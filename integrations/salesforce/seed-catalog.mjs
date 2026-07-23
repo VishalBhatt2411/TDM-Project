@@ -252,6 +252,35 @@ const VEHICLES = [
   },
 ];
 
+// Maps each model to its /vehicle-images/<category>/ folder (see apps/web/public/vehicle-images).
+const IMAGE_CATEGORY_BY_MODEL = {
+  "Glanza": "hatchback",
+  "Urban Cruiser Taisor": "suv",
+  "Urban Cruiser Hyryder": "suv",
+  "Rumion": "mpv",
+  "Innova Crysta": "mpv",
+  "Innova Hycross": "mpv",
+  "Fortuner": "suv",
+  "Fortuner Legender": "suv",
+  "Hilux": "pickup",
+  "Camry": "luxury_sedan",
+  "Vellfire": "luxury_mpv",
+};
+const IMAGE_COUNT_BY_CATEGORY = {
+  hatchback: 4,
+  suv: 3,
+  mpv: 4,
+  pickup: 4,
+  luxury_sedan: 4,
+  luxury_mpv: 4,
+};
+function galleryUrlsFor(model) {
+  const category = IMAGE_CATEGORY_BY_MODEL[model];
+  if (!category) return [];
+  const count = IMAGE_COUNT_BY_CATEGORY[category];
+  return Array.from({ length: count }, (_, i) => `/vehicle-images/${category}/${i + 1}.jpg`);
+}
+
 async function main() {
   const conn = await getConnection();
 
@@ -311,7 +340,8 @@ async function main() {
       Interior_Highlights_Json__c: JSON.stringify(v.interior),
       Colors_Json__c: JSON.stringify(v.colors),
       Faqs_Json__c: JSON.stringify(v.faqs),
-      Gallery_Urls__c: JSON.stringify([]),
+      Primary_Image_Url__c: galleryUrlsFor(v.model)[0] ?? null,
+      Gallery_Urls__c: JSON.stringify(galleryUrlsFor(v.model)),
       Accessories_Json__c: JSON.stringify([]),
       Spec_Sheet_Json__c: JSON.stringify({}),
     });

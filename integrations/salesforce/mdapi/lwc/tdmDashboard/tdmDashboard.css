@@ -1,0 +1,66 @@
+.tdm-dashboard {
+  padding: 1rem;
+}
+.tdm-dashboard__header {
+  margin-bottom: 1rem;
+}
+.tdm-dashboard__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #16325c;
+  margin: 0;
+}
+.tdm-dashboard__subtitle {
+  color: #706e6b;
+  margin: 0.25rem 0 0 0;
+}
+.tdm-dashboard__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.tdm-dashboard__row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 900px) {
+  .tdm-dashboard__row {
+    grid-template-columns: 1fr;
+  }
+}
+.tdm-dashboard__card {
+  height: 100%;
+}
+
+.status-bar {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+.status-bar__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #16325c;
+}
+.status-bar__track {
+  background: #f3f3f3;
+  border-radius: 999px;
+  height: 0.625rem;
+  overflow: hidden;
+}
+.status-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.status-bar__count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: right;
+  color: #706e6b;
+}

@@ -17,7 +17,15 @@ export function VehicleCard({ vehicle, index = 0 }: { vehicle: VehicleDto; index
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
       <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
         <div className="relative aspect-[16/10] w-full">
-          <PlaceholderVehicleImage bodyType={vehicle.bodyType} label={`${vehicle.make} ${vehicle.model}`} />
+          {vehicle.primaryImageUrl ? (
+            <img
+              src={vehicle.primaryImageUrl}
+              alt={`${vehicle.make} ${vehicle.model}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <PlaceholderVehicleImage bodyType={vehicle.bodyType} label={`${vehicle.make} ${vehicle.model}`} />
+          )}
           <div className="absolute left-3 top-3 flex gap-1.5">
             {vehicle.isBestSeller && <Badge variant="success">Best Seller</Badge>}
             {vehicle.isNewLaunch && <Badge variant="warning">New Launch</Badge>}

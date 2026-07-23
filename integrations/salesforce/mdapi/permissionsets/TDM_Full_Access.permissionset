@@ -664,4 +664,32 @@
         <readable>true</readable>
         <editable>true</editable>
     </fieldPermissions>
+    <classAccesses>
+        <apexClass>TDMDashboardController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <applicationVisibilities>
+        <application>TDM_Test_Drive_Management</application>
+        <visible>true</visible>
+    </applicationVisibilities>
+    <tabSettings>
+        <tab>TDM_Dashboard</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Booking__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Vehicle__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Sales_Rep__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Branch__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
 </PermissionSet>

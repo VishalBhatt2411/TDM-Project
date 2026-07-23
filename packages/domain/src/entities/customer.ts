@@ -91,6 +91,12 @@ export class Customer {
     if (input.marketingOptIn !== undefined) this.props.marketingOptIn = input.marketingOptIn;
   }
 
+  /** Keeps contact details in sync with what a returning customer submits on a new booking. */
+  updateContactDetails(input: { name?: PersonName; phone?: PhoneNumber }): void {
+    if (input.name) this.props.name = input.name;
+    if (input.phone) this.props.phone = input.phone;
+  }
+
   /** Registration-first policy: a customer must be fully verified before any booking exists for them. */
   assertCanBook(): void {
     if (!this.isFullyVerified) {

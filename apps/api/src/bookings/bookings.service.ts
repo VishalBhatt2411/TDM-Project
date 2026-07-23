@@ -8,6 +8,8 @@ import {
   BranchRepository,
   CustomerRepository,
   DriveFeedback,
+  PersonName,
+  PhoneNumber,
   SalesOpportunity,
   SalesOpportunityRepository,
   SalesRepRepository,
@@ -102,6 +104,20 @@ export class BookingsService {
         mobileNumber: dto.mobileNumber,
       });
       isNewAccount = true;
+    } else {
+      // A returning customer's details can change between bookings (typo fix, new
+      // number, booking for a different name) — keep the record in sync with what
+      // was actually submitted on this form rather than silently keeping stale data.
+      const submittedPhone = PhoneNumber.create(`+91${dto.mobileNumber}`);
+      const submittedName = PersonName.create(dto.firstName, dto.lastName);
+      if (
+        submittedPhone.value !== customer.phone.value ||
+        submittedName.firstName !== customer.name.firstName ||
+        submittedName.lastName !== customer.name.lastName
+      ) {
+        customer.updateContactDetails({ name: submittedName, phone: submittedPhone });
+        await this.customers.save(customer);
+      }
     }
 
     const booking = await this.createBookingInternal(customer.id, dto);

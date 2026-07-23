@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AccordionItem } from "@/components/ui/accordion";
 import { PlaceholderVehicleImage } from "@/components/PlaceholderVehicleImage";
+import { Vehicle360Viewer } from "@/components/Vehicle360Viewer";
 import { VehicleCard } from "@/components/VehicleCard";
 import { EmiCalculator } from "@/components/EmiCalculator";
 import { cn } from "@/lib/utils";
@@ -69,14 +70,13 @@ export function VehicleDetailPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       {/* Gallery */}
-      <div className="relative aspect-[16/7] overflow-hidden rounded-xl">
-        <PlaceholderVehicleImage bodyType={vehicle.bodyType} label={`${vehicle.make} ${vehicle.model}`} />
-        <div className="absolute right-3 top-3">
-          <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white backdrop-blur">
-            360° View — coming soon
-          </span>
+      {vehicle.galleryUrls && vehicle.galleryUrls.length > 0 ? (
+        <Vehicle360Viewer images={vehicle.galleryUrls} label={`${vehicle.make} ${vehicle.model}`} />
+      ) : (
+        <div className="relative aspect-[16/7] overflow-hidden rounded-xl">
+          <PlaceholderVehicleImage bodyType={vehicle.bodyType} label={`${vehicle.make} ${vehicle.model}`} />
         </div>
-      </div>
+      )}
 
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">

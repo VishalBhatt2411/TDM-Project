@@ -24,7 +24,30 @@
         <members>BookingEmailServiceTest</members>
         <members>BookingEmailRestResource</members>
         <members>BookingEmailRestResourceTest</members>
+        <members>TDMDashboardController</members>
+        <members>TDMDashboardControllerTest</members>
         <name>ApexClass</name>
+    </types>
+    <types>
+        <members>tdmKpiTile</members>
+        <members>tdmDashboard</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <types>
+        <members>TDM_Dashboard</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>TDM_Dashboard</members>
+        <members>Booking__c</members>
+        <members>Vehicle__c</members>
+        <members>Sales_Rep__c</members>
+        <members>Branch__c</members>
+        <name>CustomTab</name>
+    </types>
+    <types>
+        <members>TDM_Test_Drive_Management</members>
+        <name>CustomApplication</name>
     </types>
     <version>62.0</version>
 </Package>
