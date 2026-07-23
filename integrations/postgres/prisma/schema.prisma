@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Platform login credentials for a registered customer. The customer's business
+// identity (name/email/phone/license) lives in Salesforce Contact; this table only
+// holds what's needed to authenticate them against our own API.
+model AuthCredential {
+  customerId   String   @id
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model OtpCode {
+  id         String   @id @default(uuid())
+  customerId String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  customerId String
+  tokenHash  String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId])
+  @@unique([customerId, tokenHash])
+}
+
+model AuditLogEntry {
+  id         String   @id @default(uuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json
+  occurredAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(false)
+  branchId  String?
+  updatedAt DateTime @updatedAt
+}
+
+// Configurable dealership branding shown in the header, emails, and footer.
+// Single-row table (id is always "default").
+model DealershipConfig {
+  id              String   @id @default("default")
+  name            String
+  tagline         String?
+  logoText        String?
+  phone           String?
+  email           String?
+  address         String?
+  operatingHours  String?
+  primaryColorHex String?
+  updatedAt       DateTime @updatedAt
+}
+
+// Tracks which scheduled reminders have already been sent for a booking, so the
+// reminder cron job never double-sends when it re-scans the same time window.
+model ReminderLog {
+  id           String   @id @default(uuid())
+  bookingId    String
+  reminderType String // "24h" | "2h" | "day_of"
+  sentAt       DateTime @default(now())
+
+  @@unique([bookingId, reminderType])
+}
+
+// Tracks which no-purchase follow-up emails have already been sent per booking.
+model FollowUpLog {
+  id           String   @id @default(uuid())
+  bookingId    String
+  intervalDays Int
+  sentAt       DateTime @default(now())
+
+  @@unique([bookingId, intervalDays])
+}
+
+// One-click sign-in links emailed to customers whose account was auto-created
+// during test-drive booking (see the booking flow) — avoids ever emailing a
+// plaintext password.
+model MagicLoginToken {
+  id         String    @id @default(uuid())
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId])
+}

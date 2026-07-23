@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Sales Representative</label>
+    <pluralLabel>Sales Representatives</pluralLabel>
+    <nameField>
+        <label>Rep Name</label>
+        <type>Text</type>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>true</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Email__c</fullName>
+        <label>Email</label>
+        <type>Email</type>
+        <required>true</required>
+        <unique>true</unique>
+    </fields>
+    <fields>
+        <fullName>Phone__c</fullName>
+        <label>Phone</label>
+        <type>Phone</type>
+    </fields>
+    <fields>
+        <fullName>Branch__c</fullName>
+        <label>Branch</label>
+        <type>Lookup</type>
+        <referenceTo>Branch__c</referenceTo>
+        <relationshipName>Sales_Reps</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>User__c</fullName>
+        <label>Salesforce User</label>
+        <type>Lookup</type>
+        <referenceTo>User</referenceTo>
+        <relationshipName>Sales_Rep_Records</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Is_Active__c</fullName>
+        <label>Is Active</label>
+        <type>Checkbox</type>
+        <defaultValue>true</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Max_Daily_Bookings__c</fullName>
+        <label>Max Daily Bookings</label>
+        <type>Number</type>
+        <precision>3</precision>
+        <scale>0</scale>
+    </fields>
+</CustomObject>

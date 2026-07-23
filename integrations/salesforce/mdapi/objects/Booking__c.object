@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Test Drive Booking</label>
+    <pluralLabel>Test Drive Bookings</pluralLabel>
+    <nameField>
+        <label>Booking Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>TD-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>true</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Contact__c</fullName>
+        <label>Customer</label>
+        <type>Lookup</type>
+        <referenceTo>Contact</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Restrict</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Vehicle__c</fullName>
+        <label>Vehicle</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle__c</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Restrict</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Branch__c</fullName>
+        <label>Branch</label>
+        <type>Lookup</type>
+        <referenceTo>Branch__c</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Restrict</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Sales_Rep__c</fullName>
+        <label>Sales Representative</label>
+        <type>Lookup</type>
+        <referenceTo>Sales_Rep__c</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Drive_Type__c</fullName>
+        <label>Drive Type</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Dealership</fullName><default>true</default></value>
+                <value><fullName>Home</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Scheduled_Start__c</fullName>
+        <label>Scheduled Start</label>
+        <type>DateTime</type>
+        <required>true</required>
+    </fields>
+    <fields>
+        <fullName>Scheduled_End__c</fullName>
+        <label>Scheduled End</label>
+        <type>DateTime</type>
+        <required>true</required>
+    </fields>
+    <fields>
+        <fullName>Status__c</fullName>
+        <label>Status</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Requested</fullName><default>true</default></value>
+                <value><fullName>Confirmed</fullName><default>false</default></value>
+                <value><fullName>Waitlisted</fullName><default>false</default></value>
+                <value><fullName>InProgress</fullName><default>false</default></value>
+                <value><fullName>Completed</fullName><default>false</default></value>
+                <value><fullName>Cancelled</fullName><default>false</default></value>
+                <value><fullName>NoShow</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Home_Address__c</fullName>
+        <label>Home Address</label>
+        <type>Text</type>
+        <length>255</length>
+    </fields>
+    <fields>
+        <fullName>Home_Latitude__c</fullName>
+        <label>Home Latitude</label>
+        <type>Number</type>
+        <precision>9</precision>
+        <scale>6</scale>
+    </fields>
+    <fields>
+        <fullName>Home_Longitude__c</fullName>
+        <label>Home Longitude</label>
+        <type>Number</type>
+        <precision>10</precision>
+        <scale>6</scale>
+    </fields>
+    <fields>
+        <fullName>Check_In_Method__c</fullName>
+        <label>Check-In Method</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>QR</fullName><default>false</default></value>
+                <value><fullName>Manual</fullName><default>true</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Check_In_Timestamp__c</fullName>
+        <label>Check-In Timestamp</label>
+        <type>DateTime</type>
+    </fields>
+    <fields>
+        <fullName>Actual_Start__c</fullName>
+        <label>Actual Start</label>
+        <type>DateTime</type>
+    </fields>
+    <fields>
+        <fullName>Actual_End__c</fullName>
+        <label>Actual End</label>
+        <type>DateTime</type>
+    </fields>
+    <fields>
+        <fullName>Odometer_Start__c</fullName>
+        <label>Odometer Start</label>
+        <type>Number</type>
+        <precision>9</precision>
+        <scale>1</scale>
+    </fields>
+    <fields>
+        <fullName>Odometer_End__c</fullName>
+        <label>Odometer End</label>
+        <type>Number</type>
+        <precision>9</precision>
+        <scale>1</scale>
+    </fields>
+    <fields>
+        <fullName>Cancellation_Reason__c</fullName>
+        <label>Cancellation Reason</label>
+        <type>Text</type>
+        <length>255</length>
+    </fields>
+    <fields>
+        <fullName>Rescheduled_From__c</fullName>
+        <label>Rescheduled From</label>
+        <type>Lookup</type>
+        <referenceTo>Booking__c</referenceTo>
+        <relationshipName>Rescheduled_Bookings</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Waitlist_Position__c</fullName>
+        <label>Waitlist Position</label>
+        <type>Number</type>
+        <precision>3</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>City__c</fullName>
+        <label>City</label>
+        <type>Text</type>
+        <length>80</length>
+    </fields>
+    <fields>
+        <fullName>State__c</fullName>
+        <label>State</label>
+        <type>Text</type>
+        <length>80</length>
+    </fields>
+    <fields>
+        <fullName>Preferred_Variant__c</fullName>
+        <label>Preferred Variant</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle_Variant__c</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Is_Existing_Customer__c</fullName>
+        <label>Is Existing Customer</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Current_Vehicle_Owned__c</fullName>
+        <label>Current Vehicle Owned</label>
+        <type>Text</type>
+        <length>120</length>
+    </fields>
+    <fields>
+        <fullName>Purchase_Timeline__c</fullName>
+        <label>Purchase Timeline</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Immediate</fullName><default>false</default></value>
+                <value><fullName>Within_1_Month</fullName><default>false</default></value>
+                <value><fullName>Within_3_Months</fullName><default>false</default></value>
+                <value><fullName>Within_6_Months</fullName><default>false</default></value>
+                <value><fullName>Just_Exploring</fullName><default>true</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Pickup_Required__c</fullName>
+        <label>Pickup Required</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Additional_Notes__c</fullName>
+        <label>Additional Notes</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>4</visibleLines>
+    </fields>
+</CustomObject>

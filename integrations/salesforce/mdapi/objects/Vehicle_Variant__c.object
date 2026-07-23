@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Vehicle Variant</label>
+    <pluralLabel>Vehicle Variants</pluralLabel>
+    <nameField>
+        <label>Variant Name</label>
+        <type>Text</type>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Vehicle__c</fullName>
+        <label>Vehicle</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle__c</referenceTo>
+        <relationshipName>Variants</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Cascade</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Price__c</fullName>
+        <label>Price (Ex-Showroom)</label>
+        <type>Currency</type>
+        <precision>16</precision>
+        <scale>2</scale>
+    </fields>
+    <fields>
+        <fullName>Engine__c</fullName>
+        <label>Engine</label>
+        <type>Text</type>
+        <length>100</length>
+    </fields>
+    <fields>
+        <fullName>Fuel_Type__c</fullName>
+        <label>Fuel Type</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Petrol</fullName><default>false</default></value>
+                <value><fullName>Diesel</fullName><default>false</default></value>
+                <value><fullName>Electric</fullName><default>false</default></value>
+                <value><fullName>Hybrid</fullName><default>false</default></value>
+                <value><fullName>Plugin_Hybrid</fullName><default>false</default></value>
+                <value><fullName>CNG</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Transmission__c</fullName>
+        <label>Transmission</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Manual</fullName><default>false</default></value>
+                <value><fullName>Automatic</fullName><default>false</default></value>
+                <value><fullName>CVT</fullName><default>false</default></value>
+                <value><fullName>DCT</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Is_Default__c</fullName>
+        <label>Is Default Variant</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Display_Order__c</fullName>
+        <label>Display Order</label>
+        <type>Number</type>
+        <precision>3</precision>
+        <scale>0</scale>
+    </fields>
+</CustomObject>

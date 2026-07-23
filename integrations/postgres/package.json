@@ -1,0 +1,21 @@
+{
+  "name": "@tdm/postgres-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.19.1",
+    "@tdm/domain": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "prisma": "^5.19.1",
+    "typescript": "^5.5.4"
+  }
+}

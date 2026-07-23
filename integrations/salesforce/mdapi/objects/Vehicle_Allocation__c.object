@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Vehicle Allocation</label>
+    <pluralLabel>Vehicle Allocations</pluralLabel>
+    <nameField>
+        <label>Allocation Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>ALLOC-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Vehicle__c</fullName>
+        <label>Vehicle</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle__c</referenceTo>
+        <relationshipName>Allocations</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Cascade</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>From_Branch__c</fullName>
+        <label>From Branch</label>
+        <type>Lookup</type>
+        <referenceTo>Branch__c</referenceTo>
+        <relationshipName>Outgoing_Allocations</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>To_Branch__c</fullName>
+        <label>To Branch</label>
+        <type>Lookup</type>
+        <referenceTo>Branch__c</referenceTo>
+        <relationshipName>Incoming_Allocations</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Restrict</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Transfer_Date__c</fullName>
+        <label>Transfer Date</label>
+        <type>Date</type>
+    </fields>
+    <fields>
+        <fullName>Status__c</fullName>
+        <label>Status</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Requested</fullName><default>true</default></value>
+                <value><fullName>In_Transit</fullName><default>false</default></value>
+                <value><fullName>Completed</fullName><default>false</default></value>
+                <value><fullName>Cancelled</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+</CustomObject>

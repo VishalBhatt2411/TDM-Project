@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Compliance Record</label>
+    <pluralLabel>Compliance Records</pluralLabel>
+    <nameField>
+        <label>Compliance Record Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>CMP-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Booking__c</fullName>
+        <label>Booking</label>
+        <type>Lookup</type>
+        <referenceTo>Booking__c</referenceTo>
+        <relationshipName>Compliance_Records</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Cascade</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Otp_Verified__c</fullName>
+        <label>OTP Verified</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>License_Number__c</fullName>
+        <label>License Number</label>
+        <type>Text</type>
+        <length>40</length>
+    </fields>
+    <fields>
+        <fullName>License_Verified__c</fullName>
+        <label>License Verified</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>License_Image_Url__c</fullName>
+        <label>License Image URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>License_Expiry_Date__c</fullName>
+        <label>License Expiry Date</label>
+        <type>Date</type>
+    </fields>
+    <fields>
+        <fullName>Consent_Accepted__c</fullName>
+        <label>Consent Accepted</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Consent_Document_Url__c</fullName>
+        <label>Consent Document URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>Signature_Image_Url__c</fullName>
+        <label>Signature Image URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>Signed_At__c</fullName>
+        <label>Signed At</label>
+        <type>DateTime</type>
+    </fields>
+</CustomObject>

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Drive Feedback</label>
+    <pluralLabel>Drive Feedback</pluralLabel>
+    <nameField>
+        <label>Feedback Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>FB-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Booking__c</fullName>
+        <label>Booking</label>
+        <type>Lookup</type>
+        <referenceTo>Booking__c</referenceTo>
+        <relationshipName>Drive_Feedback</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Cascade</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Customer_Rating__c</fullName>
+        <label>Customer Rating (1-5)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Customer_Comments__c</fullName>
+        <label>Customer Comments</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Rep_Notes__c</fullName>
+        <label>Rep Notes</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Interest_Level__c</fullName>
+        <label>Interest Level</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Low</fullName><default>false</default></value>
+                <value><fullName>Medium</fullName><default>true</default></value>
+                <value><fullName>High</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Objections_Raised__c</fullName>
+        <label>Objections Raised</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>4</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Submitted_By__c</fullName>
+        <label>Submitted By</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Customer</fullName><default>false</default></value>
+                <value><fullName>Rep</fullName><default>true</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Purchase_Interest__c</fullName>
+        <label>Purchase Interest</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Vehicle_Performance_Rating__c</fullName>
+        <label>Vehicle Performance Rating (1-5)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Comfort_Rating__c</fullName>
+        <label>Comfort Rating (1-5)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Features_Rating__c</fullName>
+        <label>Features Rating (1-5)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Staff_Experience_Rating__c</fullName>
+        <label>Staff Experience Rating (1-5)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Dealership_Experience_Rating__c</fullName>
+        <label>Dealership Experience Rating (1-5)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>NPS_Score__c</fullName>
+        <label>NPS Score (0-10)</label>
+        <type>Number</type>
+        <precision>2</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Is_Survey_Response__c</fullName>
+        <label>Is Post-Drive Survey Response</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+        <description>Distinguishes a customer-submitted post-drive survey from a rep-captured drive debrief.</description>
+    </fields>
+</CustomObject>

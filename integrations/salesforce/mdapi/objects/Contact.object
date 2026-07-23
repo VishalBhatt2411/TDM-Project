@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fields>
+        <fullName>Portal_User_Id__c</fullName>
+        <label>Portal User Id</label>
+        <type>Text</type>
+        <length>60</length>
+        <unique>true</unique>
+        <externalId>true</externalId>
+        <description>Stable identifier of this customer's account in the TDM platform's own auth system (not Salesforce login) — used to match a Contact back to the registered portal user.</description>
+    </fields>
+    <fields>
+        <fullName>Preferred_Language__c</fullName>
+        <label>Preferred Language</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>en</fullName><default>true</default></value>
+                <value><fullName>hi</fullName><default>false</default></value>
+                <value><fullName>es</fullName><default>false</default></value>
+                <value><fullName>fr</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Marketing_Opt_In__c</fullName>
+        <label>Marketing Opt-In</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>License_Number__c</fullName>
+        <label>Driving License Number</label>
+        <type>Text</type>
+        <length>40</length>
+    </fields>
+    <fields>
+        <fullName>License_Verified__c</fullName>
+        <label>Driving License Verified</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Email_Verified__c</fullName>
+        <label>Email Verified</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+        <description>Set true once the customer confirms their registration email/OTP. Required before booking (registration-first policy).</description>
+    </fields>
+    <fields>
+        <fullName>Phone_Verified__c</fullName>
+        <label>Phone Verified</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+        <description>Set true once the customer confirms their registration phone OTP. Required before booking (registration-first policy).</description>
+    </fields>
+</CustomObject>

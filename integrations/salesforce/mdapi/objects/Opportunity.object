@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fields>
+        <fullName>Booking__c</fullName>
+        <label>Test Drive Booking</label>
+        <type>Lookup</type>
+        <referenceTo>Booking__c</referenceTo>
+        <relationshipName>Opportunities</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Vehicle__c</fullName>
+        <label>Vehicle</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle__c</referenceTo>
+        <relationshipName>Opportunities</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+</CustomObject>

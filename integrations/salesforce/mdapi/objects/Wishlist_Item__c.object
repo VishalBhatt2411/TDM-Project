@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Wishlist Item</label>
+    <pluralLabel>Wishlist Items</pluralLabel>
+    <nameField>
+        <label>Wishlist Item Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>WL-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>ReadWrite</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Contact__c</fullName>
+        <label>Customer</label>
+        <type>Lookup</type>
+        <referenceTo>Contact</referenceTo>
+        <relationshipName>Wishlist_Items</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Cascade</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Vehicle__c</fullName>
+        <label>Vehicle</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle__c</referenceTo>
+        <relationshipName>Wishlist_Items</relationshipName>
+        <required>true</required>
+        <deleteConstraint>Cascade</deleteConstraint>
+    </fields>
+</CustomObject>
