@@ -21,3 +21,6 @@ export const DEALERSHIP_CONFIG_REPOSITORY = Symbol("DealershipConfigRepository")
 export const REMINDER_LOG_REPOSITORY = Symbol("ReminderLogRepository");
 export const FOLLOW_UP_LOG_REPOSITORY = Symbol("FollowUpLogRepository");
 export const MAGIC_LOGIN_REPOSITORY = Symbol("MagicLoginRepository");
+export const STAFF_USER_REPOSITORY = Symbol("StaffUserRepository");
+export const STAFF_PASSWORD_TOKEN_REPOSITORY = Symbol("StaffPasswordTokenRepository");
+export const STAFF_REFRESH_TOKEN_REPOSITORY = Symbol("StaffRefreshTokenRepository");

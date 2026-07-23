@@ -29,7 +29,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContext } from "../notifications/email-templates";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
 
-function toDto(booking: Booking): BookingDto {
+export function bookingToDto(booking: Booking): BookingDto {
   const props = booking.toProps();
   return {
     id: props.id,
@@ -81,7 +81,7 @@ export class BookingsService {
 
     const booking = await this.createBookingInternal(customerId, dto);
     await this.sendConfirmation(booking, customer.email.value, `${customer.name.firstName} ${customer.name.lastName}`);
-    return { ...toDto(booking), conflictChecked: true };
+    return { ...bookingToDto(booking), conflictChecked: true };
   }
 
   /**
@@ -113,17 +113,17 @@ export class BookingsService {
     await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);
     void isNewAccount; // both new and existing customers get a fresh sign-in link — see NotificationsService
 
-    return { ...toDto(booking), conflictChecked: true };
+    return { ...bookingToDto(booking), conflictChecked: true };
   }
 
   async listForCustomer(customerId: string): Promise<BookingDto[]> {
     const bookings = await this.bookings.findByCustomer(customerId);
-    return bookings.map(toDto);
+    return bookings.map(bookingToDto);
   }
 
   async getById(customerId: string, bookingId: string): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
-    return toDto(booking);
+    return bookingToDto(booking);
   }
 
   async cancel(customerId: string, bookingId: string, dto: CancelBookingDto): Promise<BookingDto> {
@@ -153,7 +153,7 @@ export class BookingsService {
       }
     }
 
-    return toDto(booking);
+    return bookingToDto(booking);
   }
 
   async reschedule(customerId: string, bookingId: string, dto: RescheduleBookingDto): Promise<BookingDto> {
@@ -179,7 +179,7 @@ export class BookingsService {
       }
     }
 
-    return toDto(saved);
+    return bookingToDto(saved);
   }
 
   async submitSurvey(customerId: string, bookingId: string, dto: SubmitSurveyDto): Promise<{ opportunityCreated: boolean }> {

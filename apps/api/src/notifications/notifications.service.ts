@@ -10,6 +10,7 @@ import {
   followUpEmail,
   reminderEmail,
   rescheduleEmail,
+  staffPasswordSetupEmail,
   surveyRequestEmail,
 } from "./email-templates";
 
@@ -59,6 +60,18 @@ export class NotificationsService {
   async sendSurveyRequest(toEmail: string, customerName: string, vehicleLabel: string, surveyUrl: string): Promise<void> {
     const dealership = await this.dealershipConfig.get();
     const { subject, html } = surveyRequestEmail(dealership, customerName, vehicleLabel, surveyUrl);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendStaffPasswordSetup(
+    toEmail: string,
+    staffName: string,
+    role: string,
+    setupUrl: string,
+    isNewAccount: boolean,
+  ): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = staffPasswordSetupEmail(dealership, staffName, role, setupUrl, isNewAccount);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 }

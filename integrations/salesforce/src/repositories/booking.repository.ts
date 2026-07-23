@@ -1,4 +1,4 @@
-import { Booking, BookingRepository, BookingStatus, ComplianceRecord, DriveFeedback, UNASSIGNED_ID } from "@tdm/domain";
+import { Booking, BookingListFilter, BookingRepository, BookingStatus, ComplianceRecord, DriveFeedback, UNASSIGNED_ID } from "@tdm/domain";
 import { SalesforceConnectionProvider } from "../connection";
 import { bookingRecordToDomain, bookingToRecord, complianceToRecord, feedbackRecordToDomain, feedbackToRecord } from "../mappers";
 import { BOOKING_FIELDS, DRIVE_FEEDBACK_FIELDS, withConnection } from "../soql";
@@ -22,6 +22,31 @@ export class SalesforceBookingRepository implements BookingRepository {
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Contact__c = '${contactId}' ORDER BY Scheduled_Start__c DESC`,
       );
       return result.records.map(bookingRecordToDomain);
+    });
+  }
+
+  async findAll(filter: BookingListFilter): Promise<{ items: Booking[]; total: number }> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const clauses: string[] = [];
+      if (filter.status) clauses.push(`Status__c = '${filter.status}'`);
+      if (filter.branchId) clauses.push(`Branch__c = '${filter.branchId}'`);
+      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+      const page = filter.page ?? 1;
+      const pageSize = filter.pageSize ?? 25;
+      const offset = (page - 1) * pageSize;
+
+      const [itemsResult, countResult] = await Promise.all([
+        conn.query(
+          `SELECT ${BOOKING_FIELDS} FROM Booking__c ${where} ORDER BY Scheduled_Start__c DESC LIMIT ${pageSize} OFFSET ${offset}`,
+        ),
+        conn.query(`SELECT COUNT() FROM Booking__c ${where}`),
+      ]);
+
+      return {
+        items: itemsResult.records.map(bookingRecordToDomain),
+        total: (countResult as any).totalSize,
+      };
     });
   }
 

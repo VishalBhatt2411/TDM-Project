@@ -47,11 +47,22 @@ export interface SalesRepRepository {
   findById(id: string): Promise<SalesRepresentative | null>;
   findByBranch(branchId: string): Promise<SalesRepresentative[]>;
   findLeastLoadedForBranch(branchId: string, onDate: Date): Promise<SalesRepresentative | null>;
+  /** All active reps across every branch — used by the admin console's assignment dropdown. */
+  findAllActive(): Promise<SalesRepresentative[]>;
+}
+
+export interface BookingListFilter {
+  status?: Booking["status"];
+  branchId?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface BookingRepository {
   findById(id: string): Promise<Booking | null>;
   findByCustomer(customerId: string): Promise<Booking[]>;
+  /** Platform-wide booking listing for the admin console — not customer-scoped. */
+  findAll(filter: BookingListFilter): Promise<{ items: Booking[]; total: number }>;
   /** Bookings for the same vehicle whose status is Confirmed/InProgress, used for conflict detection. */
   findActiveByVehicle(vehicleId: string): Promise<Booking[]>;
   findWaitlistedForVehicle(vehicleId: string): Promise<Booking[]>;

@@ -109,3 +109,43 @@ model MagicLoginToken {
 
   @@index([customerId])
 }
+
+// Internal platform staff (Admin Console users) — entirely separate identity
+// space from customers. Deliberately platform-operational (Postgres), not
+// Salesforce: this is about who can log into OUR admin console, not CRM data.
+// A staff user is never created with a password directly; passwordHash starts
+// null and is set via the StaffPasswordToken flow (never emailed in plaintext).
+model StaffUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String?
+  role         String // "Admin" | "Manager"
+  permissions  String[] // additive permission keys beyond role defaults
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model StaffPasswordToken {
+  id          String    @id @default(uuid())
+  staffUserId String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([staffUserId])
+}
+
+model StaffRefreshToken {
+  id          String    @id @default(uuid())
+  staffUserId String
+  tokenHash   String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([staffUserId])
+  @@unique([staffUserId, tokenHash])
+}

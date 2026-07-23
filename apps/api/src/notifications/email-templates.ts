@@ -154,6 +154,29 @@ export function followUpEmail(
   return { subject: `Still thinking about the ${vehicleLabel}?`, html: layout(dealership, "We'd Love to Hear From You", body, accent) };
 }
 
+export function staffPasswordSetupEmail(
+  dealership: DealershipConfig,
+  staffName: string,
+  role: string,
+  setupUrl: string,
+  isNewAccount: boolean,
+): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const intro = isNewAccount
+    ? `An Admin Console account has been created for you at ${dealership.name} with the role of <strong>${role}</strong>.`
+    : `A password reset was requested for your ${dealership.name} Admin Console account.`;
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${staffName},</p>
+    <p style="color:#374151;font-size:15px;">${intro}</p>
+    <p style="margin:24px 0;">${button(setupUrl, isNewAccount ? "Set Your Password" : "Reset Your Password", accent)}</p>
+    <p style="color:#6b7280;font-size:13px;">This link expires in 1 hour. If you didn't expect this email, you can safely ignore it.</p>
+  `;
+  return {
+    subject: isNewAccount ? `Your ${dealership.name} Admin Console account` : `Reset your ${dealership.name} Admin Console password`,
+    html: layout(dealership, isNewAccount ? "Welcome to the Admin Console" : "Password Reset Requested", body, accent),
+  };
+}
+
 export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string): { subject: string; html: string } {
   const accent = dealership.primaryColorHex ?? "#EB0A1E";
   const body = `

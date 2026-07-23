@@ -8,6 +8,9 @@ import {
   PostgresAuthRepository,
   PostgresFeatureFlagRepository,
   ReminderLogRepository,
+  StaffPasswordTokenRepository,
+  StaffRefreshTokenRepository,
+  StaffUserRepository,
 } from "@tdm/postgres-adapter";
 import {
   SalesforceAnalyticsRepository,
@@ -37,6 +40,9 @@ import {
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
   SALESFORCE_CONNECTION_PROVIDER,
+  STAFF_PASSWORD_TOKEN_REPOSITORY,
+  STAFF_REFRESH_TOKEN_REPOSITORY,
+  STAFF_USER_REPOSITORY,
   VEHICLE_ALLOCATION_REPOSITORY,
   VEHICLE_REPOSITORY,
   VEHICLE_VARIANT_REPOSITORY,
@@ -71,6 +77,9 @@ const prisma = getPrismaClient();
     { provide: REMINDER_LOG_REPOSITORY, useValue: new ReminderLogRepository(prisma) },
     { provide: FOLLOW_UP_LOG_REPOSITORY, useValue: new FollowUpLogRepository(prisma) },
     { provide: MAGIC_LOGIN_REPOSITORY, useValue: new MagicLoginRepository(prisma) },
+    { provide: STAFF_USER_REPOSITORY, useValue: new StaffUserRepository(prisma) },
+    { provide: STAFF_PASSWORD_TOKEN_REPOSITORY, useValue: new StaffPasswordTokenRepository(prisma) },
+    { provide: STAFF_REFRESH_TOKEN_REPOSITORY, useValue: new StaffRefreshTokenRepository(prisma) },
   ],
   exports: [
     SALESFORCE_CONNECTION_PROVIDER,
@@ -91,6 +100,9 @@ const prisma = getPrismaClient();
     REMINDER_LOG_REPOSITORY,
     FOLLOW_UP_LOG_REPOSITORY,
     MAGIC_LOGIN_REPOSITORY,
+    STAFF_USER_REPOSITORY,
+    STAFF_PASSWORD_TOKEN_REPOSITORY,
+    STAFF_REFRESH_TOKEN_REPOSITORY,
   ],
 })
 export class InfrastructureModule {}

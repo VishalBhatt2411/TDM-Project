@@ -135,6 +135,13 @@ export class SalesforceSalesRepRepository implements SalesRepRepository {
     });
   }
 
+  async findAllActive(): Promise<SalesRepresentative[]> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const result = await conn.query(`SELECT ${SALES_REP_FIELDS} FROM Sales_Rep__c WHERE Is_Active__c = true ORDER BY Name`);
+      return result.records.map(salesRepRecordToDomain);
+    });
+  }
+
   async findLeastLoadedForBranch(branchId: string, onDate: Date): Promise<SalesRepresentative | null> {
     return withConnection(this.connectionProvider, async (conn) => {
       const dayStart = new Date(onDate);

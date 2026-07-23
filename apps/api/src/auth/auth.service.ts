@@ -79,11 +79,14 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    let payload: { sub: string };
+    let payload: { sub: string; scope?: string };
     try {
-      payload = this.jwtService.verify<{ sub: string }>(dto.refreshToken);
+      payload = this.jwtService.verify<{ sub: string; scope?: string }>(dto.refreshToken);
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token.");
+    }
+    if (payload.scope !== "customer") {
+      throw new UnauthorizedException("This token is not valid for customer endpoints.");
     }
     const isValid = await this.authRepo.isRefreshTokenValid(payload.sub, sha256Hex(dto.refreshToken));
     if (!isValid) {
@@ -148,8 +151,8 @@ export class AuthService {
   }
 
   private async issueTokens(customerId: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    const accessToken = this.jwtService.sign({ sub: customerId }, { expiresIn: ACCESS_TOKEN_TTL });
-    const refreshToken = this.jwtService.sign({ sub: customerId }, { expiresIn: "7d" });
+    const accessToken = this.jwtService.sign({ sub: customerId, scope: "customer" }, { expiresIn: ACCESS_TOKEN_TTL });
+    const refreshToken = this.jwtService.sign({ sub: customerId, scope: "customer" }, { expiresIn: "7d" });
     await this.authRepo.saveRefreshToken(customerId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
     return { accessToken, refreshToken, expiresIn: 15 * 60 };
   }

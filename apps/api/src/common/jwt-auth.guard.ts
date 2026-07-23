@@ -6,6 +6,11 @@ export interface AuthenticatedUser {
   customerId: string;
 }
 
+/**
+ * Guards customer-facing endpoints. Requires `scope: "customer"` in the JWT payload
+ * so a staff (admin console) token — a structurally valid JWT signed with the same
+ * secret — can never be used here. See StaffAuthGuard for the mirror-image check.
+ */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(private readonly jwtService: JwtService) {}
@@ -18,7 +23,10 @@ export class JwtAuthGuard implements CanActivate {
     }
     const token = header.slice("Bearer ".length);
     try {
-      const payload = this.jwtService.verify<{ sub: string }>(token);
+      const payload = this.jwtService.verify<{ sub: string; scope?: string }>(token);
+      if (payload.scope !== "customer") {
+        throw new UnauthorizedException("This token is not valid for customer endpoints.");
+      }
       request.user = { customerId: payload.sub };
       return true;
     } catch {

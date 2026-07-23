@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
-import { AuthModule } from "../auth/auth.module";
+import { StaffAuthModule } from "../admin/staff-auth.module";
 import { AnalyticsController } from "./analytics.controller";
 
 @Module({
-  imports: [AuthModule],
+  imports: [StaffAuthModule],
   controllers: [AnalyticsController],
 })
 export class AnalyticsModule {}
