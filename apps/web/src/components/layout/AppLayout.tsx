@@ -62,11 +62,6 @@ export function AppLayout() {
                 My Test Drives
               </Link>
             )}
-            {isAuthenticated && (
-              <Link to="/dashboard" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
-                Dashboard
-              </Link>
-            )}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -102,11 +97,6 @@ export function AppLayout() {
               {isAuthenticated && (
                 <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
                   My Test Drives
-                </Link>
-              )}
-              {isAuthenticated && (
-                <Link to="/dashboard" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
-                  Dashboard
                 </Link>
               )}
               <Link to="/vehicles" className="mt-1" onClick={() => setMobileMenuOpen(false)}>

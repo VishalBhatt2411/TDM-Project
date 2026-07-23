@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getDashboardSummary } from "@/api/analytics";
+import { getAdminDashboardSummary } from "@/api/admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function StatTile({ label, value, suffix }: { label: string; value: string | number; suffix?: string }) {
@@ -17,12 +17,12 @@ function StatTile({ label, value, suffix }: { label: string; value: string | num
   );
 }
 
-export function DashboardPage() {
-  const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboardSummary });
+export function AdminDashboardPage() {
+  const { data, isLoading } = useQuery({ queryKey: ["admin-dashboard"], queryFn: getAdminDashboardSummary });
 
   if (isLoading || !data) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="p-8">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
@@ -36,7 +36,7 @@ export function DashboardPage() {
   const branchData = data.branchPerformance.map((b) => ({ name: b.branchName, Bookings: b.bookings }));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="p-8">
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Operations Dashboard</h1>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
