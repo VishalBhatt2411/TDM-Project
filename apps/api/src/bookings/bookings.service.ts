@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   AuditLogRepository,
   Booking,
@@ -61,6 +61,8 @@ export function bookingToDto(booking: Booking): BookingDto {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
@@ -108,15 +110,23 @@ export class BookingsService {
       // A returning customer's details can change between bookings (typo fix, new
       // number, booking for a different name) — keep the record in sync with what
       // was actually submitted on this form rather than silently keeping stale data.
-      const submittedPhone = PhoneNumber.create(`+91${dto.mobileNumber}`);
-      const submittedName = PersonName.create(dto.firstName, dto.lastName);
-      if (
-        submittedPhone.value !== customer.phone.value ||
-        submittedName.firstName !== customer.name.firstName ||
-        submittedName.lastName !== customer.name.lastName
-      ) {
-        customer.updateContactDetails({ name: submittedName, phone: submittedPhone });
-        await this.customers.save(customer);
+      // This is a best-effort enrichment, not part of the booking's critical path:
+      // a Salesforce write failure here must never block the booking itself.
+      try {
+        const submittedPhone = PhoneNumber.create(`+91${dto.mobileNumber}`);
+        const submittedName = PersonName.create(dto.firstName, dto.lastName);
+        if (
+          submittedPhone.value !== customer.phone.value ||
+          submittedName.firstName !== customer.name.firstName ||
+          submittedName.lastName !== customer.name.lastName
+        ) {
+          customer.updateContactDetails({ name: submittedName, phone: submittedPhone });
+          await this.customers.save(customer);
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to sync contact details for customer ${customer.id} during booking: ${(error as Error).message}`,
+        );
       }
     }
 
