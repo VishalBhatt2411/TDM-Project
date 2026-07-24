@@ -2,7 +2,7 @@ import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundExce
 import { AuditLogRepository } from "@tdm/domain";
 import { StaffUserRepository } from "@tdm/postgres-adapter";
 import { AUDIT_LOG_REPOSITORY, STAFF_USER_REPOSITORY } from "../infrastructure/tokens";
-import { AdminAuthService } from "./admin-auth.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
 import { CreateStaffUserDto, UpdateStaffUserDto } from "./dto";
 
@@ -11,7 +11,7 @@ export class AdminUsersService {
   constructor(
     @Inject(STAFF_USER_REPOSITORY) private readonly staffUsers: StaffUserRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
-    private readonly adminAuthService: AdminAuthService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list() {
@@ -38,7 +38,8 @@ export class AdminUsersService {
       permissions: dto.permissions ?? [],
     });
 
-    await this.adminAuthService.issuePasswordSetupEmail(staff.id, staff.email, staff.name, staff.role, true);
+    const webOrigin = process.env.ADMIN_WEB_ORIGIN ?? process.env.WEB_ORIGIN ?? "http://localhost:5173";
+    await this.notifications.sendStaffAccessGranted(staff.email, staff.name, staff.role, `${webOrigin}/admin/login`);
     await this.auditLog.append({
       actorId: actor.staffUserId,
       action: "STAFF_USER_CREATED",

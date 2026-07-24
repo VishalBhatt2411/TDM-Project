@@ -10,7 +10,7 @@ Customer-facing flow: browse vehicles → pick a vehicle/variant → choose a sl
 
 - **Hexagonal/Clean Architecture**: business logic (`packages/domain`) has zero knowledge of Salesforce, Postgres, or HTTP. Everything talks through repository interfaces; concrete data adapters live in `integrations/`.
 - **Salesforce is a data provider, not a dependency** — it's used as the system of record for business entities (Contact/Customer, Vehicle, Branch, Booking, Sales Rep, Drive Feedback, etc.) but is reachable only through `integrations/salesforce`. Swapping it for another database only means writing a new adapter behind the same interfaces.
-- **Postgres** holds only what Salesforce shouldn't: authentication credentials/OTPs for customers, and a separate staff/RBAC identity space for the Admin Console — both via Prisma.
+- **Postgres** holds only what Salesforce shouldn't: authentication credentials/OTPs for customers, and a separate staff/RBAC identity space for the Admin Console — both via Prisma. Staff (Admin/Manager/Sales Rep) authenticate with their **real Salesforce identity** via OAuth2 ("Login with Salesforce") — Postgres only stores who's provisioned and what they're allowed to do (role/permissions), never a password.
 - **API-first**: the NestJS backend exposes a versioned REST API (`/api/v1/...`) with Swagger docs, validated DTOs, and centralized domain-error-to-HTTP-status mapping.
 
 ## Tech stack
@@ -43,6 +43,7 @@ infrastructure/docker-compose.yml   Local Postgres container
 - **Docker** (or a local PostgreSQL 16 instance) — used for the auth/staff database.
 - **Salesforce CLI (`sf`)** and a Salesforce org (a free Developer Edition org works) with the TDM custom objects deployed from `integrations/salesforce/mdapi`. The backend does **not** store Salesforce credentials — it shells out to an already-authenticated `sf` CLI session to obtain a short-lived access token (see `integrations/salesforce/src/connection.ts`). This is explicitly a dev-mode convenience; production hosting requires replacing it with a Connected App using the JWT Bearer flow (see "Hosting" below).
 - An email-sending capability if you want transactional emails (confirmation, magic link, OTP) to actually deliver — check `apps/api/src/notifications` / `apps/api/src/auth/otp-sender.ts` for the provider used in this environment.
+- A **Salesforce Connected App** (OAuth2 Authorization Code flow) for staff "Login with Salesforce" — Setup → App Manager → New Connected App, enable OAuth, callback URL `http://localhost:3000/api/v1/admin/auth/salesforce/callback`, scopes `id` + `api`. Without this configured, `/admin/login` renders but clicking through will fail at Salesforce's authorization step.
 
 ## Running locally
 
@@ -57,7 +58,7 @@ infrastructure/docker-compose.yml   Local Postgres container
    ```
 
 3. **Configure environment variables**. Each service reads its own `.env` (see `apps/api/.env` and `integrations/postgres/.env` — not committed, `.gitignore`d):
-   - `apps/api/.env`: `DATABASE_URL`, `JWT_SECRET`, `SF_TARGET_ORG_ALIAS`, `WEB_ORIGIN`, `PORT`
+   - `apps/api/.env`: `DATABASE_URL`, `JWT_SECRET`, `SF_TARGET_ORG_ALIAS`, `WEB_ORIGIN`, `ADMIN_WEB_ORIGIN`, `PORT`, `SF_OAUTH_CLIENT_ID`, `SF_OAUTH_CLIENT_SECRET`, `SF_OAUTH_REDIRECT_URI`, `SF_LOGIN_URL`
    - `integrations/postgres/.env`: `DATABASE_URL` (used by Prisma CLI commands)
 
 4. **Authenticate the Salesforce CLI** against your org and give it the alias referenced by `SF_TARGET_ORG_ALIAS`:

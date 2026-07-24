@@ -11,7 +11,7 @@ import {
   passwordSetupEmail,
   reminderEmail,
   rescheduleEmail,
-  staffPasswordSetupEmail,
+  staffAccessGrantedEmail,
   surveyRequestEmail,
 } from "./email-templates";
 
@@ -70,15 +70,9 @@ export class NotificationsService {
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 
-  async sendStaffPasswordSetup(
-    toEmail: string,
-    staffName: string,
-    role: string,
-    setupUrl: string,
-    isNewAccount: boolean,
-  ): Promise<void> {
+  async sendStaffAccessGranted(toEmail: string, staffName: string, role: string, loginUrl: string): Promise<void> {
     const dealership = await this.dealershipConfig.get();
-    const { subject, html } = staffPasswordSetupEmail(dealership, staffName, role, setupUrl, isNewAccount);
+    const { subject, html } = staffAccessGrantedEmail(dealership, staffName, role, loginUrl);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 }

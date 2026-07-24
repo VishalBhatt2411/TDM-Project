@@ -8,5 +8,4 @@ export * from "./repositories/automation-tracking.repository";
 export * from "./repositories/magic-login.repository";
 export * from "./repositories/customer-password-token.repository";
 export * from "./repositories/staff-user.repository";
-export * from "./repositories/staff-password-token.repository";
 export * from "./repositories/staff-refresh-token.repository";

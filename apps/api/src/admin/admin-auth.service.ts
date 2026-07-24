@@ -1,59 +1,73 @@
-import { randomBytes } from "node:crypto";
 import { Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { hashSecret, sha256Hex, StaffPasswordTokenRepository, StaffRefreshTokenRepository, StaffUserRepository, verifySecret } from "@tdm/postgres-adapter";
-import {
-  STAFF_PASSWORD_TOKEN_REPOSITORY,
-  STAFF_REFRESH_TOKEN_REPOSITORY,
-  STAFF_USER_REPOSITORY,
-} from "../infrastructure/tokens";
-import { NotificationsService } from "../notifications/notifications.service";
-import { StaffForgotPasswordDto, StaffLoginDto, StaffRefreshDto, StaffResetPasswordDto } from "./dto";
+import { SalesforceIdentityProvider } from "@tdm/salesforce-adapter";
+import { sha256Hex, StaffRefreshTokenRepository, StaffUserRepository } from "@tdm/postgres-adapter";
+import { SALESFORCE_IDENTITY_PROVIDER, STAFF_REFRESH_TOKEN_REPOSITORY, STAFF_USER_REPOSITORY } from "../infrastructure/tokens";
+import { StaffRefreshDto } from "./dto";
 
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const PASSWORD_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const OAUTH_STATE_TTL = "5m";
+const OAUTH_STATE_PURPOSE = "sf-oauth-state";
 
+export type SalesforceCallbackResult =
+  | { accessToken: string; refreshToken: string; expiresIn: number }
+  | { error: "invalid_state" | "not_provisioned" | "inactive" | "exchange_failed" };
+
+/**
+ * Staff (Admin/Manager/Sales Rep) authenticate with their real Salesforce identity
+ * via OAuth2 Authorization Code flow — this app never sees or stores a Salesforce
+ * password. Console access/permissions are still governed entirely by StaffUser
+ * (role + permissions), matched by the email Salesforce's identity endpoint returns.
+ */
 @Injectable()
 export class AdminAuthService {
   private readonly logger = new Logger(AdminAuthService.name);
 
   constructor(
     @Inject(STAFF_USER_REPOSITORY) private readonly staffUsers: StaffUserRepository,
-    @Inject(STAFF_PASSWORD_TOKEN_REPOSITORY) private readonly passwordTokens: StaffPasswordTokenRepository,
     @Inject(STAFF_REFRESH_TOKEN_REPOSITORY) private readonly refreshTokens: StaffRefreshTokenRepository,
+    @Inject(SALESFORCE_IDENTITY_PROVIDER) private readonly identityProvider: SalesforceIdentityProvider,
     private readonly jwtService: JwtService,
-    private readonly notifications: NotificationsService,
   ) {}
 
-  async login(dto: StaffLoginDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    const staff = await this.staffUsers.findByEmail(dto.email);
-    if (!staff || !staff.isActive || !staff.passwordHash) {
-      throw new UnauthorizedException("Invalid email or password.");
+  /** The "state" param is a short-lived signed JWT (not server-side session state) — CSRF protection with no storage. */
+  buildAuthorizationUrl(): string {
+    const state = this.jwtService.sign({ purpose: OAUTH_STATE_PURPOSE }, { expiresIn: OAUTH_STATE_TTL });
+    return this.identityProvider.getAuthorizationUrl(state);
+  }
+
+  async handleCallback(code: string, state: string): Promise<SalesforceCallbackResult> {
+    try {
+      const payload = this.jwtService.verify<{ purpose?: string }>(state);
+      if (payload.purpose !== OAUTH_STATE_PURPOSE) {
+        return { error: "invalid_state" };
+      }
+    } catch {
+      return { error: "invalid_state" };
     }
-    if (!(await verifySecret(dto.password, staff.passwordHash))) {
-      throw new UnauthorizedException("Invalid email or password.");
+
+    let identity;
+    try {
+      identity = await this.identityProvider.exchangeCodeForIdentity(code);
+    } catch (err) {
+      this.logger.error(`Salesforce OAuth code exchange failed: ${(err as Error).message}`);
+      return { error: "exchange_failed" };
     }
+
+    const staff = await this.staffUsers.findByEmail(identity.email);
+    if (!staff) {
+      this.logger.warn(`Salesforce login denied — no StaffUser provisioned for ${identity.email}`);
+      return { error: "not_provisioned" };
+    }
+    if (!staff.isActive) {
+      return { error: "inactive" };
+    }
+    if (!staff.salesforceUserId) {
+      await this.staffUsers.linkSalesforceUserId(staff.id, identity.salesforceUserId);
+    }
+
     return this.issueTokens(staff.id, staff.role, staff.permissions);
-  }
-
-  /** Always returns the same generic result whether or not the email exists, to avoid leaking which staff emails are registered. */
-  async forgotPassword(dto: StaffForgotPasswordDto): Promise<{ message: string }> {
-    const staff = await this.staffUsers.findByEmail(dto.email);
-    if (staff && staff.isActive) {
-      await this.issuePasswordSetupEmail(staff.id, staff.email, staff.name, staff.role, /* isNewAccount */ !staff.passwordHash);
-    }
-    return { message: "If an account exists for that email, a reset link has been sent." };
-  }
-
-  async resetPassword(dto: StaffResetPasswordDto): Promise<{ success: boolean }> {
-    const staffUserId = await this.passwordTokens.consume(sha256Hex(dto.token));
-    if (!staffUserId) {
-      throw new UnauthorizedException("This link is invalid or has expired.");
-    }
-    const passwordHash = await hashSecret(dto.newPassword);
-    await this.staffUsers.setPasswordHash(staffUserId, passwordHash);
-    return { success: true };
   }
 
   async refresh(dto: StaffRefreshDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
@@ -77,16 +91,6 @@ export class AdminAuthService {
       throw new UnauthorizedException("Account is no longer active.");
     }
     return this.issueTokens(staff.id, staff.role, staff.permissions);
-  }
-
-  /** Used when an Admin creates a brand-new staff user (see AdminUsersService). */
-  async issuePasswordSetupEmail(staffUserId: string, email: string, name: string, role: string, isNewAccount: boolean): Promise<void> {
-    const rawToken = randomBytes(32).toString("hex");
-    await this.passwordTokens.save(staffUserId, sha256Hex(rawToken), new Date(Date.now() + PASSWORD_TOKEN_TTL_MS));
-    const webOrigin = process.env.ADMIN_WEB_ORIGIN ?? process.env.WEB_ORIGIN ?? "http://localhost:5173";
-    const setupUrl = `${webOrigin}/admin/set-password?token=${rawToken}`;
-    this.logger.log(`Password setup link for ${email}: ${setupUrl}`);
-    await this.notifications.sendStaffPasswordSetup(email, name, role, setupUrl, isNewAccount);
   }
 
   private async issueTokens(

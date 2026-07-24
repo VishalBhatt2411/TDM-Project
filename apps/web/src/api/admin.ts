@@ -5,7 +5,7 @@ export interface StaffUserDto {
   id: string;
   email: string;
   name: string;
-  role: "Admin" | "Manager";
+  role: "Admin" | "Manager" | "SalesRep";
   permissions: string[];
   isActive: boolean;
   createdAt: string;
@@ -14,7 +14,7 @@ export interface StaffUserDto {
 export interface CreateStaffUserRequest {
   email: string;
   name: string;
-  role: "Admin" | "Manager";
+  role: "Admin" | "Manager" | "SalesRep";
   permissions?: string[];
 }
 

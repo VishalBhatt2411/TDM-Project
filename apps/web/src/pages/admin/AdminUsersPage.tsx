@@ -77,7 +77,7 @@ function CreateStaffUserForm({
 }) {
   const [email, setEmail] = React.useState("");
   const [name, setName] = React.useState("");
-  const [role, setRole] = React.useState<"Admin" | "Manager">("Manager");
+  const [role, setRole] = React.useState<"Admin" | "Manager" | "SalesRep">("Manager");
   const [permissions, setPermissions] = React.useState<string[]>([]);
 
   const togglePermission = (key: string) => {
@@ -88,13 +88,13 @@ function CreateStaffUserForm({
     <Card className="mb-6">
       <CardHeader>
         <CardTitle className="text-base">New Staff User</CardTitle>
-        <CardDescription>They'll receive an email to set their own password.</CardDescription>
+        <CardDescription>They'll receive an email and sign in with their existing Salesforce account.</CardDescription>
       </CardHeader>
       <CardContent>
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            onSubmit({ email, name, role, permissions: role === "Manager" ? permissions : undefined });
+            onSubmit({ email, name, role, permissions: role !== "Admin" ? permissions : undefined });
           }}
           className="space-y-4"
         >
@@ -114,13 +114,14 @@ function CreateStaffUserForm({
               id="role"
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={role}
-              onChange={(e) => setRole(e.target.value as "Admin" | "Manager")}
+              onChange={(e) => setRole(e.target.value as "Admin" | "Manager" | "SalesRep")}
             >
               <option value="Manager">Manager</option>
+              <option value="SalesRep">Sales Rep</option>
               <option value="Admin">Admin</option>
             </select>
           </div>
-          {role === "Manager" && (
+          {role !== "Admin" && (
             <div>
               <Label>Permissions</Label>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -158,7 +159,7 @@ function StaffUserRow({ user, onUpdate }: { user: StaffUserDto; onUpdate: (input
           <p className="text-sm text-muted-foreground">{user.email}</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge variant={user.role === "Admin" ? "default" : "secondary"}>{user.role}</Badge>
-            {user.role === "Manager" &&
+            {user.role !== "Admin" &&
               user.permissions.map((p) => (
                 <Badge key={p} variant="outline">
                   {PERMISSION_OPTIONS.find((o) => o.key === p)?.label ?? p}

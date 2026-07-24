@@ -127,31 +127,22 @@ model CustomerPasswordToken {
 }
 
 // Internal platform staff (Admin Console users) — entirely separate identity
-// space from customers. Deliberately platform-operational (Postgres), not
-// Salesforce: this is about who can log into OUR admin console, not CRM data.
-// A staff user is never created with a password directly; passwordHash starts
-// null and is set via the StaffPasswordToken flow (never emailed in plaintext).
+// space from customers, but credentials are NOT stored here: a staff user
+// authenticates with their actual Salesforce identity (OAuth2 Authorization
+// Code flow — see AdminAuthService), and this table only governs what they can
+// do once logged in (role/permissions), matched by email at login time.
+// salesforceUserId is populated just-in-time on first successful login, for
+// auditability — matching itself is by email, not this field.
 model StaffUser {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  name         String
-  passwordHash String?
-  role         String // "Admin" | "Manager"
-  permissions  String[] // additive permission keys beyond role defaults
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-}
-
-model StaffPasswordToken {
-  id          String    @id @default(uuid())
-  staffUserId String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  consumedAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@index([staffUserId])
+  id                String    @id @default(uuid())
+  email             String    @unique
+  name              String
+  salesforceUserId  String?   @unique
+  role              String // "Admin" | "Manager" | "SalesRep"
+  permissions       String[] // additive permission keys beyond role defaults
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model StaffRefreshToken {

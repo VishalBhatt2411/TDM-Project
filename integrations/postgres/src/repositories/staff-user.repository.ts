@@ -1,12 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 
-export type StaffRole = "Admin" | "Manager";
+export type StaffRole = "Admin" | "Manager" | "SalesRep";
 
 export interface StaffUserRecord {
   id: string;
   email: string;
   name: string;
-  passwordHash: string | null;
+  salesforceUserId: string | null;
   role: StaffRole;
   permissions: string[];
   isActive: boolean;
@@ -43,8 +43,9 @@ export class StaffUserRepository {
     return toRecord(record);
   }
 
-  async setPasswordHash(id: string, passwordHash: string): Promise<void> {
-    await this.prisma.staffUser.update({ where: { id }, data: { passwordHash } });
+  /** Recorded just-in-time on a staff user's first successful Salesforce login — matching itself is by email, not this field. */
+  async linkSalesforceUserId(id: string, salesforceUserId: string): Promise<void> {
+    await this.prisma.staffUser.update({ where: { id }, data: { salesforceUserId } });
   }
 
   async updateRoleAndPermissions(id: string, input: { role?: StaffRole; permissions?: string[]; isActive?: boolean }): Promise<StaffUserRecord> {
@@ -57,7 +58,7 @@ function toRecord(record: {
   id: string;
   email: string;
   name: string;
-  passwordHash: string | null;
+  salesforceUserId: string | null;
   role: string;
   permissions: string[];
   isActive: boolean;
@@ -67,7 +68,7 @@ function toRecord(record: {
     id: record.id,
     email: record.email,
     name: record.name,
-    passwordHash: record.passwordHash,
+    salesforceUserId: record.salesforceUserId,
     role: record.role as StaffRole,
     permissions: record.permissions,
     isActive: record.isActive,

@@ -15,8 +15,7 @@ import { VehicleDetailPage } from "@/pages/VehicleDetailPage";
 import { BookingPage } from "@/pages/BookingPage";
 import { MyBookingsPage } from "@/pages/MyBookingsPage";
 import { AdminLoginPage } from "@/pages/admin/AdminLoginPage";
-import { AdminForgotPasswordPage } from "@/pages/admin/AdminForgotPasswordPage";
-import { AdminSetPasswordPage } from "@/pages/admin/AdminSetPasswordPage";
+import { AdminAuthCallbackPage } from "@/pages/admin/AdminAuthCallbackPage";
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { AdminBookingsPage } from "@/pages/admin/AdminBookingsPage";
@@ -42,10 +41,9 @@ export function App() {
         </Route>
       </Route>
 
-      {/* Admin Console — entirely separate auth space from the customer app. */}
+      {/* Admin Console — entirely separate auth space from the customer app, backed by Salesforce identity. */}
       <Route path="/admin/login" element={<AdminLoginPage />} />
-      <Route path="/admin/forgot-password" element={<AdminForgotPasswordPage />} />
-      <Route path="/admin/set-password" element={<AdminSetPasswordPage />} />
+      <Route path="/admin/auth/callback" element={<AdminAuthCallbackPage />} />
       <Route element={<AdminProtectedRoute />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AdminDashboardPage />} />
