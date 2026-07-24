@@ -135,10 +135,14 @@ export class BookingsService {
 
     await this.sendConfirmation(booking, customer.email.value, customerName);
 
-    if (isNewAccount) {
-      // Brand-new accounts get a real password instead of only a one-time magic link,
-      // so they can sign in normally on future visits — see AuthService.issuePasswordSetupEmail.
-      await this.authService.issuePasswordSetupEmail(customer.id, customer.email.value, customerName, true);
+    // A magic link is a nice one-click convenience, but it's only safe to send when the
+    // customer already has a real password to fall back on — otherwise, once that single-use
+    // link is consumed (or expires), they have no way back in. isNewAccount is checked first to
+    // skip a redundant lookup, but a *returning* customer whose account was itself auto-registered
+    // and never had its password set (e.g. from before this check existed) must get the same
+    // password-setup email, not a magic link, on every booking until they actually set one.
+    if (isNewAccount || (await this.authService.needsPasswordSetup(customer.id))) {
+      await this.authService.issuePasswordSetupEmail(customer.id, customer.email.value, customerName, isNewAccount);
     } else {
       const magicLink = await this.authService.issueMagicLoginLink(customer.id);
       await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);

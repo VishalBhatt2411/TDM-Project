@@ -13,6 +13,11 @@ datasource db {
 model AuthCredential {
   customerId   String   @id
   passwordHash String
+  // True for a system-generated password the customer never saw/chose (auto-registered
+  // at booking time) — until they complete password setup, they have no real way back in
+  // once a one-time magic link is used, so such accounts must always be offered password
+  // setup instead of a magic link. Defaults true: unproven otherwise, safer to assume so.
+  isTemporary  Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

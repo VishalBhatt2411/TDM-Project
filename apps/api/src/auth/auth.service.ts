@@ -45,7 +45,7 @@ export class AuthService {
     await this.customers.save(customer);
 
     const passwordHash = await hashSecret(dto.password);
-    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash });
+    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash, isTemporary: false });
 
     await this.issueOtp(customer);
 
@@ -123,7 +123,7 @@ export class AuthService {
     await this.customers.save(customer);
 
     const passwordHash = await hashSecret(randomBytes(24).toString("hex"));
-    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash });
+    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash, isTemporary: true });
 
     return customer;
   }
@@ -177,8 +177,14 @@ export class AuthService {
       throw new UnauthorizedException("This link is invalid or has expired.");
     }
     const passwordHash = await hashSecret(dto.newPassword);
-    await this.authRepo.saveCredentials({ customerId, passwordHash });
+    await this.authRepo.saveCredentials({ customerId, passwordHash, isTemporary: false });
     return { success: true };
+  }
+
+  /** True if the customer has never set a real password (still on the system-generated one from auto-registration) — such an account must be offered password setup rather than a magic link, since a magic link is their only way in otherwise. */
+  async needsPasswordSetup(customerId: string): Promise<boolean> {
+    const credentials = await this.authRepo.findCredentials(customerId);
+    return !credentials || credentials.isTemporary;
   }
 
   private async issueOtp(customer: Customer): Promise<void> {
