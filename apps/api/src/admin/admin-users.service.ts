@@ -65,7 +65,14 @@ export class AdminUsersService {
       throw new ForbiddenException("Only an Admin can modify an Admin account or grant the Admin role.");
     }
 
-    const updated = await this.staffUsers.updateRoleAndPermissions(id, dto);
+    if (dto.email && dto.email.toLowerCase() !== existing.email) {
+      const conflicting = await this.staffUsers.findByEmail(dto.email);
+      if (conflicting && conflicting.id !== id) {
+        throw new ConflictException("A staff user with this email already exists.");
+      }
+    }
+
+    const updated = await this.staffUsers.update(id, dto);
 
     await this.auditLog.append({
       actorId: actor.staffUserId,

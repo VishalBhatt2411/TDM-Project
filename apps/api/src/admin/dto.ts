@@ -24,6 +24,14 @@ export class CreateStaffUserDto {
 
 export class UpdateStaffUserDto {
   @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsIn(["Admin", "Manager", "SalesRep"])
   role?: "Admin" | "Manager" | "SalesRep";
 

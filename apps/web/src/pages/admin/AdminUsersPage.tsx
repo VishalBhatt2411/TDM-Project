@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createStaffUser, listStaffUsers, updateStaffUser } from "@/api/admin";
-import type { CreateStaffUserRequest, StaffUserDto } from "@/api/admin";
+import type { CreateStaffUserRequest, StaffUserDto, UpdateStaffUserRequest } from "@/api/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ export function AdminUsersPage() {
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useQuery({ queryKey: ["staff-users"], queryFn: listStaffUsers });
   const [showCreateForm, setShowCreateForm] = React.useState(false);
+  const [editingUserId, setEditingUserId] = React.useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: createStaffUser,
@@ -24,7 +25,12 @@ export function AdminUsersPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, ...input }: { id: string } & Parameters<typeof updateStaffUser>[1]) => updateStaffUser(id, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff-users"] }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["staff-users"] });
+      // Only close the row that was actually being edited — e.g. clicking Deactivate on
+      // a different row must not silently discard an in-progress edit on this one.
+      setEditingUserId((current) => (current === variables.id ? null : current));
+    },
   });
 
   return (
@@ -58,6 +64,17 @@ export function AdminUsersPage() {
               key={user.id}
               user={user}
               onUpdate={(input) => updateMutation.mutate({ id: user.id, ...input })}
+              isEditing={editingUserId === user.id}
+              onStartEdit={() => {
+                updateMutation.reset();
+                setEditingUserId(user.id);
+              }}
+              onCancelEdit={() => {
+                updateMutation.reset();
+                setEditingUserId(null);
+              }}
+              isUpdating={updateMutation.isPending && editingUserId === user.id}
+              updateError={editingUserId === user.id ? (updateMutation.error as any) : undefined}
             />
           ))}
         </div>
@@ -150,32 +167,152 @@ function CreateStaffUserForm({
   );
 }
 
-function StaffUserRow({ user, onUpdate }: { user: StaffUserDto; onUpdate: (input: { isActive?: boolean; permissions?: string[] }) => void }) {
+function StaffUserRow({
+  user,
+  onUpdate,
+  isEditing,
+  onStartEdit,
+  onCancelEdit,
+  isUpdating,
+  updateError,
+}: {
+  user: StaffUserDto;
+  onUpdate: (input: UpdateStaffUserRequest) => void;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  isUpdating: boolean;
+  updateError?: { response?: { data?: { message?: string } } };
+}) {
   return (
     <Card>
-      <CardContent className="flex items-center justify-between p-4">
-        <div>
-          <p className="font-medium">{user.name}</p>
-          <p className="text-sm text-muted-foreground">{user.email}</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            <Badge variant={user.role === "Admin" ? "default" : "secondary"}>{user.role}</Badge>
-            {user.role !== "Admin" &&
-              user.permissions.map((p) => (
-                <Badge key={p} variant="outline">
-                  {PERMISSION_OPTIONS.find((o) => o.key === p)?.label ?? p}
-                </Badge>
-              ))}
-            {!user.isActive && <Badge variant="destructive">Deactivated</Badge>}
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium">{user.name}</p>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <Badge variant={user.role === "Admin" ? "default" : "secondary"}>{user.role}</Badge>
+              {user.role !== "Admin" &&
+                user.permissions.map((p) => (
+                  <Badge key={p} variant="outline">
+                    {PERMISSION_OPTIONS.find((o) => o.key === p)?.label ?? p}
+                  </Badge>
+                ))}
+              {!user.isActive && <Badge variant="destructive">Deactivated</Badge>}
+            </div>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {!isEditing && (
+              <Button size="sm" variant="outline" onClick={onStartEdit}>
+                Edit
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isEditing}
+              onClick={() => onUpdate({ isActive: !user.isActive })}
+            >
+              {user.isActive ? "Deactivate" : "Reactivate"}
+            </Button>
           </div>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onUpdate({ isActive: !user.isActive })}
-        >
-          {user.isActive ? "Deactivate" : "Reactivate"}
-        </Button>
+        {isEditing && (
+          <EditStaffUserForm
+            user={user}
+            onSubmit={onUpdate}
+            onCancel={onCancelEdit}
+            isSubmitting={isUpdating}
+            error={updateError}
+          />
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function EditStaffUserForm({
+  user,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+  error,
+}: {
+  user: StaffUserDto;
+  onSubmit: (input: UpdateStaffUserRequest) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+  error?: { response?: { data?: { message?: string } } };
+}) {
+  const [name, setName] = React.useState(user.name);
+  const [email, setEmail] = React.useState(user.email);
+  const [role, setRole] = React.useState<"Admin" | "Manager" | "SalesRep">(user.role);
+  const [permissions, setPermissions] = React.useState<string[]>(user.permissions);
+
+  const togglePermission = (key: string) => {
+    setPermissions((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({ name, email, role, permissions: role !== "Admin" ? permissions : undefined });
+      }}
+      className="mt-4 space-y-4 border-t pt-4"
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor={`edit-name-${user.id}`}>Name</Label>
+          <Input id={`edit-name-${user.id}`} value={name} onChange={(e) => setName(e.target.value)} required />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`edit-email-${user.id}`}>Email</Label>
+          <Input id={`edit-email-${user.id}`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`edit-role-${user.id}`}>Role</Label>
+        <select
+          id={`edit-role-${user.id}`}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={role}
+          onChange={(e) => setRole(e.target.value as "Admin" | "Manager" | "SalesRep")}
+        >
+          <option value="Manager">Manager</option>
+          <option value="SalesRep">Sales Rep</option>
+          <option value="Admin">Admin</option>
+        </select>
+      </div>
+      {role !== "Admin" && (
+        <div>
+          <Label>Permissions</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {PERMISSION_OPTIONS.map((perm) => (
+              <button
+                type="button"
+                key={perm.key}
+                onClick={() => togglePermission(perm.key)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  permissions.includes(perm.key) ? "border-primary bg-primary text-primary-foreground" : "border-input text-muted-foreground"
+                }`}
+              >
+                {perm.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {error?.response?.data?.message && <p className="text-sm text-destructive">{error.response.data.message}</p>}
+      <div className="flex gap-2">
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Saving…" : "Save"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

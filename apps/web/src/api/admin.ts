@@ -19,7 +19,9 @@ export interface CreateStaffUserRequest {
 }
 
 export interface UpdateStaffUserRequest {
-  role?: "Admin" | "Manager";
+  name?: string;
+  email?: string;
+  role?: "Admin" | "Manager" | "SalesRep";
   permissions?: string[];
   isActive?: boolean;
 }

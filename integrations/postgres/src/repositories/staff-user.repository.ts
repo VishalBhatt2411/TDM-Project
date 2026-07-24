@@ -48,8 +48,14 @@ export class StaffUserRepository {
     await this.prisma.staffUser.update({ where: { id }, data: { salesforceUserId } });
   }
 
-  async updateRoleAndPermissions(id: string, input: { role?: StaffRole; permissions?: string[]; isActive?: boolean }): Promise<StaffUserRecord> {
-    const record = await this.prisma.staffUser.update({ where: { id }, data: input });
+  async update(
+    id: string,
+    input: { name?: string; email?: string; role?: StaffRole; permissions?: string[]; isActive?: boolean },
+  ): Promise<StaffUserRecord> {
+    const record = await this.prisma.staffUser.update({
+      where: { id },
+      data: { ...input, email: input.email?.toLowerCase() },
+    });
     return toRecord(record);
   }
 }
