@@ -1,5 +1,6 @@
 import { Global, Module } from "@nestjs/common";
 import {
+  CustomerPasswordTokenRepository,
   DealershipConfigRepository,
   FollowUpLogRepository,
   getPrismaClient,
@@ -31,6 +32,7 @@ import {
   AUTH_REPOSITORY,
   BOOKING_REPOSITORY,
   BRANCH_REPOSITORY,
+  CUSTOMER_PASSWORD_TOKEN_REPOSITORY,
   CUSTOMER_REPOSITORY,
   DEALERSHIP_CONFIG_REPOSITORY,
   FEATURE_FLAG_REPOSITORY,
@@ -77,6 +79,7 @@ const prisma = getPrismaClient();
     { provide: REMINDER_LOG_REPOSITORY, useValue: new ReminderLogRepository(prisma) },
     { provide: FOLLOW_UP_LOG_REPOSITORY, useValue: new FollowUpLogRepository(prisma) },
     { provide: MAGIC_LOGIN_REPOSITORY, useValue: new MagicLoginRepository(prisma) },
+    { provide: CUSTOMER_PASSWORD_TOKEN_REPOSITORY, useValue: new CustomerPasswordTokenRepository(prisma) },
     { provide: STAFF_USER_REPOSITORY, useValue: new StaffUserRepository(prisma) },
     { provide: STAFF_PASSWORD_TOKEN_REPOSITORY, useValue: new StaffPasswordTokenRepository(prisma) },
     { provide: STAFF_REFRESH_TOKEN_REPOSITORY, useValue: new StaffRefreshTokenRepository(prisma) },
@@ -100,6 +103,7 @@ const prisma = getPrismaClient();
     REMINDER_LOG_REPOSITORY,
     FOLLOW_UP_LOG_REPOSITORY,
     MAGIC_LOGIN_REPOSITORY,
+    CUSTOMER_PASSWORD_TOKEN_REPOSITORY,
     STAFF_USER_REPOSITORY,
     STAFF_PASSWORD_TOKEN_REPOSITORY,
     STAFF_REFRESH_TOKEN_REPOSITORY,

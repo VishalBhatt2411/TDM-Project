@@ -74,6 +74,9 @@ export function AppLayout() {
                 Sign in
               </Link>
             )}
+            <Link to="/admin/login" className="hidden px-3 py-2 text-sm text-muted-foreground hover:text-foreground sm:inline">
+              Admin Console
+            </Link>
             <Link to="/vehicles" className="hidden sm:inline-block">
               <Button size="sm">Book a Test Drive</Button>
             </Link>
@@ -111,6 +114,9 @@ export function AppLayout() {
                   Sign in
                 </Link>
               )}
+              <Link to="/admin/login" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
+                Admin Console
+              </Link>
             </div>
           </nav>
         )}

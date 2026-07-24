@@ -10,6 +10,8 @@ interface AuthContextValue {
   verifyOtp: (input: VerifyOtpRequest) => Promise<void>;
   login: (input: LoginRequest) => Promise<void>;
   magicLogin: (token: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -51,14 +53,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [applyTokens],
   );
 
+  const forgotPassword = React.useCallback(async (email: string) => {
+    await apiClient.post("/auth/forgot-password", { email });
+  }, []);
+
+  const resetPassword = React.useCallback(async (token: string, newPassword: string) => {
+    await apiClient.post("/auth/reset-password", { token, newPassword });
+  }, []);
+
   const logout = React.useCallback(() => {
     tokenStorage.clear();
     setCustomerId(null);
   }, []);
 
   const value = React.useMemo(
-    () => ({ customerId, isAuthenticated: !!customerId, register, verifyOtp, login, magicLogin, logout }),
-    [customerId, register, verifyOtp, login, magicLogin, logout],
+    () => ({
+      customerId,
+      isAuthenticated: !!customerId,
+      register,
+      verifyOtp,
+      login,
+      magicLogin,
+      forgotPassword,
+      resetPassword,
+      logout,
+    }),
+    [customerId, register, verifyOtp, login, magicLogin, forgotPassword, resetPassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

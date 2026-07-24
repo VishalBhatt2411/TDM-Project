@@ -135,9 +135,14 @@ export class BookingsService {
 
     await this.sendConfirmation(booking, customer.email.value, customerName);
 
-    const magicLink = await this.authService.issueMagicLoginLink(customer.id);
-    await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);
-    void isNewAccount; // both new and existing customers get a fresh sign-in link — see NotificationsService
+    if (isNewAccount) {
+      // Brand-new accounts get a real password instead of only a one-time magic link,
+      // so they can sign in normally on future visits — see AuthService.issuePasswordSetupEmail.
+      await this.authService.issuePasswordSetupEmail(customer.id, customer.email.value, customerName, true);
+    } else {
+      const magicLink = await this.authService.issueMagicLoginLink(customer.id);
+      await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);
+    }
 
     return { ...bookingToDto(booking), conflictChecked: true };
   }

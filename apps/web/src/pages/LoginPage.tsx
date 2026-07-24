@@ -2,7 +2,7 @@ import * as React from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +59,11 @@ export function LoginPage() {
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Logging in…" : "Log in"}
             </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              <Link to="/forgot-password" className="underline hover:text-foreground">
+                Forgot your password?
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>

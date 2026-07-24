@@ -177,6 +177,28 @@ export function staffPasswordSetupEmail(
   };
 }
 
+export function passwordSetupEmail(
+  dealership: DealershipConfig,
+  customerName: string,
+  setupUrl: string,
+  isNewAccount: boolean,
+): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const intro = isNewAccount
+    ? `We've created an account for you at ${dealership.name} so you can track and manage your test drive bookings. Set a password to sign in anytime.`
+    : `A password reset was requested for your ${dealership.name} account.`;
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${customerName},</p>
+    <p style="color:#374151;font-size:15px;">${intro}</p>
+    <p style="margin:24px 0;">${button(setupUrl, isNewAccount ? "Set Your Password" : "Reset Your Password", accent)}</p>
+    <p style="color:#6b7280;font-size:13px;">This link expires in 1 hour. If you didn't expect this email, you can safely ignore it.</p>
+  `;
+  return {
+    subject: isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`,
+    html: layout(dealership, isNewAccount ? "Your Account is Ready" : "Password Reset Requested", body, accent),
+  };
+}
+
 export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string): { subject: string; html: string } {
   const accent = dealership.primaryColorHex ?? "#EB0A1E";
   const body = `

@@ -8,6 +8,7 @@ import {
   bookingConfirmationEmail,
   cancellationEmail,
   followUpEmail,
+  passwordSetupEmail,
   reminderEmail,
   rescheduleEmail,
   staffPasswordSetupEmail,
@@ -60,6 +61,12 @@ export class NotificationsService {
   async sendSurveyRequest(toEmail: string, customerName: string, vehicleLabel: string, surveyUrl: string): Promise<void> {
     const dealership = await this.dealershipConfig.get();
     const { subject, html } = surveyRequestEmail(dealership, customerName, vehicleLabel, surveyUrl);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendPasswordSetup(toEmail: string, customerName: string, setupUrl: string, isNewAccount: boolean): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = passwordSetupEmail(dealership, customerName, setupUrl, isNewAccount);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 

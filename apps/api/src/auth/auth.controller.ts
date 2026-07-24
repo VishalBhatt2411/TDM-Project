@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from "@nestjs/common";
 import { AuthService } from "./auth.service";
-import { LoginDto, MagicLoginDto, RefreshDto, RegisterDto, VerifyOtpDto } from "./dto";
+import { ForgotPasswordDto, LoginDto, MagicLoginDto, RefreshDto, RegisterDto, ResetPasswordDto, VerifyOtpDto } from "./dto";
 
 @Controller("auth")
 export class AuthController {
@@ -33,5 +33,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   magicLogin(@Body() dto: MagicLoginDto) {
     return this.authService.verifyMagicLogin(dto.token);
+  }
+
+  @Post("forgot-password")
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post("reset-password")
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

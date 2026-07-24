@@ -7,6 +7,8 @@ import { HomePage } from "@/pages/HomePage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { VerifyOtpPage } from "@/pages/VerifyOtpPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
+import { SetPasswordPage } from "@/pages/SetPasswordPage";
 import { MagicLoginPage } from "@/pages/MagicLoginPage";
 import { VehiclesPage } from "@/pages/VehiclesPage";
 import { VehicleDetailPage } from "@/pages/VehicleDetailPage";
@@ -27,6 +29,8 @@ export function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-otp" element={<VerifyOtpPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/magic-login" element={<MagicLoginPage />} />
         <Route path="/vehicles" element={<VehiclesPage />} />
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />

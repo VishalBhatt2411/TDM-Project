@@ -110,6 +110,22 @@ model MagicLoginToken {
   @@index([customerId])
 }
 
+// One-time-use links for customer password creation/reset — issued when a new
+// account is auto-registered at booking time (see AuthService.issuePasswordSetupEmail)
+// and reused for customer-initiated forgot-password requests. Same shape/semantics
+// as StaffPasswordToken; kept separate since customers and staff are different
+// identity spaces.
+model CustomerPasswordToken {
+  id         String    @id @default(uuid())
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId])
+}
+
 // Internal platform staff (Admin Console users) — entirely separate identity
 // space from customers. Deliberately platform-operational (Postgres), not
 // Salesforce: this is about who can log into OUR admin console, not CRM data.
