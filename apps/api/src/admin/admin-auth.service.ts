@@ -31,25 +31,32 @@ export class AdminAuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  /** The "state" param is a short-lived signed JWT (not server-side session state) — CSRF protection with no storage. */
+  /**
+   * The "state" param is a short-lived signed JWT (not server-side session state) —
+   * CSRF protection with no storage. It also carries the PKCE code_verifier across
+   * the login->callback gap, since those are two separate HTTP requests.
+   */
   buildAuthorizationUrl(): string {
-    const state = this.jwtService.sign({ purpose: OAUTH_STATE_PURPOSE }, { expiresIn: OAUTH_STATE_TTL });
-    return this.identityProvider.getAuthorizationUrl(state);
+    const codeVerifier = this.identityProvider.generateCodeVerifier();
+    const state = this.jwtService.sign({ purpose: OAUTH_STATE_PURPOSE, codeVerifier }, { expiresIn: OAUTH_STATE_TTL });
+    return this.identityProvider.buildAuthorizationUrl(state, codeVerifier);
   }
 
   async handleCallback(code: string, state: string): Promise<SalesforceCallbackResult> {
+    let codeVerifier: string;
     try {
-      const payload = this.jwtService.verify<{ purpose?: string }>(state);
-      if (payload.purpose !== OAUTH_STATE_PURPOSE) {
+      const payload = this.jwtService.verify<{ purpose?: string; codeVerifier?: string }>(state);
+      if (payload.purpose !== OAUTH_STATE_PURPOSE || !payload.codeVerifier) {
         return { error: "invalid_state" };
       }
+      codeVerifier = payload.codeVerifier;
     } catch {
       return { error: "invalid_state" };
     }
 
     let identity;
     try {
-      identity = await this.identityProvider.exchangeCodeForIdentity(code);
+      identity = await this.identityProvider.exchangeCodeForIdentity(code, codeVerifier);
     } catch (err) {
       this.logger.error(`Salesforce OAuth code exchange failed: ${(err as Error).message}`);
       return { error: "exchange_failed" };
