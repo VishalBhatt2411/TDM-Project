@@ -8,6 +8,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import jsforce from "jsforce";
+import { galleryUrlsFor } from "./vehicle-image-map.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,34 +20,6 @@ async function getConnection() {
   );
   const { result } = JSON.parse(stdout);
   return new jsforce.Connection({ accessToken: result.accessToken, instanceUrl: result.instanceUrl });
-}
-
-const IMAGE_CATEGORY_BY_MODEL = {
-  "Glanza": "hatchback",
-  "Urban Cruiser Taisor": "suv",
-  "Urban Cruiser Hyryder": "suv",
-  "Rumion": "mpv",
-  "Innova Crysta": "mpv",
-  "Innova Hycross": "mpv",
-  "Fortuner": "suv",
-  "Fortuner Legender": "suv",
-  "Hilux": "pickup",
-  "Camry": "luxury_sedan",
-  "Vellfire": "luxury_mpv",
-};
-const IMAGE_COUNT_BY_CATEGORY = {
-  hatchback: 4,
-  suv: 3,
-  mpv: 4,
-  pickup: 4,
-  luxury_sedan: 4,
-  luxury_mpv: 4,
-};
-function galleryUrlsFor(model) {
-  const category = IMAGE_CATEGORY_BY_MODEL[model];
-  if (!category) return [];
-  const count = IMAGE_COUNT_BY_CATEGORY[category];
-  return Array.from({ length: count }, (_, i) => `/vehicle-images/${category}/${i + 1}.jpg`);
 }
 
 async function main() {
