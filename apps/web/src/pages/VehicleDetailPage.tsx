@@ -76,6 +76,13 @@ export function VehicleDetailPage() {
         bodyType={vehicle.bodyType}
       />
 
+      {/* Colors — kept right under the gallery so switching colour feels tied to the photos above it */}
+      <ColorSelector
+        colors={vehicle.colors}
+        galleryUrls={vehicle.galleryUrls ?? []}
+        label={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+      />
+
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -178,13 +185,6 @@ export function VehicleDetailPage() {
               </div>
             </div>
           )}
-
-          {/* Colors */}
-          <ColorSelector
-            colors={vehicle.colors}
-            galleryUrls={vehicle.galleryUrls ?? []}
-            label={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-          />
 
           {/* EMI Calculator */}
           <div className="mt-8">

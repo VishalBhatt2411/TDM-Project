@@ -58,12 +58,12 @@ export function ColorSelector({
       </div>
 
       {previewUrl && (
-        <div className="mt-4 max-w-sm overflow-hidden rounded-lg border bg-muted">
+        <div className="mt-4 max-w-xl overflow-hidden rounded-lg border bg-muted">
           <img
             key={previewUrl}
             src={previewUrl}
             alt={`${label} in ${selected.name}`}
-            className="aspect-[16/10] w-full object-cover"
+            className="aspect-[16/9] w-full object-cover"
           />
           <p className="px-3 py-2 text-xs text-muted-foreground">
             {label} shown in <span className="font-medium text-foreground">{selected.name}</span>
