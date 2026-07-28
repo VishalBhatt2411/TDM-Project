@@ -58,7 +58,7 @@ export function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/vehicles">
-                <Button size="lg" variant="default" className="bg-white text-foreground hover:bg-white/90">
+                <Button size="lg" variant="default" className="bg-white text-slate-900 hover:bg-white/90">
                   Book a Test Drive
                 </Button>
               </Link>

@@ -99,6 +99,8 @@ export interface SalesOpportunityRepository {
 export interface AuthCredentials {
   customerId: string;
   passwordHash: string;
+  /** True for a system-generated password the customer has never seen/chosen (e.g. auto-registered at booking time) — such an account has no real way to log in again once a one-time link is used, and should always be offered password setup rather than a magic link. */
+  isTemporary: boolean;
 }
 
 export interface AuthRepository {

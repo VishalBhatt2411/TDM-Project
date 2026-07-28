@@ -3,6 +3,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { ConsoleOtpSender, OTP_SENDER } from "./otp-sender";
 
 // Global: JwtService (and the guards that depend on it — customer JwtAuthGuard,
@@ -17,6 +18,7 @@ import { ConsoleOtpSender, OTP_SENDER } from "./otp-sender";
       secret: process.env.JWT_SECRET ?? "dev-only-secret-change-me",
       signOptions: { expiresIn: "15m" },
     }),
+    NotificationsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtAuthGuard, { provide: OTP_SENDER, useClass: ConsoleOtpSender }],

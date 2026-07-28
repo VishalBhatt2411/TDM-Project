@@ -1,27 +1,5 @@
-import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MinLength } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString } from "class-validator";
 import { ALL_PERMISSIONS, PermissionKey } from "./permissions";
-
-export class StaffLoginDto {
-  @IsEmail()
-  email!: string;
-
-  @IsString()
-  password!: string;
-}
-
-export class StaffForgotPasswordDto {
-  @IsEmail()
-  email!: string;
-}
-
-export class StaffResetPasswordDto {
-  @IsString()
-  token!: string;
-
-  @IsString()
-  @MinLength(8)
-  newPassword!: string;
-}
 
 export class StaffRefreshDto {
   @IsString()
@@ -35,8 +13,8 @@ export class CreateStaffUserDto {
   @IsString()
   name!: string;
 
-  @IsIn(["Admin", "Manager"])
-  role!: "Admin" | "Manager";
+  @IsIn(["Admin", "Manager", "SalesRep"])
+  role!: "Admin" | "Manager" | "SalesRep";
 
   @IsOptional()
   @IsArray()
@@ -46,8 +24,16 @@ export class CreateStaffUserDto {
 
 export class UpdateStaffUserDto {
   @IsOptional()
-  @IsIn(["Admin", "Manager"])
-  role?: "Admin" | "Manager";
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsIn(["Admin", "Manager", "SalesRep"])
+  role?: "Admin" | "Manager" | "SalesRep";
 
   @IsOptional()
   @IsArray()

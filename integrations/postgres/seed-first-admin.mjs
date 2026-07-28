@@ -2,7 +2,8 @@
  * One-time seed for the very first Admin Console user. Staff users are normally
  * only creatable by an existing Admin (see AdminUsersService) — this script exists
  * solely to break that chicken-and-egg problem for the first account. No password
- * is set here; the account owner sets one via the real forgot-password/email flow.
+ * is set here — staff authenticate with their existing Salesforce account (OAuth2),
+ * so this email must match a real Salesforce User's identity email.
  *
  * Usage: node seed-first-admin.mjs <email> <name>
  */

@@ -16,7 +16,7 @@ export const adminTokenStorage = {
 
 export interface StaffTokenPayload {
   sub: string;
-  role: "Admin" | "Manager";
+  role: "Admin" | "Manager" | "SalesRep";
   permissions: string[];
 }
 

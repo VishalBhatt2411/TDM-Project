@@ -8,14 +8,14 @@ export class PostgresAuthRepository implements AuthRepository {
   async saveCredentials(creds: AuthCredentials): Promise<void> {
     await this.prisma.authCredential.upsert({
       where: { customerId: creds.customerId },
-      create: { customerId: creds.customerId, passwordHash: creds.passwordHash },
-      update: { passwordHash: creds.passwordHash },
+      create: { customerId: creds.customerId, passwordHash: creds.passwordHash, isTemporary: creds.isTemporary },
+      update: { passwordHash: creds.passwordHash, isTemporary: creds.isTemporary },
     });
   }
 
   async findCredentials(customerId: string): Promise<AuthCredentials | null> {
     const record = await this.prisma.authCredential.findUnique({ where: { customerId } });
-    return record ? { customerId: record.customerId, passwordHash: record.passwordHash } : null;
+    return record ? { customerId: record.customerId, passwordHash: record.passwordHash, isTemporary: record.isTemporary } : null;
   }
 
   async saveOtp(customerId: string, codeHash: string, expiresAt: Date): Promise<void> {

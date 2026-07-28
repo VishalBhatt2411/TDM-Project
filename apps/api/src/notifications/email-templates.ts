@@ -154,26 +154,44 @@ export function followUpEmail(
   return { subject: `Still thinking about the ${vehicleLabel}?`, html: layout(dealership, "We'd Love to Hear From You", body, accent) };
 }
 
-export function staffPasswordSetupEmail(
+export function staffAccessGrantedEmail(
   dealership: DealershipConfig,
   staffName: string,
   role: string,
+  loginUrl: string,
+): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${staffName},</p>
+    <p style="color:#374151;font-size:15px;">You've been granted access to the ${dealership.name} Admin Console with the role of <strong>${role}</strong>.</p>
+    <p style="margin:24px 0;">${button(loginUrl, "Log In with Salesforce", accent)}</p>
+    <p style="color:#6b7280;font-size:13px;">Sign in using your existing Salesforce account — no separate password to set up.</p>
+  `;
+  return {
+    subject: `Your ${dealership.name} Admin Console access is ready`,
+    html: layout(dealership, "Admin Console Access Granted", body, accent),
+  };
+}
+
+export function passwordSetupEmail(
+  dealership: DealershipConfig,
+  customerName: string,
   setupUrl: string,
   isNewAccount: boolean,
 ): { subject: string; html: string } {
   const accent = dealership.primaryColorHex ?? "#EB0A1E";
   const intro = isNewAccount
-    ? `An Admin Console account has been created for you at ${dealership.name} with the role of <strong>${role}</strong>.`
-    : `A password reset was requested for your ${dealership.name} Admin Console account.`;
+    ? `We've created an account for you at ${dealership.name} so you can track and manage your test drive bookings. Set a password to sign in anytime.`
+    : `A password reset was requested for your ${dealership.name} account.`;
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${staffName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${customerName},</p>
     <p style="color:#374151;font-size:15px;">${intro}</p>
     <p style="margin:24px 0;">${button(setupUrl, isNewAccount ? "Set Your Password" : "Reset Your Password", accent)}</p>
     <p style="color:#6b7280;font-size:13px;">This link expires in 1 hour. If you didn't expect this email, you can safely ignore it.</p>
   `;
   return {
-    subject: isNewAccount ? `Your ${dealership.name} Admin Console account` : `Reset your ${dealership.name} Admin Console password`,
-    html: layout(dealership, isNewAccount ? "Welcome to the Admin Console" : "Password Reset Requested", body, accent),
+    subject: isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`,
+    html: layout(dealership, isNewAccount ? "Your Account is Ready" : "Password Reset Requested", body, accent),
   };
 }
 

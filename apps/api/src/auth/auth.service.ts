@@ -2,15 +2,17 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthRepository, Customer, CustomerRepository, Email, PersonName, PhoneNumber } from "@tdm/domain";
-import { generateOtpCode, hashSecret, MagicLoginRepository, sha256Hex, verifySecret } from "@tdm/postgres-adapter";
-import { AUTH_REPOSITORY, CUSTOMER_REPOSITORY, MAGIC_LOGIN_REPOSITORY } from "../infrastructure/tokens";
-import { LoginDto, RefreshDto, RegisterDto, VerifyOtpDto } from "./dto";
+import { CustomerPasswordTokenRepository, generateOtpCode, hashSecret, MagicLoginRepository, sha256Hex, verifySecret } from "@tdm/postgres-adapter";
+import { AUTH_REPOSITORY, CUSTOMER_PASSWORD_TOKEN_REPOSITORY, CUSTOMER_REPOSITORY, MAGIC_LOGIN_REPOSITORY } from "../infrastructure/tokens";
+import { NotificationsService } from "../notifications/notifications.service";
+import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, VerifyOtpDto } from "./dto";
 import { OTP_SENDER, OtpSender } from "./otp-sender";
 
 const OTP_TTL_MINUTES = 10;
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAGIC_LINK_TTL_MS = 48 * 60 * 60 * 1000;
+const PASSWORD_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 @Injectable()
 export class AuthService {
@@ -20,8 +22,10 @@ export class AuthService {
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(AUTH_REPOSITORY) private readonly authRepo: AuthRepository,
     @Inject(MAGIC_LOGIN_REPOSITORY) private readonly magicLoginRepo: MagicLoginRepository,
+    @Inject(CUSTOMER_PASSWORD_TOKEN_REPOSITORY) private readonly passwordTokens: CustomerPasswordTokenRepository,
     private readonly jwtService: JwtService,
     @Inject(OTP_SENDER) private readonly otpSender: OtpSender,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ customerId: string; otpChannel: "sms" | "email" }> {
@@ -41,7 +45,7 @@ export class AuthService {
     await this.customers.save(customer);
 
     const passwordHash = await hashSecret(dto.password);
-    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash });
+    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash, isTemporary: false });
 
     await this.issueOtp(customer);
 
@@ -119,7 +123,7 @@ export class AuthService {
     await this.customers.save(customer);
 
     const passwordHash = await hashSecret(randomBytes(24).toString("hex"));
-    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash });
+    await this.authRepo.saveCredentials({ customerId: customer.id, passwordHash, isTemporary: true });
 
     return customer;
   }
@@ -140,6 +144,47 @@ export class AuthService {
       throw new UnauthorizedException("This sign-in link is invalid or has expired.");
     }
     return this.issueTokens(customerId);
+  }
+
+  /**
+   * Sends a one-time password-creation/reset link. Used both when a brand-new
+   * customer account is auto-registered at booking time (isNewAccount = true, so
+   * they end up with a real, memorable password instead of only a magic link)
+   * and for customer-initiated forgot-password requests (isNewAccount = false).
+   */
+  async issuePasswordSetupEmail(customerId: string, email: string, name: string, isNewAccount: boolean): Promise<void> {
+    const rawToken = randomBytes(32).toString("hex");
+    await this.passwordTokens.save(customerId, sha256Hex(rawToken), new Date(Date.now() + PASSWORD_TOKEN_TTL_MS));
+    const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+    const setupUrl = `${webOrigin}/set-password?token=${rawToken}`;
+    this.logger.log(`Password setup link for ${email}: ${setupUrl}`);
+    await this.notifications.sendPasswordSetup(email, name, setupUrl, isNewAccount);
+  }
+
+  /** Always returns the same generic result whether or not the email exists, to avoid leaking which customer emails are registered. */
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const customer = await this.customers.findByEmail(dto.email);
+    if (customer) {
+      const name = `${customer.name.firstName} ${customer.name.lastName}`;
+      await this.issuePasswordSetupEmail(customer.id, customer.email.value, name, /* isNewAccount */ false);
+    }
+    return { message: "If an account exists for that email, a reset link has been sent." };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ success: boolean }> {
+    const customerId = await this.passwordTokens.consume(sha256Hex(dto.token));
+    if (!customerId) {
+      throw new UnauthorizedException("This link is invalid or has expired.");
+    }
+    const passwordHash = await hashSecret(dto.newPassword);
+    await this.authRepo.saveCredentials({ customerId, passwordHash, isTemporary: false });
+    return { success: true };
+  }
+
+  /** True if the customer has never set a real password (still on the system-generated one from auto-registration) — such an account must be offered password setup rather than a magic link, since a magic link is their only way in otherwise. */
+  async needsPasswordSetup(customerId: string): Promise<boolean> {
+    const credentials = await this.authRepo.findCredentials(customerId);
+    return !credentials || credentials.isTemporary;
   }
 
   private async issueOtp(customer: Customer): Promise<void> {

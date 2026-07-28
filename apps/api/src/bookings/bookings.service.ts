@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   AuditLogRepository,
   Booking,
@@ -61,6 +61,8 @@ export function bookingToDto(booking: Booking): BookingDto {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
@@ -108,15 +110,23 @@ export class BookingsService {
       // A returning customer's details can change between bookings (typo fix, new
       // number, booking for a different name) — keep the record in sync with what
       // was actually submitted on this form rather than silently keeping stale data.
-      const submittedPhone = PhoneNumber.create(`+91${dto.mobileNumber}`);
-      const submittedName = PersonName.create(dto.firstName, dto.lastName);
-      if (
-        submittedPhone.value !== customer.phone.value ||
-        submittedName.firstName !== customer.name.firstName ||
-        submittedName.lastName !== customer.name.lastName
-      ) {
-        customer.updateContactDetails({ name: submittedName, phone: submittedPhone });
-        await this.customers.save(customer);
+      // This is a best-effort enrichment, not part of the booking's critical path:
+      // a Salesforce write failure here must never block the booking itself.
+      try {
+        const submittedPhone = PhoneNumber.create(`+91${dto.mobileNumber}`);
+        const submittedName = PersonName.create(dto.firstName, dto.lastName);
+        if (
+          submittedPhone.value !== customer.phone.value ||
+          submittedName.firstName !== customer.name.firstName ||
+          submittedName.lastName !== customer.name.lastName
+        ) {
+          customer.updateContactDetails({ name: submittedName, phone: submittedPhone });
+          await this.customers.save(customer);
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to sync contact details for customer ${customer.id} during booking: ${(error as Error).message}`,
+        );
       }
     }
 
@@ -125,9 +135,18 @@ export class BookingsService {
 
     await this.sendConfirmation(booking, customer.email.value, customerName);
 
-    const magicLink = await this.authService.issueMagicLoginLink(customer.id);
-    await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);
-    void isNewAccount; // both new and existing customers get a fresh sign-in link — see NotificationsService
+    // A magic link is a nice one-click convenience, but it's only safe to send when the
+    // customer already has a real password to fall back on — otherwise, once that single-use
+    // link is consumed (or expires), they have no way back in. isNewAccount is checked first to
+    // skip a redundant lookup, but a *returning* customer whose account was itself auto-registered
+    // and never had its password set (e.g. from before this check existed) must get the same
+    // password-setup email, not a magic link, on every booking until they actually set one.
+    if (isNewAccount || (await this.authService.needsPasswordSetup(customer.id))) {
+      await this.authService.issuePasswordSetupEmail(customer.id, customer.email.value, customerName, isNewAccount);
+    } else {
+      const magicLink = await this.authService.issueMagicLoginLink(customer.id);
+      await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);
+    }
 
     return { ...bookingToDto(booking), conflictChecked: true };
   }

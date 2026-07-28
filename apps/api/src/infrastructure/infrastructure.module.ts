@@ -1,5 +1,6 @@
 import { Global, Module } from "@nestjs/common";
 import {
+  CustomerPasswordTokenRepository,
   DealershipConfigRepository,
   FollowUpLogRepository,
   getPrismaClient,
@@ -8,7 +9,6 @@ import {
   PostgresAuthRepository,
   PostgresFeatureFlagRepository,
   ReminderLogRepository,
-  StaffPasswordTokenRepository,
   StaffRefreshTokenRepository,
   StaffUserRepository,
 } from "@tdm/postgres-adapter";
@@ -18,6 +18,7 @@ import {
   SalesforceBranchRepository,
   SalesforceConnectionProvider,
   SalesforceCustomerRepository,
+  SalesforceIdentityProvider,
   SalesforceSalesOpportunityRepository,
   SalesforceSalesRepRepository,
   SalesforceVehicleAllocationRepository,
@@ -31,6 +32,7 @@ import {
   AUTH_REPOSITORY,
   BOOKING_REPOSITORY,
   BRANCH_REPOSITORY,
+  CUSTOMER_PASSWORD_TOKEN_REPOSITORY,
   CUSTOMER_REPOSITORY,
   DEALERSHIP_CONFIG_REPOSITORY,
   FEATURE_FLAG_REPOSITORY,
@@ -40,7 +42,7 @@ import {
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
   SALESFORCE_CONNECTION_PROVIDER,
-  STAFF_PASSWORD_TOKEN_REPOSITORY,
+  SALESFORCE_IDENTITY_PROVIDER,
   STAFF_REFRESH_TOKEN_REPOSITORY,
   STAFF_USER_REPOSITORY,
   VEHICLE_ALLOCATION_REPOSITORY,
@@ -50,6 +52,12 @@ import {
 } from "./tokens";
 
 const connectionProvider = new SalesforceConnectionProvider();
+const identityProvider = new SalesforceIdentityProvider({
+  clientId: process.env.SF_OAUTH_CLIENT_ID ?? "",
+  clientSecret: process.env.SF_OAUTH_CLIENT_SECRET ?? "",
+  redirectUri: process.env.SF_OAUTH_REDIRECT_URI ?? "http://localhost:3000/api/v1/admin/auth/salesforce/callback",
+  loginUrl: process.env.SF_LOGIN_URL,
+});
 const prisma = getPrismaClient();
 
 /**
@@ -60,6 +68,7 @@ const prisma = getPrismaClient();
 @Module({
   providers: [
     { provide: SALESFORCE_CONNECTION_PROVIDER, useValue: connectionProvider },
+    { provide: SALESFORCE_IDENTITY_PROVIDER, useValue: identityProvider },
     { provide: CUSTOMER_REPOSITORY, useValue: new SalesforceCustomerRepository(connectionProvider) },
     { provide: VEHICLE_REPOSITORY, useValue: new SalesforceVehicleRepository(connectionProvider) },
     { provide: VEHICLE_VARIANT_REPOSITORY, useValue: new SalesforceVehicleVariantRepository(connectionProvider) },
@@ -77,12 +86,13 @@ const prisma = getPrismaClient();
     { provide: REMINDER_LOG_REPOSITORY, useValue: new ReminderLogRepository(prisma) },
     { provide: FOLLOW_UP_LOG_REPOSITORY, useValue: new FollowUpLogRepository(prisma) },
     { provide: MAGIC_LOGIN_REPOSITORY, useValue: new MagicLoginRepository(prisma) },
+    { provide: CUSTOMER_PASSWORD_TOKEN_REPOSITORY, useValue: new CustomerPasswordTokenRepository(prisma) },
     { provide: STAFF_USER_REPOSITORY, useValue: new StaffUserRepository(prisma) },
-    { provide: STAFF_PASSWORD_TOKEN_REPOSITORY, useValue: new StaffPasswordTokenRepository(prisma) },
     { provide: STAFF_REFRESH_TOKEN_REPOSITORY, useValue: new StaffRefreshTokenRepository(prisma) },
   ],
   exports: [
     SALESFORCE_CONNECTION_PROVIDER,
+    SALESFORCE_IDENTITY_PROVIDER,
     CUSTOMER_REPOSITORY,
     VEHICLE_REPOSITORY,
     VEHICLE_VARIANT_REPOSITORY,
@@ -100,8 +110,8 @@ const prisma = getPrismaClient();
     REMINDER_LOG_REPOSITORY,
     FOLLOW_UP_LOG_REPOSITORY,
     MAGIC_LOGIN_REPOSITORY,
+    CUSTOMER_PASSWORD_TOKEN_REPOSITORY,
     STAFF_USER_REPOSITORY,
-    STAFF_PASSWORD_TOKEN_REPOSITORY,
     STAFF_REFRESH_TOKEN_REPOSITORY,
   ],
 })

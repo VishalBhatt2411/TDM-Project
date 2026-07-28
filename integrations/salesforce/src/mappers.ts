@@ -25,13 +25,31 @@ export function contactToCustomer(record: any): Customer {
     id: record.Portal_User_Id__c,
     name: PersonName.create(record.FirstName ?? "", record.LastName ?? ""),
     email: Email.create(record.Email),
-    phone: PhoneNumber.create(record.Phone ?? record.MobilePhone),
+    phone: PhoneNumber.create(normalizeIndianPhone(record.Phone ?? record.MobilePhone)),
     emailVerified: !!record.Email_Verified__c,
     phoneVerified: !!record.Phone_Verified__c,
     preferredLanguage: record.Preferred_Language__c ?? "en",
     marketingOptIn: !!record.Marketing_Opt_In__c,
     createdAt: new Date(record.CreatedDate ?? Date.now()),
   });
+}
+
+/**
+ * Salesforce Contact.Phone is a free-text field with no format enforcement — a staff
+ * member can (and will) edit it directly in Salesforce without knowing this app writes
+ * strict E.164. Every number this app itself ever writes is a 10-digit Indian mobile
+ * number prefixed with +91, so a bare/reformatted 10 or 12-digit value read back is
+ * near-certainly the same number missing that prefix, not a different country's number.
+ * Anything else is passed through unchanged so PhoneNumber.create still reports a clear,
+ * specific error rather than this silently guessing at genuinely foreign/malformed data.
+ */
+function normalizeIndianPhone(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed || trimmed.startsWith("+")) return trimmed;
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  if (digitsOnly.length === 10) return `+91${digitsOnly}`;
+  if (digitsOnly.length === 12 && digitsOnly.startsWith("91")) return `+${digitsOnly}`;
+  return trimmed;
 }
 
 export function customerToContactRecord(customer: Customer): Record<string, unknown> {

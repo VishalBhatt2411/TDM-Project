@@ -8,9 +8,10 @@ import {
   bookingConfirmationEmail,
   cancellationEmail,
   followUpEmail,
+  passwordSetupEmail,
   reminderEmail,
   rescheduleEmail,
-  staffPasswordSetupEmail,
+  staffAccessGrantedEmail,
   surveyRequestEmail,
 } from "./email-templates";
 
@@ -63,15 +64,15 @@ export class NotificationsService {
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 
-  async sendStaffPasswordSetup(
-    toEmail: string,
-    staffName: string,
-    role: string,
-    setupUrl: string,
-    isNewAccount: boolean,
-  ): Promise<void> {
+  async sendPasswordSetup(toEmail: string, customerName: string, setupUrl: string, isNewAccount: boolean): Promise<void> {
     const dealership = await this.dealershipConfig.get();
-    const { subject, html } = staffPasswordSetupEmail(dealership, staffName, role, setupUrl, isNewAccount);
+    const { subject, html } = passwordSetupEmail(dealership, customerName, setupUrl, isNewAccount);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendStaffAccessGranted(toEmail: string, staffName: string, role: string, loginUrl: string): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = staffAccessGrantedEmail(dealership, staffName, role, loginUrl);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 }

@@ -16,10 +16,16 @@ export class SalesforceCustomerRepository implements CustomerRepository {
     });
   }
 
+  /**
+   * Matches only Contacts actually registered as portal customers (Portal_User_Id__c
+   * set) — a Contact can exist in Salesforce for all sorts of reasons unrelated to
+   * this app (CRM data entry, lead conversion, an import) and must never be treated
+   * as an existing portal account just because it happens to share an email.
+   */
   async findByEmail(email: string): Promise<Customer | null> {
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Email = '${escapeSoql(email.toLowerCase())}' LIMIT 1`,
+        `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Email = '${escapeSoql(email.toLowerCase())}' AND Portal_User_Id__c != null LIMIT 1`,
       );
       const record = result.records[0];
       return record ? contactToCustomer(record) : null;
