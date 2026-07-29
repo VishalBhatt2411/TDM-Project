@@ -32,6 +32,8 @@ export class SalesforceConnectionProvider {
    *  their own `sf org display` subprocess, which can race against the CLI's own
    *  session cache and intermittently fail. */
   private refreshInFlight: Promise<Connection> | null = null;
+  /** Cached alongside the connection — invalidated together, since a new token can mean a new identity. */
+  private cachedIntegrationUserId: string | null = null;
 
   constructor(private readonly orgAlias: string = process.env.SF_TARGET_ORG_ALIAS ?? "tdm-dev") {}
 
@@ -49,9 +51,23 @@ export class SalesforceConnectionProvider {
     return this.cachedConnection;
   }
 
+  /**
+   * The Salesforce User id this app's own connection authenticates as — every Booking__c
+   * defaults to being owned by this identity until a real rep is assigned (OwnerId can
+   * never be blank), so this id is what "unassigned" actually looks like on the record.
+   */
+  async getIntegrationUserId(): Promise<string> {
+    if (this.cachedIntegrationUserId) return this.cachedIntegrationUserId;
+    const conn = await this.getConnection();
+    const identity = await conn.identity();
+    this.cachedIntegrationUserId = identity.user_id;
+    return this.cachedIntegrationUserId;
+  }
+
   /** Call after a request fails with an auth/session error to force a fresh token. */
   async invalidate(): Promise<void> {
     this.cachedConnection = null;
+    this.cachedIntegrationUserId = null;
   }
 
   private async createConnection(): Promise<Connection> {

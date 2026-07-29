@@ -7,6 +7,11 @@ export interface StaffUserDto {
   name: string;
   role: "Admin" | "Manager" | "SalesRep";
   permissions: string[];
+  /** Bookings are assigned to their real Salesforce login — only true once they've signed in via "Login with Salesforce" at least once. */
+  hasLoggedInWithSalesforce: boolean;
+  branchId?: string;
+  maxDailyBookings?: number;
+  phone?: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -16,6 +21,9 @@ export interface CreateStaffUserRequest {
   name: string;
   role: "Admin" | "Manager" | "SalesRep";
   permissions?: string[];
+  branchId?: string;
+  maxDailyBookings?: number;
+  phone?: string;
 }
 
 export interface UpdateStaffUserRequest {
@@ -23,6 +31,9 @@ export interface UpdateStaffUserRequest {
   email?: string;
   role?: "Admin" | "Manager" | "SalesRep";
   permissions?: string[];
+  branchId?: string;
+  maxDailyBookings?: number;
+  phone?: string;
   isActive?: boolean;
 }
 
@@ -53,8 +64,61 @@ export async function listAdminBookings(query: AdminBookingListQuery): Promise<P
   return data;
 }
 
+export interface RepBookingListQuery {
+  status?: BookingStatus;
+  page?: number;
+  pageSize?: number;
+}
+
+/** A rep's own assigned bookings — requires the staff account to be linked to a Sales Rep record. */
+export async function listMyAssignedBookings(query: RepBookingListQuery): Promise<Paginated<BookingDto>> {
+  const { data } = await adminApiClient.get<Paginated<BookingDto>>("/admin/bookings/mine", { params: query });
+  return data;
+}
+
 export async function assignSalesRep(bookingId: string, salesRepId: string): Promise<BookingDto> {
   const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/assign-rep`, { salesRepId });
+  return data;
+}
+
+/** A rep handing their own booking off to a colleague. */
+export async function handoffBooking(bookingId: string, salesRepId: string): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/handoff`, { salesRepId });
+  return data;
+}
+
+export async function checkInBookingAsStaff(bookingId: string, method: "QR" | "Manual"): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/check-in`, { method });
+  return data;
+}
+
+export async function startDriveAsStaff(bookingId: string, odometerStart: number): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/start`, { odometerStart });
+  return data;
+}
+
+export async function completeDriveAsStaff(bookingId: string, odometerEnd: number): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/complete`, { odometerEnd });
+  return data;
+}
+
+export async function markNoShowAsStaff(bookingId: string): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/no-show`, {});
+  return data;
+}
+
+export async function setBookingStaffNotes(bookingId: string, notes: string): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/notes`, { notes });
+  return data;
+}
+
+export async function cancelBookingAsStaff(bookingId: string, reason: string): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/cancel`, { reason });
+  return data;
+}
+
+export async function rescheduleBookingAsStaff(bookingId: string, slot: { start: string; end: string }): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/reschedule`, { slot });
   return data;
 }
 
@@ -62,7 +126,7 @@ export interface SalesRepLookupDto {
   id: string;
   name: string;
   email: string;
-  branchId: string;
+  branchId?: string;
 }
 
 export interface BranchLookupDto {

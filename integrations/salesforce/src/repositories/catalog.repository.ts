@@ -1,16 +1,14 @@
 import {
   Branch,
   BranchRepository,
-  SalesRepRepository,
-  SalesRepresentative,
   Vehicle,
   VehicleRepository,
   VehicleSearchCriteria,
   VehicleVariantRepository,
 } from "@tdm/domain";
 import { SalesforceConnectionProvider } from "../connection";
-import { branchRecordToDomain, salesRepRecordToDomain, variantRecordToDomain, vehicleRecordToDomain, vehicleToUpdateRecord } from "../mappers";
-import { BRANCH_FIELDS, SALES_REP_FIELDS, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
+import { branchRecordToDomain, variantRecordToDomain, vehicleRecordToDomain, vehicleToUpdateRecord } from "../mappers";
+import { BRANCH_FIELDS, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
 
 export class SalesforceVehicleRepository implements VehicleRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
@@ -111,62 +109,6 @@ export class SalesforceBranchRepository implements BranchRepository {
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(`SELECT ${BRANCH_FIELDS} FROM Branch__c WHERE Is_Active__c = true ORDER BY Name`);
       return result.records.map(branchRecordToDomain);
-    });
-  }
-}
-
-export class SalesforceSalesRepRepository implements SalesRepRepository {
-  constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
-
-  async findById(id: string): Promise<SalesRepresentative | null> {
-    return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${SALES_REP_FIELDS} FROM Sales_Rep__c WHERE Id = '${id}' LIMIT 1`);
-      const record = result.records[0];
-      return record ? salesRepRecordToDomain(record) : null;
-    });
-  }
-
-  async findByBranch(branchId: string): Promise<SalesRepresentative[]> {
-    return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
-        `SELECT ${SALES_REP_FIELDS} FROM Sales_Rep__c WHERE Branch__c = '${branchId}' AND Is_Active__c = true`,
-      );
-      return result.records.map(salesRepRecordToDomain);
-    });
-  }
-
-  async findAllActive(): Promise<SalesRepresentative[]> {
-    return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${SALES_REP_FIELDS} FROM Sales_Rep__c WHERE Is_Active__c = true ORDER BY Name`);
-      return result.records.map(salesRepRecordToDomain);
-    });
-  }
-
-  async findLeastLoadedForBranch(branchId: string, onDate: Date): Promise<SalesRepresentative | null> {
-    return withConnection(this.connectionProvider, async (conn) => {
-      const dayStart = new Date(onDate);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(onDate);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const reps = await conn.query(
-        `SELECT ${SALES_REP_FIELDS} FROM Sales_Rep__c WHERE Branch__c = '${branchId}' AND Is_Active__c = true`,
-      );
-      if (reps.records.length === 0) return null;
-
-      const loadCounts = await Promise.all(
-        reps.records.map(async (rep: any) => {
-          const result = await conn.query(
-            `SELECT COUNT() FROM Booking__c WHERE Sales_Rep__c = '${rep.Id}' ` +
-              `AND Scheduled_Start__c >= ${dayStart.toISOString()} AND Scheduled_Start__c <= ${dayEnd.toISOString()} ` +
-              `AND Status__c IN ('Requested','Confirmed','InProgress')`,
-          );
-          return { rep, count: (result as any).totalSize };
-        }),
-      );
-
-      const least = loadCounts.reduce((min: { rep: any; count: number }, curr) => (curr.count < min.count ? curr : min));
-      return salesRepRecordToDomain(least.rep);
     });
   }
 }

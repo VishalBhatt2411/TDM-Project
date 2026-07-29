@@ -230,6 +230,28 @@ export function passwordSetupEmail(
   };
 }
 
+export function salesRepAssignedEmail(
+  dealership: DealershipConfig,
+  repName: string,
+  ctx: BookingEmailContext,
+): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${repName},</p>
+    <p style="color:#374151;font-size:15px;">You've been assigned to a test drive. Here are the details:</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
+      ${infoRow("Customer", ctx.customerName)}
+      ${infoRow("Vehicle", ctx.vehicleLabel)}
+      ${infoRow("Booking Reference", ctx.bookingReference)}
+      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
+      ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
+    </table>
+    <p style="color:#374151;font-size:15px;">Log in to the Admin Console to view or act on this booking.</p>
+  `;
+  return { subject: `New Test Drive Assigned — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "You've Been Assigned a Test Drive", body, accent) };
+}
+
 export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string): { subject: string; html: string } {
   const accent = dealership.primaryColorHex ?? "#EB0A1E";
   const body = `

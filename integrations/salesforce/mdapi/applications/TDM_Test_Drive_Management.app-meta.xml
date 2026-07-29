@@ -5,10 +5,12 @@
     <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
     <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
     <navType>Standard</navType>
+    <!-- No Sales_Rep__c tab: that object is retired (bookings are owned by real Salesforce
+         Users now), so the tab was dead navigation. Branch__c stays in the app for
+         admins/managers but is hidden from field reps via the TDM_Sales_Rep permission set. -->
     <tabs>TDM_Dashboard</tabs>
     <tabs>Booking__c</tabs>
     <tabs>Vehicle__c</tabs>
-    <tabs>Sales_Rep__c</tabs>
     <tabs>Branch__c</tabs>
     <uiType>Lightning</uiType>
 </CustomApplication>

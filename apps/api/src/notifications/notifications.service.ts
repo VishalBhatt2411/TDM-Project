@@ -11,6 +11,7 @@ import {
   passwordSetupEmail,
   reminderEmail,
   rescheduleEmail,
+  salesRepAssignedEmail,
   staffAccessGrantedEmail,
   surveyRequestEmail,
   waitlistedEmail,
@@ -57,6 +58,12 @@ export class NotificationsService {
   async sendReschedule(toEmail: string, ctx: BookingEmailContext, previousStart: Date): Promise<void> {
     const dealership = await this.dealershipConfig.get();
     const { subject, html } = rescheduleEmail(dealership, ctx, previousStart);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendRepAssignment(toEmail: string, repName: string, ctx: BookingEmailContext): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = salesRepAssignedEmail(dealership, repName, ctx);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 

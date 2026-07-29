@@ -7,6 +7,8 @@ export interface AuthenticatedStaff {
   staffUserId: string;
   role: StaffRole;
   permissions: string[];
+  /** Sales_Rep__c record Id this staff account is linked to — undefined unless explicitly provisioned. */
+  salesRepId?: string;
 }
 
 /**
@@ -27,9 +29,13 @@ export class StaffAuthGuard implements CanActivate {
     }
     const token = header.slice("Bearer ".length);
     try {
-      const payload = this.jwtService.verify<{ sub: string; scope?: string; role?: StaffRole; permissions?: string[] }>(
-        token,
-      );
+      const payload = this.jwtService.verify<{
+        sub: string;
+        scope?: string;
+        role?: StaffRole;
+        permissions?: string[];
+        salesRepId?: string;
+      }>(token);
       if (payload.scope !== "staff") {
         throw new UnauthorizedException("This token is not valid for admin console endpoints.");
       }
@@ -37,6 +43,7 @@ export class StaffAuthGuard implements CanActivate {
         staffUserId: payload.sub,
         role: payload.role ?? "Manager",
         permissions: payload.permissions ?? [],
+        salesRepId: payload.salesRepId,
       };
       return true;
     } catch {

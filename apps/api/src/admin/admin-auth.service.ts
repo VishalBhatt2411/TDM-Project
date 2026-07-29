@@ -74,7 +74,9 @@ export class AdminAuthService {
       await this.staffUsers.linkSalesforceUserId(staff.id, identity.salesforceUserId);
     }
 
-    return this.issueTokens(staff.id, staff.role, staff.permissions);
+    // identity.salesforceUserId (not staff.salesforceUserId) — this login just confirmed it,
+    // whereas the in-memory `staff` record may still reflect the pre-link state above.
+    return this.issueTokens(staff.id, staff.role, staff.permissions, identity.salesforceUserId);
   }
 
   async refresh(dto: StaffRefreshDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
@@ -97,15 +99,16 @@ export class AdminAuthService {
     if (!staff || !staff.isActive) {
       throw new UnauthorizedException("Account is no longer active.");
     }
-    return this.issueTokens(staff.id, staff.role, staff.permissions);
+    return this.issueTokens(staff.id, staff.role, staff.permissions, staff.salesforceUserId);
   }
 
   private async issueTokens(
     staffUserId: string,
     role: string,
     permissions: string[],
+    salesRepId?: string | null,
   ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    const payload = { sub: staffUserId, scope: "staff", role, permissions };
+    const payload = { sub: staffUserId, scope: "staff", role, permissions, salesRepId: salesRepId ?? undefined };
     const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: "7d" });
     await this.refreshTokens.save(staffUserId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));

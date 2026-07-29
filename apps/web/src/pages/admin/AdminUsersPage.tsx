@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createStaffUser, listStaffUsers, updateStaffUser } from "@/api/admin";
-import type { CreateStaffUserRequest, StaffUserDto, UpdateStaffUserRequest } from "@/api/admin";
+import { createStaffUser, listBranchesLookup, listStaffUsers, updateStaffUser } from "@/api/admin";
+import type { BranchLookupDto, CreateStaffUserRequest, StaffUserDto, UpdateStaffUserRequest } from "@/api/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { PERMISSION_OPTIONS } from "@/lib/permissions";
 export function AdminUsersPage() {
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useQuery({ queryKey: ["staff-users"], queryFn: listStaffUsers });
+  const { data: branches } = useQuery({ queryKey: ["branches-lookup"], queryFn: listBranchesLookup });
   const [showCreateForm, setShowCreateForm] = React.useState(false);
   const [editingUserId, setEditingUserId] = React.useState<string | null>(null);
 
@@ -48,6 +49,7 @@ export function AdminUsersPage() {
           onSubmit={(input) => createMutation.mutate(input)}
           isSubmitting={createMutation.isPending}
           error={createMutation.error as any}
+          branches={branches ?? []}
         />
       )}
 
@@ -63,6 +65,7 @@ export function AdminUsersPage() {
             <StaffUserRow
               key={user.id}
               user={user}
+              branches={branches ?? []}
               onUpdate={(input) => updateMutation.mutate({ id: user.id, ...input })}
               isEditing={editingUserId === user.id}
               onStartEdit={() => {
@@ -87,15 +90,20 @@ function CreateStaffUserForm({
   onSubmit,
   isSubmitting,
   error,
+  branches,
 }: {
   onSubmit: (input: CreateStaffUserRequest) => void;
   isSubmitting: boolean;
   error?: { response?: { data?: { message?: string } } };
+  branches: BranchLookupDto[];
 }) {
   const [email, setEmail] = React.useState("");
   const [name, setName] = React.useState("");
   const [role, setRole] = React.useState<"Admin" | "Manager" | "SalesRep">("Manager");
   const [permissions, setPermissions] = React.useState<string[]>([]);
+  const [branchId, setBranchId] = React.useState("");
+  const [maxDailyBookings, setMaxDailyBookings] = React.useState("8");
+  const [phone, setPhone] = React.useState("");
 
   const togglePermission = (key: string) => {
     setPermissions((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
@@ -111,7 +119,15 @@ function CreateStaffUserForm({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            onSubmit({ email, name, role, permissions: role !== "Admin" ? permissions : undefined });
+            onSubmit({
+              email,
+              name,
+              role,
+              permissions: role !== "Admin" ? permissions : undefined,
+              branchId: role === "SalesRep" && branchId ? branchId : undefined,
+              maxDailyBookings: role === "SalesRep" && maxDailyBookings ? Number(maxDailyBookings) : undefined,
+              phone: role === "SalesRep" && phone ? phone : undefined,
+            });
           }}
           className="space-y-4"
         >
@@ -138,6 +154,40 @@ function CreateStaffUserForm({
               <option value="Admin">Admin</option>
             </select>
           </div>
+          {role === "SalesRep" && (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="branch">Branch</Label>
+                <select
+                  id="branch"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                >
+                  <option value="">Unassigned</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="maxDaily">Max Daily Bookings</Label>
+                <Input
+                  id="maxDaily"
+                  type="number"
+                  min={1}
+                  value={maxDailyBookings}
+                  onChange={(e) => setMaxDailyBookings(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="phone">Phone</Label>
+                <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </div>
+            </div>
+          )}
           {role !== "Admin" && (
             <div>
               <Label>Permissions</Label>
@@ -169,6 +219,7 @@ function CreateStaffUserForm({
 
 function StaffUserRow({
   user,
+  branches,
   onUpdate,
   isEditing,
   onStartEdit,
@@ -177,6 +228,7 @@ function StaffUserRow({
   updateError,
 }: {
   user: StaffUserDto;
+  branches: BranchLookupDto[];
   onUpdate: (input: UpdateStaffUserRequest) => void;
   isEditing: boolean;
   onStartEdit: () => void;
@@ -199,6 +251,11 @@ function StaffUserRow({
                     {PERMISSION_OPTIONS.find((o) => o.key === p)?.label ?? p}
                   </Badge>
                 ))}
+              {user.role === "SalesRep" && (
+                <Badge variant={user.hasLoggedInWithSalesforce ? "outline" : "destructive"}>
+                  {user.hasLoggedInWithSalesforce ? "Logged in with Salesforce" : "Hasn't logged in yet"}
+                </Badge>
+              )}
               {!user.isActive && <Badge variant="destructive">Deactivated</Badge>}
             </div>
           </div>
@@ -221,6 +278,7 @@ function StaffUserRow({
         {isEditing && (
           <EditStaffUserForm
             user={user}
+            branches={branches}
             onSubmit={onUpdate}
             onCancel={onCancelEdit}
             isSubmitting={isUpdating}
@@ -234,12 +292,14 @@ function StaffUserRow({
 
 function EditStaffUserForm({
   user,
+  branches,
   onSubmit,
   onCancel,
   isSubmitting,
   error,
 }: {
   user: StaffUserDto;
+  branches: BranchLookupDto[];
   onSubmit: (input: UpdateStaffUserRequest) => void;
   onCancel: () => void;
   isSubmitting: boolean;
@@ -249,6 +309,9 @@ function EditStaffUserForm({
   const [email, setEmail] = React.useState(user.email);
   const [role, setRole] = React.useState<"Admin" | "Manager" | "SalesRep">(user.role);
   const [permissions, setPermissions] = React.useState<string[]>(user.permissions);
+  const [branchId, setBranchId] = React.useState(user.branchId ?? "");
+  const [maxDailyBookings, setMaxDailyBookings] = React.useState(String(user.maxDailyBookings ?? 8));
+  const [phone, setPhone] = React.useState(user.phone ?? "");
 
   const togglePermission = (key: string) => {
     setPermissions((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
@@ -258,7 +321,15 @@ function EditStaffUserForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ name, email, role, permissions: role !== "Admin" ? permissions : undefined });
+        onSubmit({
+          name,
+          email,
+          role,
+          permissions: role !== "Admin" ? permissions : undefined,
+          branchId: role === "SalesRep" ? branchId : undefined,
+          maxDailyBookings: role === "SalesRep" && maxDailyBookings ? Number(maxDailyBookings) : undefined,
+          phone: role === "SalesRep" ? phone : undefined,
+        });
       }}
       className="mt-4 space-y-4 border-t pt-4"
     >
@@ -285,6 +356,40 @@ function EditStaffUserForm({
           <option value="Admin">Admin</option>
         </select>
       </div>
+      {role === "SalesRep" && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit-branch-${user.id}`}>Branch</Label>
+            <select
+              id={`edit-branch-${user.id}`}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit-max-daily-${user.id}`}>Max Daily Bookings</Label>
+            <Input
+              id={`edit-max-daily-${user.id}`}
+              type="number"
+              min={1}
+              value={maxDailyBookings}
+              onChange={(e) => setMaxDailyBookings(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit-phone-${user.id}`}>Phone</Label>
+            <Input id={`edit-phone-${user.id}`} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+        </div>
+      )}
       {role !== "Admin" && (
         <div>
           <Label>Permissions</Label>

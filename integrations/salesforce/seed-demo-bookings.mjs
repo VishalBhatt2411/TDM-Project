@@ -51,15 +51,14 @@ function daysFromNow(days, hour) {
 async function main() {
   const conn = await getConnection();
 
-  const [contacts, vehicles, reps, branches] = await Promise.all([
+  const [contacts, vehicles, branches] = await Promise.all([
     conn.query("SELECT Id FROM Contact LIMIT 25"),
     conn.query("SELECT Id FROM Vehicle__c"),
-    conn.query("SELECT Id FROM Sales_Rep__c WHERE Is_Active__c = true"),
     conn.query("SELECT Id FROM Branch__c"),
   ]);
 
-  if (!contacts.records.length || !vehicles.records.length || !reps.records.length || !branches.records.length) {
-    throw new Error("Missing prerequisite data (contacts/vehicles/reps/branches) — run seed-catalog.mjs first.");
+  if (!contacts.records.length || !vehicles.records.length || !branches.records.length) {
+    throw new Error("Missing prerequisite data (contacts/vehicles/branches) — run seed-catalog.mjs first.");
   }
 
   const bookingRecords = [];
@@ -81,7 +80,8 @@ async function main() {
       Contact__c: contacts.records[i % contacts.records.length].Id,
       Vehicle__c: vehicles.records[i % vehicles.records.length].Id,
       Branch__c: branches.records[i % branches.records.length].Id,
-      Sales_Rep__c: reps.records[i % reps.records.length].Id,
+      // No Sales_Rep__c field anymore — bookings are assigned to real Salesforce Users
+      // (OwnerId) via the app itself; these demo rows default-own to the running user.
       Drive_Type__c: DRIVE_TYPES[i % DRIVE_TYPES.length],
       Scheduled_Start__c: start.toISOString(),
       Scheduled_End__c: end.toISOString(),

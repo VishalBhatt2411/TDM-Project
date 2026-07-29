@@ -46,6 +46,8 @@ export interface BookingProps {
   purchaseTimeline: PurchaseTimeline;
   pickupRequired: boolean;
   additionalNotes?: string;
+  /** Internal, staff-only notes (visible to the assigned rep and management, never the customer). */
+  staffNotes?: string;
 }
 
 /** How long before the scheduled start a customer may still cancel/reschedule for free. */
@@ -199,6 +201,10 @@ export class Booking {
 
   markNoShow(): void {
     this.props.status = "NoShow";
+  }
+
+  setStaffNotes(notes: string): void {
+    this.props.staffNotes = notes;
   }
 
   toProps(): BookingProps {

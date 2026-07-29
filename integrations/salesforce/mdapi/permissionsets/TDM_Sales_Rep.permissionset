@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Field-facing sales rep access for the native Salesforce app.
+
+  Deliberately does NOT grant viewAllRecords/modifyAllRecords on Booking__c — combined
+  with Booking__c's Private org-wide default, that means a rep sees exactly the drives
+  they own (are assigned) and nothing else. TDM_Full_Access is the opposite by design
+  (it exists for the backend integration user) and must never be assigned to a rep.
+
+  Catalog/reference data (vehicles, variants, branches) is intentionally readable
+  org-wide and read-only: every rep needs the full lineup to talk to a customer, but
+  nobody in the field should be editing inventory or dealership records from here.
+
+  Not granted at all: Sales_Rep__c (retired object), Compliance_Record__c (licence
+  scans/signatures — sensitive PII reps don't need in Salesforce), Drive_Feedback__c,
+  Vehicle_Allocation__c, Wishlist_Item__c. Reps do that work in the TDM web app.
+-->
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>TDM Sales Rep</label>
+    <description>Sales rep access to the TDM app: read/edit only the test drives they own, read-only vehicle and branch reference data.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+
+    <objectPermissions>
+        <object>Booking__c</object>
+        <allowCreate>false</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>true</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <object>Vehicle__c</object>
+        <allowCreate>false</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <viewAllRecords>true</viewAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <object>Vehicle_Variant__c</object>
+        <allowCreate>false</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <viewAllRecords>true</viewAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <object>Branch__c</object>
+        <allowCreate>false</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <viewAllRecords>true</viewAllRecords>
+    </objectPermissions>
+
+    <!-- Booking fields a rep works with. Staff_Notes__c is editable; the customer never sees it. -->
+    <fieldPermissions>
+        <field>Booking__c.Drive_Type__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Status__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Home_Address__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Check_In_Method__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Check_In_Timestamp__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Actual_Start__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Actual_End__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Odometer_Start__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Odometer_End__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Cancellation_Reason__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Waitlist_Position__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.City__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.State__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Preferred_Variant__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Is_Existing_Customer__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Current_Vehicle_Owned__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Purchase_Timeline__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Pickup_Required__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Additional_Notes__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Staff_Notes__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+
+    <!-- Customer contact details for the drives they're running. -->
+    <fieldPermissions>
+        <field>Contact.License_Number__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Contact.License_Verified__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Contact.Preferred_Language__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+
+    <!-- Read-only vehicle catalog: what a rep needs to answer customer questions. -->
+    <fieldPermissions>
+        <field>Vehicle__c.Trim__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.VIN__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Body_Type__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Fuel_Type__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Transmission__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Color__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Price__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Price_Max__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Odometer__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Status__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Availability_Status__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Branch__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Seating_Capacity__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Mileage_Kmpl__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Safety_Rating__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Primary_Image_Url__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle__c.Description__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle_Variant__c.Price__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle_Variant__c.Engine__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle_Variant__c.Fuel_Type__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Vehicle_Variant__c.Transmission__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+
+    <!-- Branch is reference-only: a rep needs to know where and when to meet a customer. -->
+    <fieldPermissions>
+        <field>Branch__c.Address__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Branch__c.City__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Branch__c.State__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Branch__c.Phone__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Branch__c.Operating_Hours__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+
+    <classAccesses>
+        <apexClass>TDMDashboardController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+
+    <applicationVisibilities>
+        <application>TDM_Test_Drive_Management</application>
+        <visible>true</visible>
+    </applicationVisibilities>
+
+    <!-- Only the three tabs a rep actually works in. Branch__c is deliberately absent
+         rather than set visible: an unlisted tab isn't granted, so it stays off a rep's
+         navigation while remaining reachable via the lookup on a booking they own. -->
+    <tabSettings>
+        <tab>TDM_Dashboard</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Booking__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Vehicle__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+</PermissionSet>
