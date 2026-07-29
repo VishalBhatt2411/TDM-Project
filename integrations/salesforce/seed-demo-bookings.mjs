@@ -3,10 +3,14 @@
  * ones) records so the new LWC dashboard has meaningful data to visualize.
  * Non-destructive: does not touch existing bookings, reuses the org's existing
  * sample Contacts, and the catalog's existing Vehicle__c/Sales_Rep__c/Branch__c records.
+ * Prefers Contacts already linked to a real registered customer (Portal_User_Id__c
+ * set); backfills a synthetic Portal_User_Id__c on other existing Contacts only to
+ * make up a shortfall, so every demo booking resolves the same way a real one would.
  *
  * Usage: node seed-demo-bookings.mjs
  */
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import jsforce from "jsforce";
 
@@ -48,17 +52,64 @@ function daysFromNow(days, hour) {
   return d;
 }
 
+/**
+ * Booking__c.save() (see SalesforceBookingRepository) resolves its Contact via
+ * Contact.Portal_User_Id__c — the identifier set on real registered customers by
+ * the app's own registration/auto-register flow. A Contact with no Portal_User_Id__c
+ * can still be attached to a Booking__c at insert time, but any later save() on that
+ * booking (admin assign-rep, check-in/start/complete/no-show, survey-triggered
+ * SalesOpportunity) fails to resolve it and throws. Prefer Contacts that already
+ * have a real Portal_User_Id__c; only for the shortfall, backfill a synthetic one
+ * onto otherwise-unlinked Contacts so every demo booking resolves like a real one.
+ */
+async function ensureDemoContactPool(conn, desiredCount) {
+  const linked = await conn.query(`SELECT Id FROM Contact WHERE Portal_User_Id__c != null LIMIT ${desiredCount}`);
+  const contactIds = linked.records.map((r) => r.Id);
+
+  const shortfall = desiredCount - contactIds.length;
+  if (shortfall > 0) {
+    const unlinked = await conn.query(`SELECT Id FROM Contact WHERE Portal_User_Id__c = null LIMIT ${shortfall}`);
+    if (unlinked.records.length) {
+      const updates = unlinked.records.map((r) => ({ Id: r.Id, Portal_User_Id__c: randomUUID() }));
+      await conn.sobject("Contact").update(updates);
+      contactIds.push(...updates.map((u) => u.Id));
+    }
+  }
+
+  return contactIds;
+}
+
+/**
+ * One-time repair for demo bookings created by earlier runs of this script, before
+ * it linked Contacts to a Portal_User_Id__c — without this, every already-seeded
+ * booking still 500s on any later save() (admin assign-rep, check-in/start/
+ * complete/no-show, survey-triggered SalesOpportunity), since resolveContactId can
+ * never find them. Safe to re-run: only touches Contacts with no Portal_User_Id__c
+ * that are already referenced by an existing Booking__c.
+ */
+async function backfillExistingDemoBookingContacts(conn) {
+  const orphaned = await conn.query("SELECT Contact__c FROM Booking__c WHERE Contact__r.Portal_User_Id__c = null");
+  const contactIds = [...new Set(orphaned.records.map((r) => r.Contact__c))];
+  if (!contactIds.length) return 0;
+
+  await conn.sobject("Contact").update(contactIds.map((id) => ({ Id: id, Portal_User_Id__c: randomUUID() })));
+  return contactIds.length;
+}
+
 async function main() {
   const conn = await getConnection();
 
-  const [contacts, vehicles, reps, branches] = await Promise.all([
-    conn.query("SELECT Id FROM Contact LIMIT 25"),
+  const repaired = await backfillExistingDemoBookingContacts(conn);
+  if (repaired) console.log(`Repaired ${repaired} existing Contact(s) missing Portal_User_Id__c.`);
+
+  const [contactIds, vehicles, reps, branches] = await Promise.all([
+    ensureDemoContactPool(conn, 25),
     conn.query("SELECT Id FROM Vehicle__c"),
     conn.query("SELECT Id FROM Sales_Rep__c WHERE Is_Active__c = true"),
     conn.query("SELECT Id FROM Branch__c"),
   ]);
 
-  if (!contacts.records.length || !vehicles.records.length || !reps.records.length || !branches.records.length) {
+  if (!contactIds.length || !vehicles.records.length || !reps.records.length || !branches.records.length) {
     throw new Error("Missing prerequisite data (contacts/vehicles/reps/branches) — run seed-catalog.mjs first.");
   }
 
@@ -78,7 +129,7 @@ async function main() {
     const end = new Date(start.getTime() + 60 * 60 * 1000);
 
     bookingRecords.push({
-      Contact__c: contacts.records[i % contacts.records.length].Id,
+      Contact__c: contactIds[i % contactIds.length],
       Vehicle__c: vehicles.records[i % vehicles.records.length].Id,
       Branch__c: branches.records[i % branches.records.length].Id,
       Sales_Rep__c: reps.records[i % reps.records.length].Id,
