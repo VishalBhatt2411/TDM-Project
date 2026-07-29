@@ -13,6 +13,8 @@ import {
   rescheduleEmail,
   staffAccessGrantedEmail,
   surveyRequestEmail,
+  waitlistedEmail,
+  waitlistPromotedEmail,
 } from "./email-templates";
 
 @Injectable()
@@ -37,6 +39,18 @@ export class NotificationsService {
   async sendCancellation(toEmail: string, ctx: BookingEmailContext, reason: string): Promise<void> {
     const dealership = await this.dealershipConfig.get();
     const { subject, html } = cancellationEmail(dealership, ctx, reason);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendWaitlisted(toEmail: string, ctx: BookingEmailContext, position: number): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = waitlistedEmail(dealership, ctx, position);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendWaitlistPromotion(toEmail: string, ctx: BookingEmailContext): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = waitlistPromotedEmail(dealership, ctx);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 

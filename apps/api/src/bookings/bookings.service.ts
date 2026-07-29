@@ -4,7 +4,9 @@ import {
   AuditLogRepository,
   Booking,
   BookingConflictChecker,
+  BookingConflictError,
   BookingRepository,
+  BookingStatus,
   BranchRepository,
   CustomerRepository,
   DriveFeedback,
@@ -15,6 +17,7 @@ import {
   SalesRepRepository,
   TimeSlot,
   VehicleRepository,
+  WaitlistPromotionService,
 } from "@tdm/domain";
 import { BookingDto } from "@tdm/types";
 import { AuthService } from "../auth/auth.service";
@@ -30,6 +33,9 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContext } from "../notifications/email-templates";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
+
+/** Statuses that occupy a vehicle's slot and therefore free one up when they end. */
+const SLOT_OCCUPYING_STATUSES: ReadonlySet<BookingStatus> = new Set(["Requested", "Confirmed", "InProgress"]);
 
 export function bookingToDto(booking: Booking): BookingDto {
   const props = booking.toProps();
@@ -164,6 +170,7 @@ export class BookingsService {
   async cancel(customerId: string, bookingId: string, dto: CancelBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
     const emailCtx = await this.buildEmailContext(booking);
+    const freesSlot = SLOT_OCCUPYING_STATUSES.has(booking.status);
 
     // Throws CancellationWindowExpiredError (-> 400) if past the policy cutoff.
     booking.cancel(dto.reason);
@@ -188,12 +195,17 @@ export class BookingsService {
       }
     }
 
+    if (freesSlot) {
+      await this.promoteNextWaitlisted(booking.vehicleId);
+    }
+
     return bookingToDto(booking);
   }
 
   async reschedule(customerId: string, bookingId: string, dto: RescheduleBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
     const previousStart = booking.slot.start;
+    const freesSlot = SLOT_OCCUPYING_STATUSES.has(booking.status);
     const newSlot = TimeSlot.create(dto.slot.start, dto.slot.end);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
@@ -212,6 +224,10 @@ export class BookingsService {
         const rep = await this.salesReps.findById(saved.salesRepId);
         if (rep) await this.notifications.sendReschedule(rep.toProps().email, emailCtx, previousStart);
       }
+    }
+
+    if (freesSlot) {
+      await this.promoteNextWaitlisted(booking.vehicleId);
     }
 
     return bookingToDto(saved);
@@ -256,7 +272,15 @@ export class BookingsService {
     const slot = TimeSlot.create(dto.slot.start, dto.slot.end);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
-    await conflictChecker.assertNoConflict(dto.vehicleId, slot);
+    let joinWaitlist = false;
+    try {
+      await conflictChecker.assertNoConflict(dto.vehicleId, slot);
+    } catch (error) {
+      if (!(error instanceof BookingConflictError) || !dto.joinWaitlistIfUnavailable) {
+        throw error;
+      }
+      joinWaitlist = true;
+    }
 
     let booking = Booking.request({
       customerId,
@@ -275,9 +299,14 @@ export class BookingsService {
       additionalNotes: dto.additionalNotes,
     });
 
-    const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, slot.start);
-    if (rep) {
-      booking.assignRep(rep.id);
+    if (joinWaitlist) {
+      const currentWaitlist = await this.bookings.findWaitlistedForVehicle(dto.vehicleId);
+      booking.waitlist(currentWaitlist.length + 1);
+    } else {
+      const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, slot.start);
+      if (rep) {
+        booking.assignRep(rep.id);
+      }
     }
 
     booking = await this.bookings.save(booking);
@@ -286,8 +315,27 @@ export class BookingsService {
 
   private async sendConfirmation(booking: Booking, customerEmail: string, customerName: string): Promise<void> {
     const emailCtx = await this.buildEmailContext(booking, customerName);
-    if (emailCtx) {
+    if (!emailCtx) return;
+
+    if (booking.status === "Waitlisted") {
+      await this.notifications.sendWaitlisted(customerEmail, emailCtx, booking.waitlistPosition ?? 1);
+    } else {
       await this.notifications.sendBookingConfirmation(customerEmail, emailCtx);
+    }
+  }
+
+  /** Confirms the earliest-position waitlisted booking for a vehicle once a slot frees up, and notifies the customer. */
+  private async promoteNextWaitlisted(vehicleId: string): Promise<void> {
+    const promotionService = new WaitlistPromotionService(this.bookings);
+    const promoted = await promotionService.promoteNextFor(vehicleId);
+    if (!promoted) return;
+
+    const emailCtx = await this.buildEmailContext(promoted);
+    if (!emailCtx) return;
+
+    const customer = await this.customers.findById(promoted.customerId);
+    if (customer) {
+      await this.notifications.sendWaitlistPromotion(customer.email.value, emailCtx);
     }
   }
 
