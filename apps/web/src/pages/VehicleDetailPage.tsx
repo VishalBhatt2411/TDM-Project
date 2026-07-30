@@ -6,8 +6,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AccordionItem } from "@/components/ui/accordion";
-import { PlaceholderVehicleImage } from "@/components/PlaceholderVehicleImage";
-import { Vehicle360Viewer } from "@/components/Vehicle360Viewer";
+import { VehicleImageGallery } from "@/components/VehicleImageGallery";
+import { ColorSelector } from "@/components/ColorSelector";
 import { VehicleCard } from "@/components/VehicleCard";
 import { EmiCalculator } from "@/components/EmiCalculator";
 import { cn } from "@/lib/utils";
@@ -70,13 +70,11 @@ export function VehicleDetailPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       {/* Gallery */}
-      {vehicle.galleryUrls && vehicle.galleryUrls.length > 0 ? (
-        <Vehicle360Viewer images={vehicle.galleryUrls} label={`${vehicle.make} ${vehicle.model}`} />
-      ) : (
-        <div className="relative aspect-[16/7] overflow-hidden rounded-xl">
-          <PlaceholderVehicleImage bodyType={vehicle.bodyType} label={`${vehicle.make} ${vehicle.model}`} />
-        </div>
-      )}
+      <VehicleImageGallery
+        images={vehicle.galleryUrls ?? []}
+        label={`${vehicle.make} ${vehicle.model}`}
+        bodyType={vehicle.bodyType}
+      />
 
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -182,19 +180,11 @@ export function VehicleDetailPage() {
           )}
 
           {/* Colors */}
-          {vehicle.colors.length > 0 && (
-            <div className="mt-8">
-              <h2 className="mb-3 text-lg font-semibold">Available Colors</h2>
-              <div className="flex flex-wrap gap-4">
-                {vehicle.colors.map((c) => (
-                  <div key={c.name} className="flex flex-col items-center gap-1.5">
-                    <span className="h-10 w-10 rounded-full border-2 border-border shadow-sm" style={{ backgroundColor: c.hex }} />
-                    <span className="text-xs text-muted-foreground">{c.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <ColorSelector
+            colors={vehicle.colors}
+            galleryUrls={vehicle.galleryUrls ?? []}
+            label={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+          />
 
           {/* EMI Calculator */}
           <div className="mt-8">

@@ -1,4 +1,3 @@
-import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { useAdminAuth } from "@/context/admin-auth-context";

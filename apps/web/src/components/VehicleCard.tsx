@@ -16,7 +16,7 @@ export function VehicleCard({ vehicle, index = 0 }: { vehicle: VehicleDto; index
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
       <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
-        <div className="relative aspect-[16/10] w-full">
+        <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden">
           {vehicle.primaryImageUrl ? (
             <img
               src={vehicle.primaryImageUrl}

@@ -24,6 +24,7 @@ export type AvailabilityStatus = "In_Stock" | "Limited_Stock" | "On_Request" | "
 export interface VehicleColor {
   name: string;
   hex: string;
+  imageUrl?: string;
 }
 
 export interface VehicleFaq {

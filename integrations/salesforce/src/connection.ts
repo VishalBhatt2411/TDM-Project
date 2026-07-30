@@ -83,11 +83,16 @@ export class SalesforceConnectionProvider {
       this.orgAlias,
       "--json",
     ], {
-      env: { ...process.env, SF_TEMP_SHOW_SECRETS: "true" },
+      env: { ...process.env, SF_TEMP_SHOW_SECRETS: "true", FORCE_COLOR: "0", NO_COLOR: "1" },
       shell: process.platform === "win32",
     });
 
-    const parsed: SfOrgDisplayResult = JSON.parse(stdout);
+    // Defensive: some environments make the `sf` CLI emit ANSI color codes even
+    // with --json (e.g. when it detects a color-capable parent shell), which
+    // would otherwise break JSON.parse below.
+    // eslint-disable-next-line no-control-regex
+    const cleanStdout = stdout.replace(/\x1b\[[0-9;]*m/g, "");
+    const parsed: SfOrgDisplayResult = JSON.parse(cleanStdout);
     if (!parsed.result?.accessToken || !parsed.result?.instanceUrl) {
       throw new Error(
         `Could not obtain a Salesforce access token for org alias "${this.orgAlias}". ` +
