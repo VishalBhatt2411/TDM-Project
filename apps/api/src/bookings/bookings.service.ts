@@ -14,6 +14,7 @@ import {
   SalesOpportunityRepository,
   SalesRepRepository,
   TimeSlot,
+  UNASSIGNED_ID,
   VehicleRepository,
 } from "@tdm/domain";
 import { BookingDto } from "@tdm/types";
@@ -200,9 +201,13 @@ export class BookingsService {
     await conflictChecker.assertNoConflict(booking.vehicleId, newSlot);
 
     // Throws CancellationWindowExpiredError (-> 400) if past the policy cutoff.
-    const newBooking = booking.reschedule(newSlot, randomUUID());
-    await this.bookings.save(booking);
+    // `reschedule` mutates `booking` to Cancelled in memory and returns the replacement —
+    // but we persist the replacement FIRST. If creating it fails (conflict, validation,
+    // a Salesforce hiccup), the original booking must still be safely in place; nothing
+    // has been cancelled yet. Only once the new booking exists do we cancel the old one.
+    const newBooking = booking.reschedule(newSlot, UNASSIGNED_ID);
     const saved = await this.bookings.save(newBooking);
+    await this.bookings.save(booking);
 
     const emailCtx = await this.buildEmailContext(saved);
     if (emailCtx) {
