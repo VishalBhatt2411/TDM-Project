@@ -11,8 +11,11 @@ import {
   passwordSetupEmail,
   reminderEmail,
   rescheduleEmail,
+  salesRepAssignedEmail,
   staffAccessGrantedEmail,
   surveyRequestEmail,
+  waitlistedEmail,
+  waitlistPromotedEmail,
 } from "./email-templates";
 
 @Injectable()
@@ -40,9 +43,27 @@ export class NotificationsService {
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 
+  async sendWaitlisted(toEmail: string, ctx: BookingEmailContext, position: number): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = waitlistedEmail(dealership, ctx, position);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendWaitlistPromotion(toEmail: string, ctx: BookingEmailContext): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = waitlistPromotedEmail(dealership, ctx);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
   async sendReschedule(toEmail: string, ctx: BookingEmailContext, previousStart: Date): Promise<void> {
     const dealership = await this.dealershipConfig.get();
     const { subject, html } = rescheduleEmail(dealership, ctx, previousStart);
+    await this.emailSender.send({ to: toEmail, subject, html });
+  }
+
+  async sendRepAssignment(toEmail: string, repName: string, ctx: BookingEmailContext): Promise<void> {
+    const dealership = await this.dealershipConfig.get();
+    const { subject, html } = salesRepAssignedEmail(dealership, repName, ctx);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 

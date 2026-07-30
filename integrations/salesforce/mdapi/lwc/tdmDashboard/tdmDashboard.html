@@ -1,24 +1,27 @@
 <template>
   <div class="tdm-dashboard">
     <div class="tdm-dashboard__header">
-      <h1 class="tdm-dashboard__title">Test Drive Management</h1>
-      <p class="tdm-dashboard__subtitle">Live booking activity, sales rep performance, and drive outcomes.</p>
+      <h1 class="tdm-dashboard__title">{headline}</h1>
+      <p class="tdm-dashboard__subtitle">{subtitle}</p>
     </div>
 
     <template if:true={kpis}>
       <div class="tdm-dashboard__kpis">
-        <c-tdm-kpi-tile label="Total Bookings" value={kpis.totalBookings} accent="blue"></c-tdm-kpi-tile>
-        <c-tdm-kpi-tile label="Upcoming" value={kpis.upcomingCount} accent="blue"></c-tdm-kpi-tile>
-        <c-tdm-kpi-tile label="Completed (Month)" value={kpis.completedThisMonth} accent="green"></c-tdm-kpi-tile>
-        <c-tdm-kpi-tile label="Cancelled / No-Show (Month)" value={kpis.cancelledThisMonth} accent="red"></c-tdm-kpi-tile>
-        <c-tdm-kpi-tile label="Completion Rate" value={kpis.completionRate} suffix="%" accent="green"></c-tdm-kpi-tile>
-        <c-tdm-kpi-tile label="Avg NPS" value={avgNpsDisplay} accent="amber"></c-tdm-kpi-tile>
-        <c-tdm-kpi-tile label="Active Sales Reps" value={kpis.activeSalesReps} accent="blue"></c-tdm-kpi-tile>
+        <c-tdm-kpi-tile label={labels.drivesToday} value={kpis.drivesToday} accent="blue"></c-tdm-kpi-tile>
+        <c-tdm-kpi-tile label={labels.upcoming} value={kpis.upcomingCount} accent="blue"></c-tdm-kpi-tile>
+        <c-tdm-kpi-tile label={labels.completedThisMonth} value={kpis.completedThisMonth} accent="green"></c-tdm-kpi-tile>
+        <c-tdm-kpi-tile label={labels.cancelledThisMonth} value={kpis.cancelledThisMonth} accent="red"></c-tdm-kpi-tile>
+        <c-tdm-kpi-tile label={labels.completionRate} value={kpis.completionRate} suffix="%" accent="green"></c-tdm-kpi-tile>
+        <c-tdm-kpi-tile label={labels.avgNps} value={avgNpsDisplay} accent="amber"></c-tdm-kpi-tile>
+        <template if:false={isPersonalView}>
+          <c-tdm-kpi-tile label="Total Bookings" value={kpis.totalBookings} accent="blue"></c-tdm-kpi-tile>
+          <c-tdm-kpi-tile label="Active Sales Reps" value={kpis.activeSalesReps} accent="blue"></c-tdm-kpi-tile>
+        </template>
       </div>
     </template>
 
     <div class="tdm-dashboard__row">
-      <lightning-card title="Bookings by Status" icon-name="standard:dashboard" class="tdm-dashboard__card">
+      <lightning-card title={labels.statusBreakdown} icon-name="standard:dashboard" class="tdm-dashboard__card">
         <div class="slds-p-around_medium">
           <template if:true={hasStatusBreakdown}>
             <template for:each={statusBreakdown} for:item="row">
@@ -32,28 +35,31 @@
             </template>
           </template>
           <template if:false={hasStatusBreakdown}>
-            <p class="slds-text-body_small slds-text-color_weak">No bookings yet.</p>
+            <p class="slds-text-body_small slds-text-color_weak">{emptyStatusMessage}</p>
           </template>
         </div>
       </lightning-card>
 
-      <lightning-card title="Sales Rep Leaderboard" icon-name="standard:people" class="tdm-dashboard__card">
-        <template if:true={hasRepLeaderboard}>
-          <lightning-datatable
-            key-field="repName"
-            data={repLeaderboard}
-            columns={repColumns}
-            hide-checkbox-column
-            show-row-number-column>
-          </lightning-datatable>
-        </template>
-        <template if:false={hasRepLeaderboard}>
-          <p class="slds-p-around_medium slds-text-body_small slds-text-color_weak">No active sales reps yet.</p>
-        </template>
-      </lightning-card>
+      <!-- A leaderboard is only meaningful across reps; hidden entirely for a rep-scoped viewer. -->
+      <template if:false={isPersonalView}>
+        <lightning-card title="Sales Rep Leaderboard" icon-name="standard:people" class="tdm-dashboard__card">
+          <template if:true={hasRepLeaderboard}>
+            <lightning-datatable
+              key-field="repName"
+              data={repLeaderboard}
+              columns={repColumns}
+              hide-checkbox-column
+              show-row-number-column>
+            </lightning-datatable>
+          </template>
+          <template if:false={hasRepLeaderboard}>
+            <p class="slds-p-around_medium slds-text-body_small slds-text-color_weak">No booking activity yet.</p>
+          </template>
+        </lightning-card>
+      </template>
     </div>
 
-    <lightning-card title="Upcoming Test Drives" icon-name="standard:event">
+    <lightning-card title={labels.upcomingList} icon-name="standard:event">
       <template if:true={hasUpcomingBookings}>
         <lightning-datatable
           key-field="bookingNumber"
@@ -63,7 +69,7 @@
         </lightning-datatable>
       </template>
       <template if:false={hasUpcomingBookings}>
-        <p class="slds-p-around_medium slds-text-body_small slds-text-color_weak">No upcoming test drives scheduled.</p>
+        <p class="slds-p-around_medium slds-text-body_small slds-text-color_weak">{emptyUpcomingMessage}</p>
       </template>
     </lightning-card>
   </div>

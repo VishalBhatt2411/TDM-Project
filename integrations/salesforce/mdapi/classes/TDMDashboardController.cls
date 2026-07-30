@@ -3,14 +3,55 @@
  * All methods are cacheable — the dashboard is a visibility/reporting surface
  * for sales reps and managers, not a place bookings get edited (that happens
  * through the TDM web app, which writes back to these same objects).
+ *
+ * Runs `with sharing`, and Booking__c is Private with the booking's Owner being its
+ * assigned sales rep. That means every Booking__c query below is automatically scoped
+ * to the drives the running user owns — a rep sees their own numbers, while a manager
+ * or admin (View All Data / View All Bookings) sees the whole dealership. `isPersonalView`
+ * tells the UI which of the two it's rendering so it can label things honestly.
  */
 public with sharing class TDMDashboardController {
+
+    /**
+     * True when the running user only sees their own bookings. Checked against the user's
+     * effective permissions rather than their role name, so it stays correct however
+     * access is granted. PermissionSetAssignment includes the profile's own implicit
+     * permission set, so this covers profile- and permission-set-granted access alike.
+     */
+    /** Keyed by user id, not a bare Boolean — otherwise a System.runAs block would read
+     *  back the outer user's answer within the same transaction. */
+    private static Map<Id, Boolean> isPersonalViewByUser = new Map<Id, Boolean>();
+    private static Boolean isPersonalView() {
+        Id currentUserId = UserInfo.getUserId();
+        if (isPersonalViewByUser.containsKey(currentUserId)) {
+            return isPersonalViewByUser.get(currentUserId);
+        }
+        Integer viewAllData = [
+            SELECT COUNT() FROM PermissionSetAssignment
+            WHERE AssigneeId = :currentUserId
+            AND PermissionSet.PermissionsViewAllData = true
+        ];
+        Integer viewAllBookings = [
+            SELECT COUNT() FROM ObjectPermissions
+            WHERE ParentId IN (
+                SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = :currentUserId
+            )
+            AND SobjectType = 'Booking__c'
+            AND PermissionsViewAllRecords = true
+        ];
+        Boolean personal = viewAllData == 0 && viewAllBookings == 0;
+        isPersonalViewByUser.put(currentUserId, personal);
+        return personal;
+    }
 
     @AuraEnabled(cacheable=true)
     public static DashboardKpis getKpis() {
         DashboardKpis kpis = new DashboardKpis();
         Datetime now = Datetime.now();
-        Date monthStart = Date.today().toStartOfMonth();
+        Date today = Date.today();
+        Date monthStart = today.toStartOfMonth();
+        Boolean personal = isPersonalView();
+        kpis.isPersonalView = personal;
 
         kpis.totalBookings = [SELECT COUNT() FROM Booking__c];
 
@@ -18,6 +59,13 @@ public with sharing class TDMDashboardController {
             SELECT COUNT() FROM Booking__c
             WHERE Scheduled_Start__c >= :now
             AND Status__c IN ('Requested', 'Confirmed', 'Waitlisted')
+        ];
+
+        // The single most useful number for a rep starting their shift.
+        kpis.drivesToday = [
+            SELECT COUNT() FROM Booking__c
+            WHERE DAY_ONLY(Scheduled_Start__c) = :today
+            AND Status__c IN ('Requested', 'Confirmed', 'InProgress')
         ];
 
         kpis.completedThisMonth = [
@@ -35,14 +83,32 @@ public with sharing class TDMDashboardController {
             ? (Decimal.valueOf(completedTotal) / kpis.totalBookings * 100).setScale(1)
             : 0;
 
-        AggregateResult npsAgg = [
-            SELECT AVG(NPS_Score__c) avgNps FROM Drive_Feedback__c
-            WHERE Is_Survey_Response__c = true
-        ];
+        // Field reps deliberately have no direct Drive_Feedback__c access (that object holds
+        // survey PII they work with through the TDM web app, not here). Apex isn't bound by
+        // object-level CRUD, so this aggregate is the controlled exposure point — and it's
+        // filtered to the running user's own drives so a rep only ever sees satisfaction for
+        // customers they personally drove.
+        Id currentUserId = UserInfo.getUserId();
+        AggregateResult npsAgg = personal
+            ? [
+                SELECT AVG(NPS_Score__c) avgNps FROM Drive_Feedback__c
+                WHERE Is_Survey_Response__c = true AND Booking__r.OwnerId = :currentUserId
+              ]
+            : [
+                SELECT AVG(NPS_Score__c) avgNps FROM Drive_Feedback__c
+                WHERE Is_Survey_Response__c = true
+              ];
         Object avgNpsRaw = npsAgg.get('avgNps');
         kpis.avgNps = avgNpsRaw != null ? ((Decimal) avgNpsRaw).setScale(1) : null;
 
-        kpis.activeSalesReps = [SELECT COUNT() FROM Sales_Rep__c WHERE Is_Active__c = true];
+        // Bookings are assigned to real Salesforce Users (record Owner) rather than a
+        // Sales_Rep__c record, so "active sales reps" is read as distinct booking owners.
+        // Meaningless in a personal view (it would always be 1), so it's left null and the
+        // UI drops the tile entirely rather than showing a misleading number.
+        if (!personal) {
+            AggregateResult distinctOwners = [SELECT COUNT_DISTINCT(OwnerId) c FROM Booking__c];
+            kpis.activeSalesReps = (Integer) distinctOwners.get('c');
+        }
 
         return kpis;
     }
@@ -78,8 +144,9 @@ public with sharing class TDMDashboardController {
         List<BookingRow> rows = new List<BookingRow>();
 
         for (Booking__c b : [
-            SELECT Name, Contact__r.FirstName, Contact__r.LastName, Vehicle__r.Make__c, Vehicle__r.Model__c,
-                   Sales_Rep__r.Name, Branch__r.Name, Scheduled_Start__c, Status__c, Drive_Type__c
+            SELECT Name, Contact__r.FirstName, Contact__r.LastName, Contact__r.Phone,
+                   Vehicle__r.Make__c, Vehicle__r.Model__c,
+                   Owner.Name, Branch__r.Name, Scheduled_Start__c, Status__c, Drive_Type__c
             FROM Booking__c
             WHERE Scheduled_Start__c >= :now
             AND Status__c IN ('Requested', 'Confirmed', 'Waitlisted')
@@ -89,8 +156,9 @@ public with sharing class TDMDashboardController {
             BookingRow row = new BookingRow();
             row.bookingNumber = b.Name;
             row.customerName = trim(b.Contact__r.FirstName) + ' ' + trim(b.Contact__r.LastName);
+            row.customerPhone = b.Contact__r != null ? b.Contact__r.Phone : null;
             row.vehicleName = trim(b.Vehicle__r.Make__c) + ' ' + trim(b.Vehicle__r.Model__c);
-            row.repName = b.Sales_Rep__r != null ? b.Sales_Rep__r.Name : 'Unassigned';
+            row.repName = b.Owner.Name;
             row.branchName = b.Branch__r != null ? b.Branch__r.Name : '';
             row.scheduledStart = b.Scheduled_Start__c;
             row.status = b.Status__c;
@@ -100,27 +168,32 @@ public with sharing class TDMDashboardController {
         return rows;
     }
 
+    /**
+     * Leaderboard is keyed by the booking's Owner (a real Salesforce User) rather than a
+     * Sales_Rep__c record. Returns empty for a rep-scoped viewer — a "leaderboard" of one
+     * person is noise, and the UI hides the card rather than rendering a single row.
+     */
     @AuraEnabled(cacheable=true)
     public static List<RepStat> getRepLeaderboard() {
-        Map<Id, String> repNames = new Map<Id, String>();
-        for (Sales_Rep__c rep : [SELECT Id, Name FROM Sales_Rep__c WHERE Is_Active__c = true]) {
-            repNames.put(rep.Id, rep.Name);
+        if (isPersonalView()) {
+            return new List<RepStat>();
         }
 
+        Map<Id, String> repNames = new Map<Id, String>();
         Map<Id, Integer> totalByRep = new Map<Id, Integer>();
         for (AggregateResult ar : [
-            SELECT Sales_Rep__c repId, COUNT(Id) cnt FROM Booking__c
-            WHERE Sales_Rep__c != null GROUP BY Sales_Rep__c
+            SELECT OwnerId, Owner.Name ownerName, COUNT(Id) cnt FROM Booking__c GROUP BY OwnerId, Owner.Name
         ]) {
-            totalByRep.put((Id) ar.get('repId'), (Integer) ar.get('cnt'));
+            Id ownerId = (Id) ar.get('OwnerId');
+            repNames.put(ownerId, (String) ar.get('ownerName'));
+            totalByRep.put(ownerId, (Integer) ar.get('cnt'));
         }
 
         Map<Id, Integer> completedByRep = new Map<Id, Integer>();
         for (AggregateResult ar : [
-            SELECT Sales_Rep__c repId, COUNT(Id) cnt FROM Booking__c
-            WHERE Sales_Rep__c != null AND Status__c = 'Completed' GROUP BY Sales_Rep__c
+            SELECT OwnerId, COUNT(Id) cnt FROM Booking__c WHERE Status__c = 'Completed' GROUP BY OwnerId
         ]) {
-            completedByRep.put((Id) ar.get('repId'), (Integer) ar.get('cnt'));
+            completedByRep.put((Id) ar.get('OwnerId'), (Integer) ar.get('cnt'));
         }
 
         List<RepStat> stats = new List<RepStat>();
@@ -145,11 +218,15 @@ public with sharing class TDMDashboardController {
     public class DashboardKpis {
         @AuraEnabled public Integer totalBookings;
         @AuraEnabled public Integer upcomingCount;
+        @AuraEnabled public Integer drivesToday;
         @AuraEnabled public Integer completedThisMonth;
         @AuraEnabled public Integer cancelledThisMonth;
         @AuraEnabled public Decimal completionRate;
         @AuraEnabled public Decimal avgNps;
+        /** Null in a personal view — the UI drops the tile rather than showing "1". */
         @AuraEnabled public Integer activeSalesReps;
+        /** True when these numbers cover only the running user's own drives. */
+        @AuraEnabled public Boolean isPersonalView;
     }
 
     public class StatusCount {
@@ -160,6 +237,7 @@ public with sharing class TDMDashboardController {
     public class BookingRow {
         @AuraEnabled public String bookingNumber;
         @AuraEnabled public String customerName;
+        @AuraEnabled public String customerPhone;
         @AuraEnabled public String vehicleName;
         @AuraEnabled public String repName;
         @AuraEnabled public String branchName;

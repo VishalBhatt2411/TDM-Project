@@ -18,13 +18,15 @@ export interface StaffTokenPayload {
   sub: string;
   role: "Admin" | "Manager" | "SalesRep";
   permissions: string[];
+  /** Sales_Rep__c record Id this staff account is linked to — undefined unless explicitly provisioned. */
+  salesRepId?: string;
 }
 
 export function decodeStaffToken(accessToken: string): StaffTokenPayload | null {
   try {
     const payloadBase64 = accessToken.split(".")[1];
     const payload = JSON.parse(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")));
-    return { sub: payload.sub, role: payload.role, permissions: payload.permissions ?? [] };
+    return { sub: payload.sub, role: payload.role, permissions: payload.permissions ?? [], salesRepId: payload.salesRepId };
   } catch {
     return null;
   }

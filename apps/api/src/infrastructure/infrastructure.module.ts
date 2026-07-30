@@ -20,12 +20,12 @@ import {
   SalesforceCustomerRepository,
   SalesforceIdentityProvider,
   SalesforceSalesOpportunityRepository,
-  SalesforceSalesRepRepository,
   SalesforceVehicleAllocationRepository,
   SalesforceVehicleRepository,
   SalesforceVehicleVariantRepository,
   SalesforceWishlistRepository,
 } from "@tdm/salesforce-adapter";
+import { StaffSalesRepRepository } from "./staff-sales-rep.repository";
 import {
   ANALYTICS_REPOSITORY,
   AUDIT_LOG_REPOSITORY,
@@ -59,6 +59,8 @@ const identityProvider = new SalesforceIdentityProvider({
   loginUrl: process.env.SF_LOGIN_URL,
 });
 const prisma = getPrismaClient();
+const bookingRepository = new SalesforceBookingRepository(connectionProvider);
+const staffUserRepository = new StaffUserRepository(prisma);
 
 /**
  * The only module in the application allowed to know about Salesforce or Postgres.
@@ -73,8 +75,8 @@ const prisma = getPrismaClient();
     { provide: VEHICLE_REPOSITORY, useValue: new SalesforceVehicleRepository(connectionProvider) },
     { provide: VEHICLE_VARIANT_REPOSITORY, useValue: new SalesforceVehicleVariantRepository(connectionProvider) },
     { provide: BRANCH_REPOSITORY, useValue: new SalesforceBranchRepository(connectionProvider) },
-    { provide: SALES_REP_REPOSITORY, useValue: new SalesforceSalesRepRepository(connectionProvider) },
-    { provide: BOOKING_REPOSITORY, useValue: new SalesforceBookingRepository(connectionProvider) },
+    { provide: SALES_REP_REPOSITORY, useValue: new StaffSalesRepRepository(staffUserRepository, bookingRepository) },
+    { provide: BOOKING_REPOSITORY, useValue: bookingRepository },
     { provide: WISHLIST_REPOSITORY, useValue: new SalesforceWishlistRepository(connectionProvider) },
     { provide: VEHICLE_ALLOCATION_REPOSITORY, useValue: new SalesforceVehicleAllocationRepository(connectionProvider) },
     { provide: SALES_OPPORTUNITY_REPOSITORY, useValue: new SalesforceSalesOpportunityRepository(connectionProvider) },
@@ -87,7 +89,7 @@ const prisma = getPrismaClient();
     { provide: FOLLOW_UP_LOG_REPOSITORY, useValue: new FollowUpLogRepository(prisma) },
     { provide: MAGIC_LOGIN_REPOSITORY, useValue: new MagicLoginRepository(prisma) },
     { provide: CUSTOMER_PASSWORD_TOKEN_REPOSITORY, useValue: new CustomerPasswordTokenRepository(prisma) },
-    { provide: STAFF_USER_REPOSITORY, useValue: new StaffUserRepository(prisma) },
+    { provide: STAFF_USER_REPOSITORY, useValue: staffUserRepository },
     { provide: STAFF_REFRESH_TOKEN_REPOSITORY, useValue: new StaffRefreshTokenRepository(prisma) },
   ],
   exports: [

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { Navigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getAdminDashboardSummary } from "@/api/admin";
+import { useAdminAuth } from "@/context/admin-auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function StatTile({ label, value, suffix }: { label: string; value: string | number; suffix?: string }) {
@@ -18,7 +20,20 @@ function StatTile({ label, value, suffix }: { label: string; value: string | num
 }
 
 export function AdminDashboardPage() {
-  const { data, isLoading } = useQuery({ queryKey: ["admin-dashboard"], queryFn: getAdminDashboardSummary });
+  const { hasPermission } = useAdminAuth();
+  // A plain SalesRep (no grantable permissions) has nowhere to see dashboard KPIs —
+  // land them on their own bookings instead of a dashboard call that will 403 forever.
+  const canViewDashboard = hasPermission("view_dashboard");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-dashboard"],
+    queryFn: getAdminDashboardSummary,
+    enabled: canViewDashboard,
+  });
+
+  if (!canViewDashboard) {
+    return <Navigate to="/admin/bookings" replace />;
+  }
 
   if (isLoading || !data) {
     return (

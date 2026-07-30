@@ -98,6 +98,11 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   additionalNotes?: string;
+
+  /** If the requested slot conflicts with an existing booking, join the vehicle's waitlist instead of failing outright. */
+  @IsOptional()
+  @IsBoolean()
+  joinWaitlistIfUnavailable?: boolean;
 }
 
 /**
