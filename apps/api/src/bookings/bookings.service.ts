@@ -4,8 +4,8 @@ import {
   AuditLogRepository,
   Booking,
   BookingConflictChecker,
+  BookingConflictError,
   BookingRepository,
-  BranchRepository,
   CustomerRepository,
   DriveFeedback,
   PersonName,
@@ -14,7 +14,7 @@ import {
   SalesOpportunityRepository,
   SalesRepRepository,
   TimeSlot,
-  UNASSIGNED_ID,
+  UNASSIGNED_ID, 
   VehicleRepository,
 } from "@tdm/domain";
 import { BookingDto } from "@tdm/types";
@@ -22,14 +22,13 @@ import { AuthService } from "../auth/auth.service";
 import {
   AUDIT_LOG_REPOSITORY,
   BOOKING_REPOSITORY,
-  BRANCH_REPOSITORY,
   CUSTOMER_REPOSITORY,
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
-  VEHICLE_REPOSITORY,
 } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
-import { BookingEmailContext } from "../notifications/email-templates";
+import { BookingEmailContextService } from "../notifications/booking-email-context.service";
+import { BookingMutationService } from "./booking-mutation.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
 
 export function bookingToDto(booking: Booking): BookingDto {
@@ -68,12 +67,12 @@ export class BookingsService {
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
-    @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
-    @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(SALES_OPPORTUNITY_REPOSITORY) private readonly opportunities: SalesOpportunityRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
     private readonly authService: AuthService,
     private readonly notifications: NotificationsService,
+    private readonly emailContext: BookingEmailContextService,
+    private readonly mutations: BookingMutationService,
   ) {}
 
   /** Authenticated booking creation — for a customer who already has an account/session. */
@@ -164,32 +163,8 @@ export class BookingsService {
 
   async cancel(customerId: string, bookingId: string, dto: CancelBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
-    const emailCtx = await this.buildEmailContext(booking);
-
-    // Throws CancellationWindowExpiredError (-> 400) if past the policy cutoff.
-    booking.cancel(dto.reason);
-    await this.bookings.save(booking);
-
-    await this.auditLog.append({
-      actorId: customerId,
-      action: "BOOKING_CANCELLED",
-      entityType: "Booking",
-      entityId: booking.id,
-      metadata: { reason: dto.reason },
-    });
-
-    if (emailCtx) {
-      const customer = await this.customers.findById(customerId);
-      if (customer) {
-        await this.notifications.sendCancellation(customer.email.value, emailCtx, dto.reason);
-      }
-      if (booking.salesRepId) {
-        const rep = await this.salesReps.findById(booking.salesRepId);
-        if (rep) await this.notifications.sendCancellation(rep.toProps().email, emailCtx, dto.reason);
-      }
-    }
-
-    return bookingToDto(booking);
+    const cancelled = await this.mutations.cancelBooking(booking, dto.reason, customerId);
+    return bookingToDto(cancelled);
   }
 
   async reschedule(customerId: string, bookingId: string, dto: RescheduleBookingDto): Promise<BookingDto> {
@@ -209,7 +184,7 @@ export class BookingsService {
     const saved = await this.bookings.save(newBooking);
     await this.bookings.save(booking);
 
-    const emailCtx = await this.buildEmailContext(saved);
+    const emailCtx = await this.emailContext.build(saved);
     if (emailCtx) {
       const customer = await this.customers.findById(customerId);
       if (customer) await this.notifications.sendReschedule(customer.email.value, emailCtx, previousStart);
@@ -261,7 +236,15 @@ export class BookingsService {
     const slot = TimeSlot.create(dto.slot.start, dto.slot.end);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
-    await conflictChecker.assertNoConflict(dto.vehicleId, slot);
+    let joinWaitlist = false;
+    try {
+      await conflictChecker.assertNoConflict(dto.vehicleId, slot);
+    } catch (error) {
+      if (!(error instanceof BookingConflictError) || !dto.joinWaitlistIfUnavailable) {
+        throw error;
+      }
+      joinWaitlist = true;
+    }
 
     let booking = Booking.request({
       customerId,
@@ -280,43 +263,39 @@ export class BookingsService {
       additionalNotes: dto.additionalNotes,
     });
 
-    const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, slot.start);
-    if (rep) {
-      booking.assignRep(rep.id);
+    let assignedRepEmail: string | undefined;
+    let assignedRepName: string | undefined;
+    if (joinWaitlist) {
+      const currentWaitlist = await this.bookings.findWaitlistedForVehicle(dto.vehicleId);
+      booking.waitlist(currentWaitlist.length + 1);
+    } else {
+      const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, slot.start);
+      if (rep) {
+        booking.assignRep(rep.id);
+        assignedRepEmail = rep.toProps().email;
+        assignedRepName = rep.toProps().name;
+      }
     }
 
     booking = await this.bookings.save(booking);
+
+    if (assignedRepEmail && assignedRepName) {
+      const emailCtx = await this.emailContext.build(booking);
+      if (emailCtx) await this.notifications.sendRepAssignment(assignedRepEmail, assignedRepName, emailCtx);
+    }
+
     return booking;
   }
 
   private async sendConfirmation(booking: Booking, customerEmail: string, customerName: string): Promise<void> {
-    const emailCtx = await this.buildEmailContext(booking, customerName);
-    if (emailCtx) {
+    const emailCtx = await this.emailContext.build(booking, customerName);
+    if (!emailCtx) return;
+
+    if (booking.status === "Waitlisted") {
+      await this.notifications.sendWaitlisted(customerEmail, emailCtx, booking.waitlistPosition ?? 1);
+    } else {
       await this.notifications.sendBookingConfirmation(customerEmail, emailCtx);
     }
-  }
-
-  private async buildEmailContext(booking: Booking, customerNameOverride?: string): Promise<BookingEmailContext | null> {
-    const [vehicle, branch, rep, customer] = await Promise.all([
-      this.vehicles.findById(booking.vehicleId),
-      this.branches.findById(booking.branchId),
-      booking.salesRepId ? this.salesReps.findById(booking.salesRepId) : Promise.resolve(null),
-      customerNameOverride ? Promise.resolve(null) : this.customers.findById(booking.customerId),
-    ]);
-    if (!vehicle || !branch) return null;
-
-    const vehicleProps = vehicle.toProps();
-    const branchProps = branch.toProps();
-    return {
-      customerName: customerNameOverride ?? (customer ? `${customer.name.firstName} ${customer.name.lastName}` : "there"),
-      vehicleLabel: `${vehicleProps.year} ${vehicleProps.make} ${vehicleProps.model}`,
-      bookingReference: booking.id,
-      scheduledStart: booking.slot.start,
-      driveType: booking.toProps().driveType,
-      branchName: branchProps.name,
-      branchAddress: branchProps.address.line1,
-      salesRepName: rep ? rep.toProps().name : undefined,
-    };
   }
 
   private async requireOwnedBooking(customerId: string, bookingId: string): Promise<Booking> {

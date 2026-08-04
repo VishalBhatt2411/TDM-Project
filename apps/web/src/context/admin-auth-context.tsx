@@ -7,6 +7,8 @@ export interface StaffProfile {
   staffUserId: string;
   role: StaffRole;
   permissions: string[];
+  /** Sales_Rep__c / Salesforce User id this staff account is linked to — undefined until their first "Login with Salesforce". */
+  salesRepId?: string;
 }
 
 interface AdminAuthContextValue {

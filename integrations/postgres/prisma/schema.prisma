@@ -145,6 +145,12 @@ model StaffUser {
   salesforceUserId  String?   @unique
   role              String // "Admin" | "Manager" | "SalesRep"
   permissions       String[] // additive permission keys beyond role defaults
+  // Dealership profile fields for a "SalesRep" role user — bookings are assigned to
+  // their real Salesforce User (salesforceUserId), so this is metadata only, used for
+  // auto-assignment (branch matching / daily load) and their own contact info.
+  branchId          String?
+  maxDailyBookings  Int?
+  phone             String?
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

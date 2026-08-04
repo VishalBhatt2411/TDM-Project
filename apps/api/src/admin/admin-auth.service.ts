@@ -39,6 +39,8 @@ export interface StaffProfile {
   staffUserId: string;
   role: StaffRole;
   permissions: string[];
+  /** Sales_Rep__c / Salesforce User id this staff account is linked to — undefined until their first "Login with Salesforce". */
+  salesRepId?: string;
 }
 
 /**
@@ -112,7 +114,9 @@ export class AdminAuthService {
       }
 
       this.logger.log(JSON.stringify({ event: "admin_login_success", provider: "salesforce", userId: staff.id }));
-      return { ok: true, ...(await this.issueTokens(staff.id, staff.role)) };
+      // identity.salesforceUserId (not staff.salesforceUserId) — this login just confirmed it,
+      // whereas the in-memory `staff` record may still reflect the pre-link state above.
+      return { ok: true, ...(await this.issueTokens(staff.id, staff.role, identity.salesforceUserId)) };
     } catch (err) {
       // Defense in depth: any unexpected failure (DB outage, etc.) must still map to
       // a generic code — never leak a stack trace or provider-specific message.
@@ -153,7 +157,7 @@ export class AdminAuthService {
     if (!staff || !staff.isActive) {
       throw new UnauthorizedException("Account is no longer active.");
     }
-    return this.issueTokens(staff.id, staff.role);
+    return this.issueTokens(staff.id, staff.role, staff.salesforceUserId);
   }
 
   /** Best-effort: revokes the refresh token if one was presented. Never throws — logout must always succeed from the client's point of view. */
@@ -175,18 +179,25 @@ export class AdminAuthService {
   async getProfile(staffUserId: string): Promise<StaffProfile | null> {
     const staff = await this.staffUsers.findById(staffUserId);
     if (!staff || !staff.isActive) return null;
-    return { staffUserId: staff.id, role: staff.role, permissions: staff.permissions };
+    return {
+      staffUserId: staff.id,
+      role: staff.role,
+      permissions: staff.permissions,
+      salesRepId: staff.salesforceUserId ?? undefined,
+    };
   }
 
   /**
-   * JWT payload is intentionally minimal (sub/scope/role) — no permissions array.
-   * Permissions can change (grant/revoke) faster than a 15-minute access token's
-   * lifetime, so they're always loaded fresh from the DB at authorization time
-   * (PermissionGuard) and for the console UI (getProfile), never trusted from a
-   * token that may already be stale.
+   * JWT payload is intentionally minimal (sub/scope/role/salesRepId) — no permissions
+   * array. Permissions can change (grant/revoke) faster than a 15-minute access
+   * token's lifetime, so they're always loaded fresh from the DB at authorization
+   * time (PermissionGuard, AdminBookingsService) and for the console UI (getProfile),
+   * never trusted from a token that may already be stale. `salesRepId`, by contrast,
+   * is an identity fact like `role` (set once on first Salesforce login, rarely
+   * changes) — safe to carry in the token the same way `role` is.
    */
-  private async issueTokens(staffUserId: string, role: StaffRole): Promise<StaffTokenPair> {
-    const payload = { sub: staffUserId, scope: AUTH_SCOPE.STAFF, role };
+  private async issueTokens(staffUserId: string, role: StaffRole, salesRepId?: string | null): Promise<StaffTokenPair> {
+    const payload = { sub: staffUserId, scope: AUTH_SCOPE.STAFF, role, salesRepId: salesRepId ?? undefined };
     const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: REFRESH_TOKEN_TTL });
     await this.refreshTokens.save(staffUserId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));

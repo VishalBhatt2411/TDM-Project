@@ -5,7 +5,9 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "view_dashboard" },
-  { to: "/admin/bookings", label: "Test Drives", icon: Calendar, permission: "manage_bookings" },
+  // No permission gate — every staff role (including a plain SalesRep with no
+  // grantable permissions) can at least reach their own scoped "My Test Drives" view.
+  { to: "/admin/bookings", label: "Test Drives", icon: Calendar, permission: null },
   { to: "/admin/users", label: "Users & Permissions", icon: Users, permission: "manage_users" },
 ];
 
@@ -21,7 +23,7 @@ export function AdminLayout() {
           <span className="font-semibold">Admin Console</span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {NAV_ITEMS.filter((item) => hasPermission(item.permission)).map((item) => {
+          {NAV_ITEMS.filter((item) => !item.permission || hasPermission(item.permission)).map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.to;
             return (

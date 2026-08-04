@@ -21,9 +21,14 @@ export interface StaffUserRecord {
   id: string;
   email: string;
   name: string;
+  /** Populated just-in-time on first successful Salesforce login — this IS the id bookings are assigned to (Booking__c.OwnerId). */
   salesforceUserId: string | null;
   role: StaffRole;
   permissions: string[];
+  /** Dealership branch this rep operates out of — used for auto-assignment matching. */
+  branchId: string | null;
+  maxDailyBookings: number | null;
+  phone: string | null;
   isActive: boolean;
   createdAt: Date;
 }
@@ -41,18 +46,35 @@ export class StaffUserRepository {
     return record ? toRecord(record) : null;
   }
 
+  /** The Salesforce User id (Booking__c.OwnerId) a rep is assigned bookings under — only populated after their first login. */
+  async findBySalesforceUserId(salesforceUserId: string): Promise<StaffUserRecord | null> {
+    const record = await this.prisma.staffUser.findUnique({ where: { salesforceUserId } });
+    return record ? toRecord(record) : null;
+  }
+
   async findAll(): Promise<StaffUserRecord[]> {
     const records = await this.prisma.staffUser.findMany({ orderBy: { createdAt: "asc" } });
     return records.map(toRecord);
   }
 
-  async create(input: { email: string; name: string; role: StaffRole; permissions?: string[] }): Promise<StaffUserRecord> {
+  async create(input: {
+    email: string;
+    name: string;
+    role: StaffRole;
+    permissions?: string[];
+    branchId?: string;
+    maxDailyBookings?: number;
+    phone?: string;
+  }): Promise<StaffUserRecord> {
     const record = await this.prisma.staffUser.create({
       data: {
         email: input.email.toLowerCase(),
         name: input.name,
         role: input.role,
         permissions: input.permissions ?? [],
+        branchId: input.branchId ?? null,
+        maxDailyBookings: input.maxDailyBookings ?? null,
+        phone: input.phone ?? null,
       },
     });
     return toRecord(record);
@@ -65,7 +87,16 @@ export class StaffUserRepository {
 
   async update(
     id: string,
-    input: { name?: string; email?: string; role?: StaffRole; permissions?: string[]; isActive?: boolean },
+    input: {
+      name?: string;
+      email?: string;
+      role?: StaffRole;
+      permissions?: string[];
+      branchId?: string | null;
+      maxDailyBookings?: number | null;
+      phone?: string | null;
+      isActive?: boolean;
+    },
   ): Promise<StaffUserRecord> {
     const record = await this.prisma.staffUser.update({
       where: { id },
@@ -82,6 +113,9 @@ function toRecord(record: {
   salesforceUserId: string | null;
   role: string;
   permissions: string[];
+  branchId: string | null;
+  maxDailyBookings: number | null;
+  phone: string | null;
   isActive: boolean;
   createdAt: Date;
 }): StaffUserRecord {
@@ -92,6 +126,9 @@ function toRecord(record: {
     salesforceUserId: record.salesforceUserId,
     role: toStaffRole(record.role),
     permissions: record.permissions,
+    branchId: record.branchId,
+    maxDailyBookings: record.maxDailyBookings,
+    phone: record.phone,
     isActive: record.isActive,
     createdAt: record.createdAt,
   };

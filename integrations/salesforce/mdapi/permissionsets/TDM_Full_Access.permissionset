@@ -85,11 +85,6 @@
         <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
     <fieldPermissions>
-        <field>Booking__c.Sales_Rep__c</field>
-        <readable>true</readable>
-        <editable>true</editable>
-    </fieldPermissions>
-    <fieldPermissions>
         <field>Booking__c.Drive_Type__c</field>
         <readable>true</readable>
         <editable>true</editable>
@@ -196,6 +191,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <field>Booking__c.Additional_Notes__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Booking__c.Staff_Notes__c</field>
         <readable>true</readable>
         <editable>true</editable>
     </fieldPermissions>
@@ -684,10 +684,8 @@
         <tab>Vehicle__c</tab>
         <visibility>Visible</visibility>
     </tabSettings>
-    <tabSettings>
-        <tab>Sales_Rep__c</tab>
-        <visibility>Visible</visibility>
-    </tabSettings>
+    <!-- Sales_Rep__c intentionally has no tab: the object is retired in favour of assigning
+         bookings to real Salesforce Users, so surfacing it would only invite confusion. -->
     <tabSettings>
         <tab>Branch__c</tab>
         <visibility>Visible</visibility>

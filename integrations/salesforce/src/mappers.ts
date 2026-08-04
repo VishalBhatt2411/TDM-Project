@@ -10,7 +10,6 @@ import {
   PersonName,
   PhoneNumber,
   SalesOpportunity,
-  SalesRepresentative,
   TimeSlot,
   Vehicle,
   VehicleAllocation,
@@ -151,25 +150,19 @@ export function branchRecordToDomain(record: any): Branch {
   });
 }
 
-export function salesRepRecordToDomain(record: any): SalesRepresentative {
-  return SalesRepresentative.restore({
-    id: record.Id,
-    name: record.Name,
-    email: record.Email__c,
-    phone: record.Phone__c ?? undefined,
-    branchId: record.Branch__c,
-    isActive: !!record.Is_Active__c,
-    maxDailyBookings: record.Max_Daily_Bookings__c ?? undefined,
-  });
-}
-
-export function bookingRecordToDomain(record: any): Booking {
+/**
+ * A Booking__c's OwnerId is mandatory in Salesforce (unlike the old Sales_Rep__c lookup,
+ * which could be blank) — a booking that hasn't been assigned to a rep yet is simply
+ * owned by the app's own integration user. integrationUserId lets that default ownership
+ * read back as "no rep assigned" rather than as an assignment to a fake/system rep.
+ */
+export function bookingRecordToDomain(record: any, integrationUserId: string): Booking {
   return Booking.restore({
     id: record.Id,
     customerId: record.Contact__r?.Portal_User_Id__c ?? record.Contact__c,
     vehicleId: record.Vehicle__c,
     branchId: record.Branch__c,
-    salesRepId: record.Sales_Rep__c ?? undefined,
+    salesRepId: record.OwnerId && record.OwnerId !== integrationUserId ? record.OwnerId : undefined,
     driveType: record.Drive_Type__c,
     slot: TimeSlot.create(record.Scheduled_Start__c, record.Scheduled_End__c),
     status: record.Status__c,
@@ -194,6 +187,7 @@ export function bookingRecordToDomain(record: any): Booking {
     purchaseTimeline: record.Purchase_Timeline__c ?? "Just_Exploring",
     pickupRequired: !!record.Pickup_Required__c,
     additionalNotes: record.Additional_Notes__c ?? undefined,
+    staffNotes: record.Staff_Notes__c ?? undefined,
   });
 }
 
@@ -213,7 +207,10 @@ export function bookingToRecord(booking: Booking): Record<string, unknown> {
     Contact__c: props.customerId,
     Vehicle__c: props.vehicleId,
     Branch__c: props.branchId,
-    Sales_Rep__c: props.salesRepId ?? null,
+    // Omitted (not set to null — OwnerId can never be blank in Salesforce) when nobody's
+    // assigned yet: on insert it defaults to the integration user; on update it's simply
+    // left unchanged, which is exactly what "no rep assignment change" should mean.
+    ...(props.salesRepId ? { OwnerId: props.salesRepId } : {}),
     Drive_Type__c: props.driveType,
     Scheduled_Start__c: props.slot.start.toISOString(),
     Scheduled_End__c: props.slot.end.toISOString(),
@@ -236,6 +233,7 @@ export function bookingToRecord(booking: Booking): Record<string, unknown> {
     Purchase_Timeline__c: props.purchaseTimeline,
     Pickup_Required__c: props.pickupRequired,
     Additional_Notes__c: props.additionalNotes ?? null,
+    Staff_Notes__c: props.staffNotes ?? null,
   };
 }
 

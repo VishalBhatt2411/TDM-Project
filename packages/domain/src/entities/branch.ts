@@ -32,11 +32,12 @@ export class Branch {
 }
 
 export interface SalesRepProps {
+  /** The rep's real Salesforce User Id — this is what a Booking is assigned to (Booking__c.OwnerId). */
   id: string;
   name: string;
   email: string;
   phone?: string;
-  branchId: string;
+  branchId?: string;
   isActive: boolean;
   maxDailyBookings?: number;
 }

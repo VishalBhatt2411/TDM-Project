@@ -41,6 +41,8 @@ export interface BookingDto {
   purchaseTimeline: PurchaseTimeline;
   pickupRequired: boolean;
   additionalNotes?: string;
+  /** Internal, staff-only notes — never surfaced to the customer. */
+  staffNotes?: string;
 }
 
 export interface CreateBookingRequest {
@@ -89,6 +91,22 @@ export interface CancelBookingRequest {
 
 export interface CheckInRequest {
   method: "QR" | "Manual";
+}
+
+export interface StartDriveRequest {
+  odometerStart: number;
+}
+
+export interface CompleteDriveRequest {
+  odometerEnd: number;
+}
+
+export interface SetStaffNotesRequest {
+  notes: string;
+}
+
+export interface HandoffBookingRequest {
+  salesRepId: string;
 }
 
 export interface ComplianceSubmission {

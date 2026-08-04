@@ -8,6 +8,10 @@ import { parseCookieHeader } from "../common/cookie.util";
 export interface AuthenticatedStaff {
   staffUserId: string;
   role: StaffRole;
+  /** Sales_Rep__c / Salesforce User id this staff account is linked to — undefined unless
+   *  they've completed "Login with Salesforce" at least once. An identity fact (like
+   *  `role`), not a fast-changing grant — safe to carry in the JWT alongside role. */
+  salesRepId?: string;
 }
 
 /**
@@ -16,7 +20,7 @@ export interface AuthenticatedStaff {
  * token is never exposed to browser JavaScript) and requires `scope: "staff"` in
  * its payload — the mirror image of JwtAuthGuard's `scope: "customer"` check.
  *
- * Note the payload intentionally carries only `sub`/`scope`/`role`, not
+ * Note the payload intentionally carries only `sub`/`scope`/`role`/`salesRepId`, not
  * permissions — see AdminAuthService.issueTokens and PermissionGuard.
  */
 @Injectable()
@@ -30,13 +34,19 @@ export class StaffAuthGuard implements CanActivate {
       throw new UnauthorizedException("Not authenticated.");
     }
     try {
-      const payload = this.jwtService.verify<{ sub: string; scope?: string; role?: StaffRole }>(token);
+      const payload = this.jwtService.verify<{
+        sub: string;
+        scope?: string;
+        role?: StaffRole;
+        salesRepId?: string;
+      }>(token);
       if (payload.scope !== AUTH_SCOPE.STAFF) {
         throw new UnauthorizedException("This token is not valid for admin console endpoints.");
       }
       request.staff = {
         staffUserId: payload.sub,
         role: payload.role ?? StaffRole.Manager,
+        salesRepId: payload.salesRepId,
       };
       return true;
     } catch {

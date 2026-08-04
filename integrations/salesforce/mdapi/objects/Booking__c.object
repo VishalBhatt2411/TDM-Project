@@ -8,7 +8,20 @@
         <displayFormat>TD-{00000}</displayFormat>
     </nameField>
     <deploymentStatus>Deployed</deploymentStatus>
-    <sharingModel>ReadWrite</sharingModel>
+    <!--
+      Private, not Public Read/Write: a booking's Owner IS its assigned sales rep, so
+      ownership must actually govern visibility — a rep should only see their own drives
+      in native Salesforce. The backend integration user is a System Administrator
+      (View All Data), so the TDM web app continues to see every booking regardless.
+
+      Gotcha for future deploys: changing sharingModel on an ALREADY-EXISTING object is
+      silently ignored when it rides along in a large multi-component deploy. Verify via
+      Tooling API: query InternalSharingModel on EntityDefinition where QualifiedApiName
+      equals Booking__c, and if it still reads ReadWrite, deploy this object on its own
+      (or set it in Setup, Sharing Settings). A fresh org created from this metadata gets
+      Private correctly on first deploy.
+    -->
+    <sharingModel>Private</sharingModel>
     <enableActivities>true</enableActivities>
     <enableHistory>true</enableHistory>
     <enableReports>true</enableReports>
@@ -39,14 +52,6 @@
         <relationshipName>Bookings</relationshipName>
         <required>true</required>
         <deleteConstraint>Restrict</deleteConstraint>
-    </fields>
-    <fields>
-        <fullName>Sales_Rep__c</fullName>
-        <label>Sales Representative</label>
-        <type>Lookup</type>
-        <referenceTo>Sales_Rep__c</referenceTo>
-        <relationshipName>Bookings</relationshipName>
-        <deleteConstraint>SetNull</deleteConstraint>
     </fields>
     <fields>
         <fullName>Drive_Type__c</fullName>
@@ -230,5 +235,13 @@
         <type>LongTextArea</type>
         <length>4000</length>
         <visibleLines>4</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Staff_Notes__c</fullName>
+        <label>Staff Notes</label>
+        <description>Internal notes maintained by the assigned sales rep / management — never shown to the customer.</description>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>6</visibleLines>
     </fields>
 </CustomObject>

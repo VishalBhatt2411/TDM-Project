@@ -54,6 +54,8 @@ export interface SalesRepRepository {
 export interface BookingListFilter {
   status?: Booking["status"];
   branchId?: string;
+  /** Scopes results to bookings assigned to a single sales rep — used for a rep's self-service view. */
+  salesRepId?: string;
   page?: number;
   pageSize?: number;
 }

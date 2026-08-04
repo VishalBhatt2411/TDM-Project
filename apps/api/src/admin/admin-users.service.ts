@@ -31,11 +31,15 @@ export class AdminUsersService {
     if (existing) {
       throw new ConflictException("A staff user with this email already exists.");
     }
+
     const staff = await this.staffUsers.create({
       email: dto.email,
       name: dto.name,
       role: dto.role,
       permissions: dto.permissions ?? [],
+      branchId: dto.branchId,
+      maxDailyBookings: dto.maxDailyBookings,
+      phone: dto.phone,
     });
 
     const webOrigin = process.env.ADMIN_WEB_ORIGIN ?? process.env.WEB_ORIGIN ?? "http://localhost:5173";
@@ -86,13 +90,30 @@ export class AdminUsersService {
   }
 }
 
-function toPublicDto(staff: { id: string; email: string; name: string; role: StaffRole; permissions: string[]; isActive: boolean; createdAt: Date }) {
+function toPublicDto(staff: {
+  id: string;
+  email: string;
+  name: string;
+  salesforceUserId: string | null;
+  role: StaffRole;
+  permissions: string[];
+  branchId: string | null;
+  maxDailyBookings: number | null;
+  phone: string | null;
+  isActive: boolean;
+  createdAt: Date;
+}) {
   return {
     id: staff.id,
     email: staff.email,
     name: staff.name,
     role: staff.role,
     permissions: staff.permissions,
+    // A rep is only assignable bookings once they've logged in via Salesforce at least once.
+    hasLoggedInWithSalesforce: !!staff.salesforceUserId,
+    branchId: staff.branchId ?? undefined,
+    maxDailyBookings: staff.maxDailyBookings ?? undefined,
+    phone: staff.phone ?? undefined,
     isActive: staff.isActive,
     createdAt: staff.createdAt.toISOString(),
   };

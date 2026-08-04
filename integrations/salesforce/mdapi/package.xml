@@ -17,6 +17,7 @@
     </types>
     <types>
         <members>TDM_Full_Access</members>
+        <members>TDM_Sales_Rep</members>
         <name>PermissionSet</name>
     </types>
     <types>

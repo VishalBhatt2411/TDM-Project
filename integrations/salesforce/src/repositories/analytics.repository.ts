@@ -46,8 +46,8 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
             `GROUP BY Branch__c, Branch__r.Name`,
         ),
         conn.query(
-          `SELECT Sales_Rep__c r, Sales_Rep__r.Name rn, COUNT(Id) cnt FROM Booking__c ` +
-            `WHERE CreatedDate = LAST_N_DAYS:30 AND Sales_Rep__c != null${branchFilter} GROUP BY Sales_Rep__c, Sales_Rep__r.Name`,
+          `SELECT OwnerId r, Owner.Name rn, COUNT(Id) cnt FROM Booking__c ` +
+            `WHERE CreatedDate = LAST_N_DAYS:30${branchFilter} GROUP BY OwnerId, Owner.Name`,
         ),
         conn.query(
           `SELECT Vehicle__c v, Vehicle__r.Make__c mk, Vehicle__r.Model__c md, COUNT(Id) cnt FROM Booking__c ` +

@@ -86,6 +86,41 @@ export function accountAccessEmail(dealership: DealershipConfig, customerName: s
   return { subject: `Access your ${dealership.name} account`, html: layout(dealership, "Your Account is Ready", body, accent) };
 }
 
+export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, position: number): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">The ${ctx.vehicleLabel} isn't available for your requested time, so we've added you to the waitlist.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
+      ${infoRow("Vehicle", ctx.vehicleLabel)}
+      ${infoRow("Booking Reference", ctx.bookingReference)}
+      ${infoRow("Requested Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Waitlist Position", `#${position}`)}
+      ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
+    </table>
+    <p style="color:#374151;font-size:15px;">We'll email you the moment a slot opens up and your booking is confirmed.</p>
+  `;
+  return { subject: `You're on the Waitlist — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "Added to the Waitlist", body, accent) };
+}
+
+export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: BookingEmailContext): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">Good news — a slot has opened up and your test drive is now confirmed!</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
+      ${infoRow("Vehicle", ctx.vehicleLabel)}
+      ${infoRow("Booking Reference", ctx.bookingReference)}
+      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
+      ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
+      ${ctx.salesRepName ? infoRow("Your Sales Contact", ctx.salesRepName) : ""}
+    </table>
+    <p style="color:#374151;font-size:15px;">Please bring a valid driving license to your appointment.</p>
+  `;
+  return { subject: `You're Confirmed! — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "Waitlist Slot Confirmed", body, accent) };
+}
+
 export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, reason: string): { subject: string; html: string } {
   const accent = dealership.primaryColorHex ?? "#EB0A1E";
   const body = `
@@ -193,6 +228,28 @@ export function passwordSetupEmail(
     subject: isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`,
     html: layout(dealership, isNewAccount ? "Your Account is Ready" : "Password Reset Requested", body, accent),
   };
+}
+
+export function salesRepAssignedEmail(
+  dealership: DealershipConfig,
+  repName: string,
+  ctx: BookingEmailContext,
+): { subject: string; html: string } {
+  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const body = `
+    <p style="color:#374151;font-size:15px;">Hi ${repName},</p>
+    <p style="color:#374151;font-size:15px;">You've been assigned to a test drive. Here are the details:</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
+      ${infoRow("Customer", ctx.customerName)}
+      ${infoRow("Vehicle", ctx.vehicleLabel)}
+      ${infoRow("Booking Reference", ctx.bookingReference)}
+      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
+      ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
+    </table>
+    <p style="color:#374151;font-size:15px;">Log in to the Admin Console to view or act on this booking.</p>
+  `;
+  return { subject: `New Test Drive Assigned — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "You've Been Assigned a Test Drive", body, accent) };
 }
 
 export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string): { subject: string; html: string } {
