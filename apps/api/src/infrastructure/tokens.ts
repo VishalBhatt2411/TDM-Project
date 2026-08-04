@@ -25,3 +25,4 @@ export const MAGIC_LOGIN_REPOSITORY = Symbol("MagicLoginRepository");
 export const CUSTOMER_PASSWORD_TOKEN_REPOSITORY = Symbol("CustomerPasswordTokenRepository");
 export const STAFF_USER_REPOSITORY = Symbol("StaffUserRepository");
 export const STAFF_REFRESH_TOKEN_REPOSITORY = Symbol("StaffRefreshTokenRepository");
+export const STAFF_OAUTH_STATE_REPOSITORY = Symbol("StaffOAuthStateRepository");

@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditLogRepository } from "@tdm/domain";
-import { StaffUserRepository } from "@tdm/postgres-adapter";
+import { StaffRole, StaffUserRepository } from "@tdm/postgres-adapter";
 import { AUDIT_LOG_REPOSITORY, STAFF_USER_REPOSITORY } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
@@ -23,7 +23,7 @@ export class AdminUsersService {
     // A Manager holding "manage_users" (a grantable permission) must not be able to
     // create a fellow Admin — only an actual Admin can mint another Admin. Without
     // this check, "manage_users" would be an indirect full-privilege-escalation path.
-    if (dto.role === "Admin" && actor.role !== "Admin") {
+    if (dto.role === StaffRole.Admin && actor.role !== StaffRole.Admin) {
       throw new ForbiddenException("Only an Admin can create another Admin account.");
     }
 
@@ -60,8 +60,8 @@ export class AdminUsersService {
     // Same privilege-escalation guard as create(): a non-Admin (even one with
     // "manage_users") can neither promote someone to Admin nor modify an existing
     // Admin's role/permissions/active status — only an Admin can touch Admin accounts.
-    const targetIsOrWouldBeAdmin = existing.role === "Admin" || dto.role === "Admin";
-    if (targetIsOrWouldBeAdmin && actor.role !== "Admin") {
+    const targetIsOrWouldBeAdmin = existing.role === StaffRole.Admin || dto.role === StaffRole.Admin;
+    if (targetIsOrWouldBeAdmin && actor.role !== StaffRole.Admin) {
       throw new ForbiddenException("Only an Admin can modify an Admin account or grant the Admin role.");
     }
 
@@ -86,7 +86,7 @@ export class AdminUsersService {
   }
 }
 
-function toPublicDto(staff: { id: string; email: string; name: string; role: string; permissions: string[]; isActive: boolean; createdAt: Date }) {
+function toPublicDto(staff: { id: string; email: string; name: string; role: StaffRole; permissions: string[]; isActive: boolean; createdAt: Date }) {
   return {
     id: staff.id,
     email: staff.email,

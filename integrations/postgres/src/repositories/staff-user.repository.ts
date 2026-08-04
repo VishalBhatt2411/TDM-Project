@@ -1,6 +1,21 @@
 import { PrismaClient } from "@prisma/client";
 
-export type StaffRole = "Admin" | "Manager" | "SalesRep";
+/** Strongly typed staff roles — invalid role values cannot be assigned at compile time. */
+export enum StaffRole {
+  Admin = "Admin",
+  Manager = "Manager",
+  SalesRep = "SalesRep",
+}
+
+const STAFF_ROLE_VALUES: readonly string[] = Object.values(StaffRole);
+
+/** Validates a raw DB/JWT string against the known role set instead of blindly casting it. */
+export function toStaffRole(value: string): StaffRole {
+  if (STAFF_ROLE_VALUES.includes(value)) {
+    return value as StaffRole;
+  }
+  throw new Error(`Unknown staff role: "${value}"`);
+}
 
 export interface StaffUserRecord {
   id: string;
@@ -75,7 +90,7 @@ function toRecord(record: {
     email: record.email,
     name: record.name,
     salesforceUserId: record.salesforceUserId,
-    role: record.role as StaffRole,
+    role: toStaffRole(record.role),
     permissions: record.permissions,
     isActive: record.isActive,
     createdAt: record.createdAt,

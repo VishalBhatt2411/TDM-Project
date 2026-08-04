@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
+import { AUTH_SCOPE } from "../auth/auth.constants";
 
 export interface AuthenticatedUser {
   customerId: string;
@@ -24,7 +25,7 @@ export class JwtAuthGuard implements CanActivate {
     const token = header.slice("Bearer ".length);
     try {
       const payload = this.jwtService.verify<{ sub: string; scope?: string }>(token);
-      if (payload.scope !== "customer") {
+      if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
         throw new UnauthorizedException("This token is not valid for customer endpoints.");
       }
       request.user = { customerId: payload.sub };

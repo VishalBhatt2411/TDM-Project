@@ -8,7 +8,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_provisioned: "Your Salesforce account isn't provisioned for the Admin Console. Contact your administrator.",
   inactive: "This Admin Console account has been deactivated. Contact your administrator.",
   invalid_state: "That sign-in attempt expired or was invalid. Please try again.",
+  invalid_request: "That sign-in link was malformed. Please start over.",
   exchange_failed: "Couldn't complete sign-in with Salesforce. Please try again.",
+  internal_error: "Something went wrong on our end. Please try again shortly.",
 };
 
 export function AdminLoginPage() {

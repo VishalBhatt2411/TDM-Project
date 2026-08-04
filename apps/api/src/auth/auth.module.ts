@@ -5,6 +5,7 @@ import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { ConsoleOtpSender, OTP_SENDER } from "./otp-sender";
+import { ACCESS_TOKEN_TTL } from "./auth.constants";
 
 // Global: JwtService (and the guards that depend on it — customer JwtAuthGuard,
 // staff StaffAuthGuard in ./admin) needs to be resolvable from any module without
@@ -16,7 +17,7 @@ import { ConsoleOtpSender, OTP_SENDER } from "./otp-sender";
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? "dev-only-secret-change-me",
-      signOptions: { expiresIn: "15m" },
+      signOptions: { expiresIn: ACCESS_TOKEN_TTL },
     }),
     NotificationsModule,
   ],

@@ -1,43 +1,63 @@
 import * as React from "react";
-import { adminTokenStorage, decodeStaffToken } from "@/lib/admin-token-storage";
-import type { StaffTokenPayload } from "@/lib/admin-token-storage";
+import { adminApiClient } from "@/lib/admin-api-client";
+
+export type StaffRole = "Admin" | "Manager" | "SalesRep";
+
+export interface StaffProfile {
+  staffUserId: string;
+  role: StaffRole;
+  permissions: string[];
+}
 
 interface AdminAuthContextValue {
-  staff: StaffTokenPayload | null;
+  staff: StaffProfile | null;
   isAuthenticated: boolean;
+  /** True until the initial GET /admin/auth/me call resolves — avoids a login-page flash on reload. */
+  isLoading: boolean;
   loginWithSalesforce: () => void;
-  completeLogin: (accessToken: string, refreshToken: string) => void;
-  logout: () => void;
+  /** Re-checks session state with the backend. Called on mount and after the OAuth redirect lands. */
+  refreshSession: () => Promise<void>;
+  logout: () => Promise<void>;
   hasPermission: (key: string) => boolean;
 }
 
 const AdminAuthContext = React.createContext<AdminAuthContextValue | null>(null);
 
+/**
+ * Login status and staff identity are always derived from the backend (GET
+ * /admin/auth/me), never from a client-side JWT decode or a URL fragment — the
+ * access/refresh tokens live only in HttpOnly cookies the browser manages
+ * automatically and this code never touches.
+ */
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
-  const [staff, setStaff] = React.useState<StaffTokenPayload | null>(() => {
-    const token = adminTokenStorage.getAccessToken();
-    return token ? decodeStaffToken(token) : null;
-  });
+  const [staff, setStaff] = React.useState<StaffProfile | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-  const applyTokens = React.useCallback((accessToken: string, refreshToken: string) => {
-    adminTokenStorage.setTokens(accessToken, refreshToken);
-    setStaff(decodeStaffToken(accessToken));
+  const refreshSession = React.useCallback(async () => {
+    try {
+      const { data } = await adminApiClient.get<StaffProfile>("/admin/auth/me");
+      setStaff(data);
+    } catch {
+      setStaff(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  React.useEffect(() => {
+    refreshSession();
+  }, [refreshSession]);
 
   const loginWithSalesforce = React.useCallback(() => {
     window.location.href = "/api/v1/admin/auth/salesforce/login";
   }, []);
 
-  const completeLogin = React.useCallback(
-    (accessToken: string, refreshToken: string) => {
-      applyTokens(accessToken, refreshToken);
-    },
-    [applyTokens],
-  );
-
-  const logout = React.useCallback(() => {
-    adminTokenStorage.clear();
-    setStaff(null);
+  const logout = React.useCallback(async () => {
+    try {
+      await adminApiClient.post("/admin/auth/logout");
+    } finally {
+      setStaff(null);
+    }
   }, []);
 
   const hasPermission = React.useCallback(
@@ -46,8 +66,16 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = React.useMemo(
-    () => ({ staff, isAuthenticated: !!staff, loginWithSalesforce, completeLogin, logout, hasPermission }),
-    [staff, loginWithSalesforce, completeLogin, logout, hasPermission],
+    () => ({
+      staff,
+      isAuthenticated: !!staff,
+      isLoading,
+      loginWithSalesforce,
+      refreshSession,
+      logout,
+      hasPermission,
+    }),
+    [staff, isLoading, loginWithSalesforce, refreshSession, logout, hasPermission],
   );
 
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;

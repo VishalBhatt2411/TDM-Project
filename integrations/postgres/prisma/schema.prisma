@@ -161,3 +161,15 @@ model StaffRefreshToken {
   @@index([staffUserId])
   @@unique([staffUserId, tokenHash])
 }
+
+// Server-side storage for a pending "Login with Salesforce" OAuth2/PKCE handshake.
+// The browser only ever carries the opaque `state` id (CSRF token + lookup key);
+// the PKCE code_verifier itself never leaves the server, keeping the redirect URL
+// short and the verifier out of browser history/referrer headers. Single-use:
+// consumed (deleted) by AdminAuthService on callback, whether or not it succeeds.
+model StaffOAuthState {
+  state        String   @id
+  codeVerifier String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}

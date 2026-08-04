@@ -1,10 +1,6 @@
-import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString } from "class-validator";
+import { StaffRole } from "@tdm/postgres-adapter";
 import { ALL_PERMISSIONS, PermissionKey } from "./permissions";
-
-export class StaffRefreshDto {
-  @IsString()
-  refreshToken!: string;
-}
 
 export class CreateStaffUserDto {
   @IsEmail()
@@ -13,8 +9,8 @@ export class CreateStaffUserDto {
   @IsString()
   name!: string;
 
-  @IsIn(["Admin", "Manager", "SalesRep"])
-  role!: "Admin" | "Manager" | "SalesRep";
+  @IsEnum(StaffRole)
+  role!: StaffRole;
 
   @IsOptional()
   @IsArray()
@@ -32,8 +28,8 @@ export class UpdateStaffUserDto {
   email?: string;
 
   @IsOptional()
-  @IsIn(["Admin", "Manager", "SalesRep"])
-  role?: "Admin" | "Manager" | "SalesRep";
+  @IsEnum(StaffRole)
+  role?: StaffRole;
 
   @IsOptional()
   @IsArray()

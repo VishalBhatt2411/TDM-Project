@@ -7,10 +7,9 @@ import { AUTH_REPOSITORY, CUSTOMER_PASSWORD_TOKEN_REPOSITORY, CUSTOMER_REPOSITOR
 import { NotificationsService } from "../notifications/notifications.service";
 import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, VerifyOtpDto } from "./dto";
 import { OTP_SENDER, OtpSender } from "./otp-sender";
+import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from "./auth.constants";
 
 const OTP_TTL_MINUTES = 10;
-const ACCESS_TOKEN_TTL = "15m";
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAGIC_LINK_TTL_MS = 48 * 60 * 60 * 1000;
 const PASSWORD_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -89,7 +88,7 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token.");
     }
-    if (payload.scope !== "customer") {
+    if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
       throw new UnauthorizedException("This token is not valid for customer endpoints.");
     }
     const isValid = await this.authRepo.isRefreshTokenValid(payload.sub, sha256Hex(dto.refreshToken));
@@ -196,8 +195,8 @@ export class AuthService {
   }
 
   private async issueTokens(customerId: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    const accessToken = this.jwtService.sign({ sub: customerId, scope: "customer" }, { expiresIn: ACCESS_TOKEN_TTL });
-    const refreshToken = this.jwtService.sign({ sub: customerId, scope: "customer" }, { expiresIn: "7d" });
+    const accessToken = this.jwtService.sign({ sub: customerId, scope: AUTH_SCOPE.CUSTOMER }, { expiresIn: ACCESS_TOKEN_TTL });
+    const refreshToken = this.jwtService.sign({ sub: customerId, scope: AUTH_SCOPE.CUSTOMER }, { expiresIn: REFRESH_TOKEN_TTL });
     await this.authRepo.saveRefreshToken(customerId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
     return { accessToken, refreshToken, expiresIn: 15 * 60 };
   }

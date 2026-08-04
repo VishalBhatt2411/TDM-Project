@@ -1,19 +1,23 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
-import type { StaffRole } from "@tdm/postgres-adapter";
+import { StaffRole } from "@tdm/postgres-adapter";
+import { ACCESS_TOKEN_COOKIE, AUTH_SCOPE } from "../auth/auth.constants";
+import { parseCookieHeader } from "../common/cookie.util";
 
 export interface AuthenticatedStaff {
   staffUserId: string;
   role: StaffRole;
-  permissions: string[];
 }
 
 /**
- * Guards admin console endpoints. Requires `scope: "staff"` in the JWT payload —
- * the mirror image of JwtAuthGuard's `scope: "customer"` check. A customer's
- * access token, even though it's a structurally valid JWT signed with the same
- * secret, can never pass this guard, and a staff token can never pass JwtAuthGuard.
+ * Guards admin console endpoints. Reads the access token from the HttpOnly
+ * `tdm_staff_at` cookie (never from an Authorization header or request body — the
+ * token is never exposed to browser JavaScript) and requires `scope: "staff"` in
+ * its payload — the mirror image of JwtAuthGuard's `scope: "customer"` check.
+ *
+ * Note the payload intentionally carries only `sub`/`scope`/`role`, not
+ * permissions — see AdminAuthService.issueTokens and PermissionGuard.
  */
 @Injectable()
 export class StaffAuthGuard implements CanActivate {
@@ -21,26 +25,22 @@ export class StaffAuthGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request & { staff?: AuthenticatedStaff }>();
-    const header = request.headers.authorization;
-    if (!header?.startsWith("Bearer ")) {
-      throw new UnauthorizedException("Missing bearer token.");
+    const token = parseCookieHeader(request.headers.cookie)[ACCESS_TOKEN_COOKIE];
+    if (!token) {
+      throw new UnauthorizedException("Not authenticated.");
     }
-    const token = header.slice("Bearer ".length);
     try {
-      const payload = this.jwtService.verify<{ sub: string; scope?: string; role?: StaffRole; permissions?: string[] }>(
-        token,
-      );
-      if (payload.scope !== "staff") {
+      const payload = this.jwtService.verify<{ sub: string; scope?: string; role?: StaffRole }>(token);
+      if (payload.scope !== AUTH_SCOPE.STAFF) {
         throw new UnauthorizedException("This token is not valid for admin console endpoints.");
       }
       request.staff = {
         staffUserId: payload.sub,
-        role: payload.role ?? "Manager",
-        permissions: payload.permissions ?? [],
+        role: payload.role ?? StaffRole.Manager,
       };
       return true;
     } catch {
-      throw new UnauthorizedException("Invalid or expired token.");
+      throw new UnauthorizedException("Invalid or expired session.");
     }
   }
 }
