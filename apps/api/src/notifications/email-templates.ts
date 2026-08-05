@@ -1,6 +1,26 @@
 import type { DealershipConfig } from "@tdm/postgres-adapter";
 
-function layout(dealership: DealershipConfig, title: string, bodyHtml: string, accentHex = dealership.primaryColorHex ?? "#EB0A1E"): string {
+/**
+ * Escapes a value for safe interpolation into HTML email bodies. Every template below
+ * renders fields sourced from customer/staff free text (names, cancellation reasons,
+ * dealership config) — without this, `<img src=x onerror=...>` in e.g. a cancellation
+ * reason would execute in whatever mail client renders the resulting HTML.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Validates a `#rrggbb`/`#rgb` hex color before it's placed unescaped into a `style` attribute; falls back to the brand default otherwise. */
+function safeHex(value: string | null | undefined, fallback: string): string {
+  return value && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value) ? value : fallback;
+}
+
+function layout(dealership: DealershipConfig, title: string, bodyHtml: string, accentHex = safeHex(dealership.primaryColorHex, "#EB0A1E")): string {
   return `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">
@@ -9,21 +29,21 @@ function layout(dealership: DealershipConfig, title: string, bodyHtml: string, a
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
         <tr>
           <td style="background:${accentHex};padding:24px 32px;">
-            <span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:0.5px;">${dealership.logoText ?? dealership.name}</span>
-            <div style="color:#ffffff;opacity:0.85;font-size:13px;margin-top:2px;">${dealership.tagline ?? ""}</div>
+            <span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:0.5px;">${escapeHtml(dealership.logoText ?? dealership.name)}</span>
+            <div style="color:#ffffff;opacity:0.85;font-size:13px;margin-top:2px;">${escapeHtml(dealership.tagline ?? "")}</div>
           </td>
         </tr>
         <tr>
           <td style="padding:32px;">
-            <h1 style="font-size:20px;color:#111827;margin:0 0 16px;">${title}</h1>
+            <h1 style="font-size:20px;color:#111827;margin:0 0 16px;">${escapeHtml(title)}</h1>
             ${bodyHtml}
           </td>
         </tr>
         <tr>
           <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
-            <p style="margin:0;font-size:13px;color:#6b7280;">${dealership.name} · ${dealership.address ?? ""}</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${dealership.phone ?? ""} ${dealership.email ? "· " + dealership.email : ""}</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${dealership.operatingHours ?? ""}</p>
+            <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(dealership.name)} · ${escapeHtml(dealership.address ?? "")}</p>
+            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(dealership.phone ?? "")} ${dealership.email ? "· " + escapeHtml(dealership.email) : ""}</p>
+            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(dealership.operatingHours ?? "")}</p>
           </td>
         </tr>
       </table>
@@ -34,13 +54,13 @@ function layout(dealership: DealershipConfig, title: string, bodyHtml: string, a
 }
 
 function button(href: string, label: string, accentHex: string): string {
-  return `<a href="${href}" style="display:inline-block;background:${accentHex};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:bold;font-size:14px;">${label}</a>`;
+  return `<a href="${encodeURI(href)}" style="display:inline-block;background:${accentHex};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:bold;font-size:14px;">${escapeHtml(label)}</a>`;
 }
 
 function infoRow(label: string, value: string): string {
   return `<tr>
-    <td style="padding:6px 0;color:#6b7280;font-size:14px;width:160px;">${label}</td>
-    <td style="padding:6px 0;color:#111827;font-size:14px;font-weight:600;">${value}</td>
+    <td style="padding:6px 0;color:#6b7280;font-size:14px;width:160px;">${escapeHtml(label)}</td>
+    <td style="padding:6px 0;color:#111827;font-size:14px;font-weight:600;">${escapeHtml(value)}</td>
   </tr>`;
 }
 
@@ -57,9 +77,9 @@ export interface BookingEmailContext {
 }
 
 export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: BookingEmailContext): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Your test drive is confirmed! Here are the details:</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
@@ -76,10 +96,10 @@ export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: Book
 }
 
 export function accountAccessEmail(dealership: DealershipConfig, customerName: string, magicLinkUrl: string): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${customerName},</p>
-    <p style="color:#374151;font-size:15px;">We've created an account for you at ${dealership.name} so you can track and manage your test drive bookings.</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
+    <p style="color:#374151;font-size:15px;">We've created an account for you at ${escapeHtml(dealership.name)} so you can track and manage your test drive bookings.</p>
     <p style="margin:24px 0;">${button(magicLinkUrl, "Access My Bookings", accent)}</p>
     <p style="color:#6b7280;font-size:13px;">This secure link signs you in directly — no password needed. It expires in 48 hours; you can always request a new one from the login page.</p>
   `;
@@ -87,10 +107,10 @@ export function accountAccessEmail(dealership: DealershipConfig, customerName: s
 }
 
 export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, position: number): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
-    <p style="color:#374151;font-size:15px;">The ${ctx.vehicleLabel} isn't available for your requested time, so we've added you to the waitlist.</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
+    <p style="color:#374151;font-size:15px;">The ${escapeHtml(ctx.vehicleLabel)} isn't available for your requested time, so we've added you to the waitlist.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
@@ -104,9 +124,9 @@ export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailC
 }
 
 export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: BookingEmailContext): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Good news — a slot has opened up and your test drive is now confirmed!</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
@@ -122,9 +142,9 @@ export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: Booking
 }
 
 export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, reason: string): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Your test drive booking has been cancelled as requested.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
@@ -138,9 +158,9 @@ export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmai
 }
 
 export function rescheduleEmail(dealership: DealershipConfig, ctx: BookingEmailContext, previousStart: Date): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Your test drive has been rescheduled.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
@@ -158,10 +178,10 @@ export function reminderEmail(
   ctx: BookingEmailContext,
   kind: "24h" | "2h" | "day_of",
 ): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const leadText = kind === "24h" ? "tomorrow" : kind === "2h" ? "in about 2 hours" : "today";
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${ctx.customerName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Just a reminder — your test drive is <strong>${leadText}</strong>.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
@@ -179,10 +199,10 @@ export function followUpEmail(
   vehicleLabel: string,
   daysSince: number,
 ): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${customerName},</p>
-    <p style="color:#374151;font-size:15px;">It's been ${daysSince} days since your test drive of the ${vehicleLabel}. We hope you enjoyed it!</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
+    <p style="color:#374151;font-size:15px;">It's been ${daysSince} days since your test drive of the ${escapeHtml(vehicleLabel)}. We hope you enjoyed it!</p>
     <p style="color:#374151;font-size:15px;">If you have any questions, or would like to discuss pricing, financing, or an exchange offer, your sales representative would be happy to help.</p>
     <p style="color:#374151;font-size:15px;">We're here whenever you're ready to take the next step.</p>
   `;
@@ -195,10 +215,10 @@ export function staffAccessGrantedEmail(
   role: string,
   loginUrl: string,
 ): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${staffName},</p>
-    <p style="color:#374151;font-size:15px;">You've been granted access to the ${dealership.name} Admin Console with the role of <strong>${role}</strong>.</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(staffName)},</p>
+    <p style="color:#374151;font-size:15px;">You've been granted access to the ${escapeHtml(dealership.name)} Admin Console with the role of <strong>${escapeHtml(role)}</strong>.</p>
     <p style="margin:24px 0;">${button(loginUrl, "Log In with Salesforce", accent)}</p>
     <p style="color:#6b7280;font-size:13px;">Sign in using your existing Salesforce account — no separate password to set up.</p>
   `;
@@ -214,12 +234,12 @@ export function passwordSetupEmail(
   setupUrl: string,
   isNewAccount: boolean,
 ): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const intro = isNewAccount
-    ? `We've created an account for you at ${dealership.name} so you can track and manage your test drive bookings. Set a password to sign in anytime.`
-    : `A password reset was requested for your ${dealership.name} account.`;
+    ? `We've created an account for you at ${escapeHtml(dealership.name)} so you can track and manage your test drive bookings. Set a password to sign in anytime.`
+    : `A password reset was requested for your ${escapeHtml(dealership.name)} account.`;
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${customerName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
     <p style="color:#374151;font-size:15px;">${intro}</p>
     <p style="margin:24px 0;">${button(setupUrl, isNewAccount ? "Set Your Password" : "Reset Your Password", accent)}</p>
     <p style="color:#6b7280;font-size:13px;">This link expires in 1 hour. If you didn't expect this email, you can safely ignore it.</p>
@@ -235,9 +255,9 @@ export function salesRepAssignedEmail(
   repName: string,
   ctx: BookingEmailContext,
 ): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${repName},</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(repName)},</p>
     <p style="color:#374151;font-size:15px;">You've been assigned to a test drive. Here are the details:</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Customer", ctx.customerName)}
@@ -253,10 +273,10 @@ export function salesRepAssignedEmail(
 }
 
 export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string): { subject: string; html: string } {
-  const accent = dealership.primaryColorHex ?? "#EB0A1E";
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${customerName},</p>
-    <p style="color:#374151;font-size:15px;">Thank you for test driving the ${vehicleLabel} with us! We'd love your feedback — it takes less than 2 minutes.</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
+    <p style="color:#374151;font-size:15px;">Thank you for test driving the ${escapeHtml(vehicleLabel)} with us! We'd love your feedback — it takes less than 2 minutes.</p>
     <p style="margin:24px 0;">${button(surveyUrl, "Share Your Feedback", accent)}</p>
   `;
   return { subject: `How was your ${vehicleLabel} test drive?`, html: layout(dealership, "Tell Us About Your Experience", body, accent) };

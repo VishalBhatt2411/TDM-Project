@@ -34,8 +34,10 @@ function base64UrlEscape(base64: string): string {
 export class SalesforceIdentityProvider {
   constructor(private readonly config: SalesforceIdentityProviderConfig) {}
 
+  /** RFC 7636 caps code_verifier at 128 characters — 96 random bytes base64url-encode to
+   *  exactly that (96 / 3 * 4, no padding), the maximum entropy the spec allows. */
   generateCodeVerifier(): string {
-    return base64UrlEscape(randomBytes(128).toString("base64"));
+    return base64UrlEscape(randomBytes(96).toString("base64"));
   }
 
   buildAuthorizationUrl(state: string, codeVerifier: string): string {

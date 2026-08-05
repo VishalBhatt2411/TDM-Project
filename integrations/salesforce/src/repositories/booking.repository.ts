@@ -1,7 +1,7 @@
 import { Booking, BookingListFilter, BookingRepository, BookingStatus, ComplianceRecord, DriveFeedback, UNASSIGNED_ID } from "@tdm/domain";
 import { SalesforceConnectionProvider } from "../connection";
 import { bookingRecordToDomain, bookingToRecord, complianceToRecord, feedbackRecordToDomain, feedbackToRecord } from "../mappers";
-import { BOOKING_FIELDS, DRIVE_FEEDBACK_FIELDS, withConnection } from "../soql";
+import { BOOKING_FIELDS, DRIVE_FEEDBACK_FIELDS, escapeSoql, withConnection } from "../soql";
 
 export class SalesforceBookingRepository implements BookingRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
@@ -9,7 +9,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findById(id: string): Promise<Booking | null> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Id = '${id}' LIMIT 1`);
+      const result = await conn.query(`SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`);
       const record = result.records[0];
       return record ? bookingRecordToDomain(record, integrationUserId) : null;
     });
@@ -21,7 +21,7 @@ export class SalesforceBookingRepository implements BookingRepository {
       const contactId = await this.resolveContactId(conn, customerId);
       if (!contactId) return [];
       const result = await conn.query(
-        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Contact__c = '${contactId}' ORDER BY Scheduled_Start__c DESC`,
+        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Contact__c = '${escapeSoql(contactId)}' ORDER BY Scheduled_Start__c DESC`,
       );
       return result.records.map((r) => bookingRecordToDomain(r, integrationUserId));
     });
@@ -31,13 +31,13 @@ export class SalesforceBookingRepository implements BookingRepository {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
       const clauses: string[] = [];
-      if (filter.status) clauses.push(`Status__c = '${filter.status}'`);
-      if (filter.branchId) clauses.push(`Branch__c = '${filter.branchId}'`);
-      if (filter.salesRepId) clauses.push(`OwnerId = '${filter.salesRepId}'`);
+      if (filter.status) clauses.push(`Status__c = '${escapeSoql(filter.status)}'`);
+      if (filter.branchId) clauses.push(`Branch__c = '${escapeSoql(filter.branchId)}'`);
+      if (filter.salesRepId) clauses.push(`OwnerId = '${escapeSoql(filter.salesRepId)}'`);
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
 
-      const page = filter.page ?? 1;
-      const pageSize = filter.pageSize ?? 25;
+      const page = safeInt(filter.page, 1);
+      const pageSize = safeInt(filter.pageSize, 25);
       const offset = (page - 1) * pageSize;
 
       const [itemsResult, countResult] = await Promise.all([
@@ -58,7 +58,7 @@ export class SalesforceBookingRepository implements BookingRepository {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Vehicle__c = '${vehicleId}' ` +
+        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' ` +
           `AND Status__c IN ('Confirmed', 'InProgress', 'Requested')`,
       );
       return result.records.map((r) => bookingRecordToDomain(r, integrationUserId));
@@ -69,7 +69,7 @@ export class SalesforceBookingRepository implements BookingRepository {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Vehicle__c = '${vehicleId}' AND Status__c = 'Waitlisted' ` +
+        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' AND Status__c = 'Waitlisted' ` +
           `ORDER BY Waitlist_Position__c ASC`,
       );
       return result.records.map((r) => bookingRecordToDomain(r, integrationUserId));
@@ -85,7 +85,7 @@ export class SalesforceBookingRepository implements BookingRepository {
       const dayEnd = new Date(date);
       dayEnd.setHours(23, 59, 59, 999);
       const result = await conn.query(
-        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE OwnerId = '${salesRepId}' ` +
+        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE OwnerId = '${escapeSoql(salesRepId)}' ` +
           `AND Scheduled_Start__c >= ${dayStart.toISOString()} AND Scheduled_Start__c <= ${dayEnd.toISOString()} ` +
           `AND Status__c IN ('Requested', 'Confirmed', 'InProgress') ` +
           `ORDER BY Scheduled_Start__c ASC`,
@@ -105,7 +105,10 @@ export class SalesforceBookingRepository implements BookingRepository {
       const isNew = props.id === UNASSIGNED_ID;
 
       if (!isNew) {
-        await conn.sobject("Booking__c").update({ Id: props.id, ...record });
+        const updated = await conn.sobject("Booking__c").update({ Id: props.id, ...record });
+        if (!(updated as any).success) {
+          throw new Error(`Failed to update Booking__c ${props.id}: ${JSON.stringify((updated as any).errors)}`);
+        }
         return booking;
       }
 
@@ -119,20 +122,26 @@ export class SalesforceBookingRepository implements BookingRepository {
 
   async saveCompliance(record: ComplianceRecord): Promise<void> {
     await withConnection(this.connectionProvider, async (conn) => {
-      await conn.sobject("Compliance_Record__c").create(complianceToRecord(record));
+      const created = await conn.sobject("Compliance_Record__c").create(complianceToRecord(record));
+      if (!(created as any).success) {
+        throw new Error(`Failed to create Compliance_Record__c: ${JSON.stringify((created as any).errors)}`);
+      }
     });
   }
 
   async saveFeedback(feedback: DriveFeedback): Promise<void> {
     await withConnection(this.connectionProvider, async (conn) => {
-      await conn.sobject("Drive_Feedback__c").create(feedbackToRecord(feedback));
+      const created = await conn.sobject("Drive_Feedback__c").create(feedbackToRecord(feedback));
+      if (!(created as any).success) {
+        throw new Error(`Failed to create Drive_Feedback__c: ${JSON.stringify((created as any).errors)}`);
+      }
     });
   }
 
   async findFeedbackByBooking(bookingId: string): Promise<DriveFeedback | null> {
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${DRIVE_FEEDBACK_FIELDS} FROM Drive_Feedback__c WHERE Booking__c = '${bookingId}' ORDER BY CreatedDate DESC LIMIT 1`,
+        `SELECT ${DRIVE_FEEDBACK_FIELDS} FROM Drive_Feedback__c WHERE Booking__c = '${escapeSoql(bookingId)}' ORDER BY CreatedDate DESC LIMIT 1`,
       );
       const record = result.records[0];
       return record ? feedbackRecordToDomain(record) : null;
@@ -143,7 +152,7 @@ export class SalesforceBookingRepository implements BookingRepository {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Status__c = '${status}' ` +
+        `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Status__c = '${escapeSoql(status)}' ` +
           `AND Scheduled_Start__c >= ${start.toISOString()} AND Scheduled_Start__c <= ${end.toISOString()} ` +
           `ORDER BY Scheduled_Start__c ASC`,
       );
@@ -166,8 +175,13 @@ export class SalesforceBookingRepository implements BookingRepository {
 
   private async resolveContactId(conn: any, platformCustomerId: string): Promise<string | null> {
     const result = await conn.query(
-      `SELECT Id FROM Contact WHERE Portal_User_Id__c = '${platformCustomerId}' LIMIT 1`,
+      `SELECT Id FROM Contact WHERE Portal_User_Id__c = '${escapeSoql(platformCustomerId)}' LIMIT 1`,
     );
     return result.records[0]?.Id ?? null;
   }
+}
+
+/** Clamps a possibly-undefined/NaN page/pageSize query param to a safe positive integer. */
+function safeInt(value: number | undefined, fallback: number): number {
+  return value != null && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }

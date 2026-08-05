@@ -8,14 +8,14 @@ import {
 } from "@tdm/domain";
 import { SalesforceConnectionProvider } from "../connection";
 import { branchRecordToDomain, variantRecordToDomain, vehicleRecordToDomain, vehicleToUpdateRecord } from "../mappers";
-import { BRANCH_FIELDS, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
+import { BRANCH_FIELDS, escapeSoql, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
 
 export class SalesforceVehicleRepository implements VehicleRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
 
   async findById(id: string): Promise<Vehicle | null> {
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Id = '${id}' LIMIT 1`);
+      const result = await conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`);
       const record = result.records[0];
       return record ? vehicleRecordToDomain(record) : null;
     });
@@ -59,11 +59,11 @@ export class SalesforceVehicleRepository implements VehicleRepository {
 
   async findRelated(vehicleId: string, limit = 4): Promise<Vehicle[]> {
     return withConnection(this.connectionProvider, async (conn) => {
-      const current = await conn.query(`SELECT Body_Type__c FROM Vehicle__c WHERE Id = '${vehicleId}' LIMIT 1`);
+      const current = await conn.query(`SELECT Body_Type__c FROM Vehicle__c WHERE Id = '${escapeSoql(vehicleId)}' LIMIT 1`);
       const bodyType = (current.records[0] as any)?.Body_Type__c;
       if (!bodyType) return [];
       const result = await conn.query(
-        `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Body_Type__c = '${escapeSoql(bodyType)}' AND Id != '${vehicleId}' ` +
+        `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Body_Type__c = '${escapeSoql(bodyType)}' AND Id != '${escapeSoql(vehicleId)}' ` +
           `ORDER BY Is_Featured__c DESC LIMIT ${limit}`,
       );
       return result.records.map(vehicleRecordToDomain);
@@ -99,7 +99,7 @@ export class SalesforceBranchRepository implements BranchRepository {
 
   async findById(id: string): Promise<Branch | null> {
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${BRANCH_FIELDS} FROM Branch__c WHERE Id = '${id}' LIMIT 1`);
+      const result = await conn.query(`SELECT ${BRANCH_FIELDS} FROM Branch__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`);
       const record = result.records[0];
       return record ? branchRecordToDomain(record) : null;
     });
@@ -119,7 +119,7 @@ export class SalesforceVehicleVariantRepository implements VehicleVariantReposit
   async findByVehicle(vehicleId: string) {
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${VEHICLE_VARIANT_FIELDS} FROM Vehicle_Variant__c WHERE Vehicle__c = '${vehicleId}' ORDER BY Display_Order__c ASC`,
+        `SELECT ${VEHICLE_VARIANT_FIELDS} FROM Vehicle_Variant__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' ORDER BY Display_Order__c ASC`,
       );
       return result.records.map(variantRecordToDomain);
     });
@@ -127,13 +127,11 @@ export class SalesforceVehicleVariantRepository implements VehicleVariantReposit
 
   async findById(id: string) {
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${VEHICLE_VARIANT_FIELDS} FROM Vehicle_Variant__c WHERE Id = '${id}' LIMIT 1`);
+      const result = await conn.query(
+        `SELECT ${VEHICLE_VARIANT_FIELDS} FROM Vehicle_Variant__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`,
+      );
       const record = result.records[0];
       return record ? variantRecordToDomain(record) : null;
     });
   }
-}
-
-function escapeSoql(value: string): string {
-  return value.replace(/'/g, "\\'");
 }

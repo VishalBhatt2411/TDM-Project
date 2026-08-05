@@ -1,13 +1,14 @@
 import { AnalyticsRepository, DashboardSummary } from "@tdm/domain";
 import { SalesforceConnectionProvider } from "../connection";
-import { withConnection } from "../soql";
+import { escapeSoql, withConnection } from "../soql";
 
 export class SalesforceAnalyticsRepository implements AnalyticsRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
 
   async getDashboardSummary(branchId?: string): Promise<DashboardSummary> {
+    const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const branchFilter = branchId ? ` AND Branch__c = '${branchId}'` : "";
+      const branchFilter = branchId ? ` AND Branch__c = '${escapeSoql(branchId)}'` : "";
       // SOQL has no bare `NOW` literal for datetime comparisons — use an actual ISO instant.
       const nowIso = new Date().toISOString();
 
@@ -29,7 +30,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
           `SELECT COUNT() FROM Booking__c WHERE Scheduled_Start__c > ${nowIso} AND Status__c IN ('Requested','Confirmed')${branchFilter}`,
         ),
         conn.query(
-          `SELECT Status__c s, COUNT(Id) cnt FROM Vehicle__c WHERE Branch__c != null${branchId ? ` AND Branch__c = '${branchId}'` : ""} GROUP BY Status__c`,
+          `SELECT Status__c s, COUNT(Id) cnt FROM Vehicle__c WHERE Branch__c != null${branchFilter} GROUP BY Status__c`,
         ),
         conn.query(
           `SELECT Status__c s, COUNT(Id) cnt FROM Booking__c WHERE CreatedDate = LAST_N_DAYS:30${branchFilter} GROUP BY Status__c`,
@@ -46,8 +47,11 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
             `GROUP BY Branch__c, Branch__r.Name`,
         ),
         conn.query(
+          // Excludes the integration user — every never-assigned booking defaults to being
+          // owned by it (see SalesforceConnectionProvider.getIntegrationUserId), so without
+          // this filter "unassigned" shows up as a phantom sales rep in the results.
           `SELECT OwnerId r, Owner.Name rn, COUNT(Id) cnt FROM Booking__c ` +
-            `WHERE CreatedDate = LAST_N_DAYS:30${branchFilter} GROUP BY OwnerId, Owner.Name`,
+            `WHERE CreatedDate = LAST_N_DAYS:30 AND OwnerId != '${escapeSoql(integrationUserId)}'${branchFilter} GROUP BY OwnerId, Owner.Name`,
         ),
         conn.query(
           `SELECT Vehicle__c v, Vehicle__r.Make__c mk, Vehicle__r.Model__c md, COUNT(Id) cnt FROM Booking__c ` +

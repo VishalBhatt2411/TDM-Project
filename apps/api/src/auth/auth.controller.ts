@@ -1,4 +1,6 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from "@nestjs/common";
+import { AuthenticatedUser, JwtAuthGuard } from "../common/jwt-auth.guard";
+import { CurrentUser } from "../common/current-user.decorator";
 import { AuthService } from "./auth.service";
 import { ForgotPasswordDto, LoginDto, MagicLoginDto, RefreshDto, RegisterDto, ResetPasswordDto, VerifyOtpDto } from "./dto";
 
@@ -9,6 +11,13 @@ export class AuthController {
   @Post("register")
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  /** Lets the frontend pre-fill known details (e.g. the booking form) for an already-logged-in customer instead of re-asking for them. */
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  getMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user.customerId);
   }
 
   @Post("verify-otp")

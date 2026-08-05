@@ -29,6 +29,14 @@ export class CancellationWindowExpiredError extends DomainError {
   }
 }
 
+/** Thrown when a Booking lifecycle method (checkIn/start/complete/markNoShow/reschedule) is
+ *  invoked from a status that doesn't allow it — e.g. completing a drive that never started. */
+export class IllegalBookingStateError extends DomainError {
+  constructor(message: string) {
+    super(message, "ILLEGAL_BOOKING_STATE");
+  }
+}
+
 export class RegistrationRequiredError extends DomainError {
   constructor(message = "Customer must complete registration and verification before booking a test drive.") {
     super(message, "REGISTRATION_REQUIRED");

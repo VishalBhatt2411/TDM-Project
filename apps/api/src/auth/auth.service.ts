@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, Logger, Una
 import { JwtService } from "@nestjs/jwt";
 import { AuthRepository, Customer, CustomerRepository, Email, PersonName, PhoneNumber } from "@tdm/domain";
 import { CustomerPasswordTokenRepository, generateOtpCode, hashSecret, MagicLoginRepository, sha256Hex, verifySecret } from "@tdm/postgres-adapter";
+import type { CustomerDto } from "@tdm/types";
 import { AUTH_REPOSITORY, CUSTOMER_PASSWORD_TOKEN_REPOSITORY, CUSTOMER_REPOSITORY, MAGIC_LOGIN_REPOSITORY } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, VerifyOtpDto } from "./dto";
@@ -184,6 +185,25 @@ export class AuthService {
   async needsPasswordSetup(customerId: string): Promise<boolean> {
     const credentials = await this.authRepo.findCredentials(customerId);
     return !credentials || credentials.isTemporary;
+  }
+
+  /** Backs GET /auth/me — lets an already-logged-in customer's known details (name/email/phone) pre-fill forms like booking, instead of re-asking for them. */
+  async getProfile(customerId: string): Promise<CustomerDto> {
+    const customer = await this.customers.findById(customerId);
+    if (!customer) {
+      throw new UnauthorizedException("Account no longer exists.");
+    }
+    return {
+      id: customer.id,
+      firstName: customer.name.firstName,
+      lastName: customer.name.lastName,
+      email: customer.email.value,
+      phone: customer.phone.value,
+      preferredLanguage: customer.preferredLanguage,
+      marketingOptIn: customer.marketingOptIn,
+      licenseVerified: !!customer.license?.verified,
+      createdAt: customer.createdAt.toISOString(),
+    };
   }
 
   private async issueOtp(customer: Customer): Promise<void> {

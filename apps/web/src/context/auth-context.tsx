@@ -1,11 +1,13 @@
 import * as React from "react";
-import type { AuthTokens, LoginRequest, RegisterRequest, RegisterResponse, VerifyOtpRequest } from "@tdm/types";
+import type { AuthTokens, CustomerDto, LoginRequest, RegisterRequest, RegisterResponse, VerifyOtpRequest } from "@tdm/types";
 import { apiClient } from "@/lib/api-client";
 import { decodeCustomerId, tokenStorage } from "@/lib/token-storage";
 
 interface AuthContextValue {
   customerId: string | null;
   isAuthenticated: boolean;
+  /** The logged-in customer's known details (name/email/phone) — null until GET /auth/me resolves, or if not logged in. */
+  profile: CustomerDto | null;
   register: (input: RegisterRequest) => Promise<RegisterResponse>;
   verifyOtp: (input: VerifyOtpRequest) => Promise<void>;
   login: (input: LoginRequest) => Promise<void>;
@@ -22,6 +24,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = tokenStorage.getAccessToken();
     return token ? decodeCustomerId(token) : null;
   });
+  const [profile, setProfile] = React.useState<CustomerDto | null>(null);
+
+  React.useEffect(() => {
+    if (!customerId) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get<CustomerDto>("/auth/me")
+      .then(({ data }) => {
+        if (!cancelled) setProfile(data);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
 
   const applyTokens = React.useCallback((tokens: AuthTokens) => {
     tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);
@@ -70,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       customerId,
       isAuthenticated: !!customerId,
+      profile,
       register,
       verifyOtp,
       login,
@@ -78,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetPassword,
       logout,
     }),
-    [customerId, register, verifyOtp, login, magicLogin, forgotPassword, resetPassword, logout],
+    [customerId, profile, register, verifyOtp, login, magicLogin, forgotPassword, resetPassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

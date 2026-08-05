@@ -22,6 +22,18 @@ export async function withConnection<T>(
   }
 }
 
+/**
+ * Escapes a value for safe interpolation inside a single-quoted SOQL string literal.
+ * Backslash must be escaped first — otherwise a trailing backslash in the input would
+ * combine with the escaped quote that follows it to produce an unescaped quote,
+ * letting the value break out of the literal (e.g. input `\` immediately before a `'`).
+ * Every repository builds queries by string interpolation (SOQL has no bind-parameter
+ * API in jsforce), so this must wrap every non-constant value placed inside a query.
+ */
+export function escapeSoql(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
 export const CONTACT_FIELDS =
   "Id, FirstName, LastName, Email, Phone, Portal_User_Id__c, Preferred_Language__c, Marketing_Opt_In__c, " +
   "Email_Verified__c, Phone_Verified__c, License_Number__c, License_Verified__c, CreatedDate";

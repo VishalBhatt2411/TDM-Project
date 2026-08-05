@@ -79,9 +79,13 @@ export class BookingMutationService {
     // UNASSIGNED_ID, not a client-generated id — the repository only creates a new
     // Salesforce record (vs. attempting to update a nonexistent one) when it sees
     // this exact sentinel, then returns the booking with the provider-assigned id.
+    // `reschedule` mutates `booking` to Cancelled in memory and returns the replacement —
+    // but we persist the replacement FIRST. If creating it fails (conflict, validation,
+    // a Salesforce hiccup), the original booking must still be safely in place; nothing
+    // has been cancelled yet. Only once the new booking exists do we cancel the old one.
     const newBooking = booking.reschedule(newSlot, UNASSIGNED_ID);
-    await this.bookings.save(booking);
     const saved = await this.bookings.save(newBooking);
+    await this.bookings.save(booking);
 
     await this.auditLog.append({
       actorId,

@@ -1,4 +1,4 @@
-import { CancellationWindowExpiredError } from "../errors";
+import { CancellationWindowExpiredError, IllegalBookingStateError } from "../errors";
 import { Address, TimeSlot } from "../value-objects";
 
 export type DriveType = "Dealership" | "Home";
@@ -135,7 +135,11 @@ export class Booking {
     return this.props.waitlistPosition;
   }
 
+  /** Called either right after a conflict-free request, or by WaitlistPromotionService once a slot frees up. */
   confirm(): void {
+    if (this.props.status !== "Requested" && this.props.status !== "Waitlisted") {
+      throw new IllegalBookingStateError(`Cannot confirm a booking with status "${this.props.status}".`);
+    }
     this.props.status = "Confirmed";
   }
 
@@ -157,13 +161,21 @@ export class Booking {
     }
   }
 
+  private assertActive(): void {
+    if (this.props.status === "Completed" || this.props.status === "Cancelled" || this.props.status === "NoShow") {
+      throw new IllegalBookingStateError(`Cannot modify a booking with status "${this.props.status}".`);
+    }
+  }
+
   cancel(reason: string, asOf: Date = new Date()): void {
+    this.assertActive();
     this.assertWithinCancellationWindow(asOf);
     this.props.status = "Cancelled";
     this.props.cancellationReason = reason;
   }
 
   reschedule(newSlot: TimeSlot, newBookingId: string, asOf: Date = new Date()): Booking {
+    this.assertActive();
     this.assertWithinCancellationWindow(asOf);
     this.props.status = "Cancelled";
     this.props.cancellationReason = "Rescheduled";
@@ -183,23 +195,41 @@ export class Booking {
   }
 
   checkIn(method: CheckInMethod, asOf: Date = new Date()): void {
+    if (this.props.status !== "Confirmed") {
+      throw new IllegalBookingStateError(`Cannot check in a booking with status "${this.props.status}".`);
+    }
+    if (this.props.checkInTimestamp) {
+      throw new IllegalBookingStateError("This booking has already been checked in.");
+    }
     this.props.checkInMethod = method;
     this.props.checkInTimestamp = asOf;
   }
 
   start(odometerStart: number, asOf: Date = new Date()): void {
+    if (this.props.status !== "Confirmed" || !this.props.checkInTimestamp) {
+      throw new IllegalBookingStateError("A booking must be checked in before the drive can start.");
+    }
     this.props.status = "InProgress";
     this.props.actualStart = asOf;
     this.props.odometerStart = odometerStart;
   }
 
   complete(odometerEnd: number, asOf: Date = new Date()): void {
+    if (this.props.status !== "InProgress") {
+      throw new IllegalBookingStateError(`Cannot complete a drive that hasn't started (status "${this.props.status}").`);
+    }
     this.props.status = "Completed";
     this.props.actualEnd = asOf;
     this.props.odometerEnd = odometerEnd;
   }
 
   markNoShow(): void {
+    if (this.props.status !== "Confirmed") {
+      throw new IllegalBookingStateError(`Cannot mark a booking with status "${this.props.status}" as a no-show.`);
+    }
+    if (this.props.checkInTimestamp) {
+      throw new IllegalBookingStateError("Cannot mark a booking as a no-show after it has been checked in.");
+    }
     this.props.status = "NoShow";
   }
 

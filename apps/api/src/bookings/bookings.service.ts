@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
-  AuditLogRepository,
   Booking,
   BookingConflictChecker,
   BookingConflictError,
@@ -14,13 +13,11 @@ import {
   SalesOpportunityRepository,
   SalesRepRepository,
   TimeSlot,
-  UNASSIGNED_ID, 
   VehicleRepository,
 } from "@tdm/domain";
 import { BookingDto } from "@tdm/types";
 import { AuthService } from "../auth/auth.service";
 import {
-  AUDIT_LOG_REPOSITORY,
   BOOKING_REPOSITORY,
   CUSTOMER_REPOSITORY,
   SALES_OPPORTUNITY_REPOSITORY,
@@ -68,7 +65,6 @@ export class BookingsService {
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(SALES_OPPORTUNITY_REPOSITORY) private readonly opportunities: SalesOpportunityRepository,
-    @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
     private readonly authService: AuthService,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
@@ -169,31 +165,7 @@ export class BookingsService {
 
   async reschedule(customerId: string, bookingId: string, dto: RescheduleBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
-    const previousStart = booking.slot.start;
-    const newSlot = TimeSlot.create(dto.slot.start, dto.slot.end);
-
-    const conflictChecker = new BookingConflictChecker(this.bookings);
-    await conflictChecker.assertNoConflict(booking.vehicleId, newSlot);
-
-    // Throws CancellationWindowExpiredError (-> 400) if past the policy cutoff.
-    // `reschedule` mutates `booking` to Cancelled in memory and returns the replacement —
-    // but we persist the replacement FIRST. If creating it fails (conflict, validation,
-    // a Salesforce hiccup), the original booking must still be safely in place; nothing
-    // has been cancelled yet. Only once the new booking exists do we cancel the old one.
-    const newBooking = booking.reschedule(newSlot, UNASSIGNED_ID);
-    const saved = await this.bookings.save(newBooking);
-    await this.bookings.save(booking);
-
-    const emailCtx = await this.emailContext.build(saved);
-    if (emailCtx) {
-      const customer = await this.customers.findById(customerId);
-      if (customer) await this.notifications.sendReschedule(customer.email.value, emailCtx, previousStart);
-      if (saved.salesRepId) {
-        const rep = await this.salesReps.findById(saved.salesRepId);
-        if (rep) await this.notifications.sendReschedule(rep.toProps().email, emailCtx, previousStart);
-      }
-    }
-
+    const saved = await this.mutations.rescheduleBooking(booking, dto.slot, customerId);
     return bookingToDto(saved);
   }
 
@@ -269,6 +241,12 @@ export class BookingsService {
       const currentWaitlist = await this.bookings.findWaitlistedForVehicle(dto.vehicleId);
       booking.waitlist(currentWaitlist.length + 1);
     } else {
+      // No conflict was found for this slot, so the booking is confirmed immediately —
+      // "Requested" only persists for a booking that joined the waitlist (see waitlist()
+      // above) or one a rep/admin hasn't yet acted on; a booking that cleared the conflict
+      // check has nothing left to wait on. Without this, checkIn()/reminders (both gated
+      // on status "Confirmed") would never fire for a normal, non-waitlisted booking.
+      booking.confirm();
       const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, slot.start);
       if (rep) {
         booking.assignRep(rep.id);

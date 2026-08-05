@@ -8,6 +8,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   CANCELLATION_WINDOW_EXPIRED: HttpStatus.BAD_REQUEST,
   REGISTRATION_REQUIRED: HttpStatus.FORBIDDEN,
   NOT_FOUND: HttpStatus.NOT_FOUND,
+  ILLEGAL_BOOKING_STATE: HttpStatus.CONFLICT,
 };
 
 @Catch(DomainError)
