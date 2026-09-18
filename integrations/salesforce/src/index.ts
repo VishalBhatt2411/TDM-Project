@@ -1,5 +1,6 @@
 export * from "./connection";
 export * from "./identity-provider";
+export * from "./metadata-deploy";
 export * from "./repositories/customer.repository";
 export * from "./repositories/catalog.repository";
 export * from "./repositories/booking.repository";

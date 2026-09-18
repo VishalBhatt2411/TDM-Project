@@ -80,15 +80,15 @@ export class AdminAuthService {
 
   async handleCallback(code: string, state: string): Promise<SalesforceCallbackResult> {
     try {
-      const codeVerifier = await this.oauthStates.consume(state);
-      if (!codeVerifier) {
+      const consumed = await this.oauthStates.consume(state);
+      if (!consumed) {
         this.logger.warn(JSON.stringify({ event: "admin_oauth_invalid_state", provider: "salesforce" }));
         return { ok: false, error: AdminAuthErrorCode.INVALID_STATE };
       }
 
       let identity;
       try {
-        identity = await this.identityProvider.exchangeCodeForIdentity(code, codeVerifier);
+        identity = await this.identityProvider.exchangeCodeForIdentity(code, consumed.codeVerifier);
       } catch (err) {
         this.logger.error(
           JSON.stringify({ event: "admin_oauth_exchange_failed", provider: "salesforce", reason: (err as Error).message }),

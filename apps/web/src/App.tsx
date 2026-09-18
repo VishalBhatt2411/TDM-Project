@@ -19,6 +19,10 @@ import { AdminAuthCallbackPage } from "@/pages/admin/AdminAuthCallbackPage";
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { AdminBookingsPage } from "@/pages/admin/AdminBookingsPage";
+import { CreateOrganizationPage } from "@/pages/onboarding/CreateOrganizationPage";
+import { ConnectedAppInstructionsPage } from "@/pages/onboarding/ConnectedAppInstructionsPage";
+import { SalesforceCredentialsPage } from "@/pages/onboarding/SalesforceCredentialsPage";
+import { OnboardingCallbackPage } from "@/pages/onboarding/OnboardingCallbackPage";
 
 export function App() {
   return (
@@ -40,6 +44,12 @@ export function App() {
           <Route path="/my-bookings" element={<MyBookingsPage />} />
         </Route>
       </Route>
+
+      {/* Self-service client onboarding — connects a new client's own Salesforce org. Public, no auth. */}
+      <Route path="/onboarding" element={<CreateOrganizationPage />} />
+      <Route path="/onboarding/:organizationId/connected-app" element={<ConnectedAppInstructionsPage />} />
+      <Route path="/onboarding/:organizationId/credentials" element={<SalesforceCredentialsPage />} />
+      <Route path="/onboarding/:organizationId/connecting" element={<OnboardingCallbackPage />} />
 
       {/* Admin Console — entirely separate auth space from the customer app, backed by Salesforce identity. */}
       <Route path="/admin/login" element={<AdminLoginPage />} />

@@ -30,6 +30,8 @@ export interface StaffUserRecord {
   maxDailyBookings: number | null;
   phone: string | null;
   isActive: boolean;
+  /** Owning tenant — null for the single-tenant deployment's pre-existing staff (see Organization). */
+  organizationId: string | null;
   createdAt: Date;
 }
 
@@ -65,6 +67,7 @@ export class StaffUserRepository {
     branchId?: string;
     maxDailyBookings?: number;
     phone?: string;
+    organizationId?: string;
   }): Promise<StaffUserRecord> {
     const record = await this.prisma.staffUser.create({
       data: {
@@ -75,6 +78,7 @@ export class StaffUserRepository {
         branchId: input.branchId ?? null,
         maxDailyBookings: input.maxDailyBookings ?? null,
         phone: input.phone ?? null,
+        organizationId: input.organizationId ?? null,
       },
     });
     return toRecord(record);
@@ -117,6 +121,7 @@ function toRecord(record: {
   maxDailyBookings: number | null;
   phone: string | null;
   isActive: boolean;
+  organizationId: string | null;
   createdAt: Date;
 }): StaffUserRecord {
   return {
@@ -130,6 +135,7 @@ function toRecord(record: {
     maxDailyBookings: record.maxDailyBookings,
     phone: record.phone,
     isActive: record.isActive,
+    organizationId: record.organizationId,
     createdAt: record.createdAt,
   };
 }

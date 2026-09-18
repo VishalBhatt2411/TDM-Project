@@ -5,6 +5,7 @@ import {
   FollowUpLogRepository,
   getPrismaClient,
   MagicLoginRepository,
+  OrganizationRepository,
   PostgresAuditLogRepository,
   PostgresAuthRepository,
   PostgresFeatureFlagRepository,
@@ -39,6 +40,7 @@ import {
   FEATURE_FLAG_REPOSITORY,
   FOLLOW_UP_LOG_REPOSITORY,
   MAGIC_LOGIN_REPOSITORY,
+  ORGANIZATION_REPOSITORY,
   REMINDER_LOG_REPOSITORY,
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
@@ -94,6 +96,7 @@ const staffUserRepository = new StaffUserRepository(prisma);
     { provide: STAFF_USER_REPOSITORY, useValue: staffUserRepository },
     { provide: STAFF_REFRESH_TOKEN_REPOSITORY, useValue: new StaffRefreshTokenRepository(prisma) },
     { provide: STAFF_OAUTH_STATE_REPOSITORY, useValue: new StaffOAuthStateRepository(prisma) },
+    { provide: ORGANIZATION_REPOSITORY, useValue: new OrganizationRepository(prisma) },
   ],
   exports: [
     SALESFORCE_CONNECTION_PROVIDER,
@@ -119,6 +122,7 @@ const staffUserRepository = new StaffUserRepository(prisma);
     STAFF_USER_REPOSITORY,
     STAFF_REFRESH_TOKEN_REPOSITORY,
     STAFF_OAUTH_STATE_REPOSITORY,
+    ORGANIZATION_REPOSITORY,
   ],
 })
 export class InfrastructureModule {}

@@ -138,11 +138,14 @@ model CustomerPasswordToken {
 // do once logged in (role/permissions), matched by email at login time.
 // salesforceUserId is populated just-in-time on first successful login, for
 // auditability — matching itself is by email, not this field.
+// organizationId is nullable during the multi-tenant rollout: existing staff
+// (the single-tenant deployment) have none, while accounts auto-provisioned by
+// the onboarding wizard (see OnboardingService) are always linked to their org.
 model StaffUser {
-  id                String    @id @default(uuid())
-  email             String    @unique
+  id                String        @id @default(uuid())
+  email             String        @unique
   name              String
-  salesforceUserId  String?   @unique
+  salesforceUserId  String?       @unique
   role              String // "Admin" | "Manager" | "SalesRep"
   permissions       String[] // additive permission keys beyond role defaults
   // Dealership profile fields for a "SalesRep" role user — bookings are assigned to
@@ -151,9 +154,13 @@ model StaffUser {
   branchId          String?
   maxDailyBookings  Int?
   phone             String?
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  isActive          Boolean       @default(true)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([organizationId])
 }
 
 model StaffRefreshToken {
@@ -173,9 +180,43 @@ model StaffRefreshToken {
 // the PKCE code_verifier itself never leaves the server, keeping the redirect URL
 // short and the verifier out of browser history/referrer headers. Single-use:
 // consumed (deleted) by AdminAuthService on callback, whether or not it succeeds.
+// Reused as-is by OnboardingService for the tenant "Connect Salesforce" handshake —
+// same shape/single-use semantics — distinguished by organizationId being set.
 model StaffOAuthState {
-  state        String   @id
-  codeVerifier String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  state          String        @id
+  codeVerifier   String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  expiresAt      DateTime
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+}
+
+// A client company connecting their own Salesforce org to this platform via the
+// self-service onboarding wizard (see OnboardingService). Salesforce secrets are
+// encrypted at rest (see crypto.ts) — never stored or logged in plaintext.
+model Organization {
+  id                   String    @id @default(uuid())
+  name                 String
+  // URL-safe identifier reserved for this org (e.g. future login routing) — validated
+  // lowercase-alphanumeric-with-hyphens at creation time (OnboardingService).
+  slug                 String    @unique
+  sfConsumerKey        String?
+  sfConsumerSecretEnc  String? // AES-256-GCM, "iv:authTag:cipher" hex (see crypto.ts)
+  sfRefreshTokenEnc    String?
+  sfInstanceUrl        String?
+  sfLoginUrl           String    @default("https://login.salesforce.com")
+  sfOrgId              String?
+  connectionStatus     String    @default("pending") // "pending" | "connected" | "error"
+  connectionError      String?
+  metadataDeployedAt   DateTime?
+  // Bumped whenever the master encryption key is rotated, so a future migration
+  // knows which key to decrypt sfConsumerSecretEnc/sfRefreshTokenEnc with.
+  encryptionKeyVersion Int       @default(1)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  staffUsers  StaffUser[]
+  oauthStates StaffOAuthState[]
 }

@@ -9,6 +9,7 @@ import { DealershipConfigModule } from "./config/config.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { BranchesModule } from "./branches/branches.module";
 import { AdminModule } from "./admin/admin.module";
+import { OnboardingModule } from "./onboarding/onboarding.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AdminModule } from "./admin/admin.module";
     AnalyticsModule,
     BranchesModule,
     AdminModule,
+    OnboardingModule,
   ],
 })
 export class AppModule {}

@@ -9,9 +9,11 @@
   },
   "dependencies": {
     "@tdm/domain": "*",
+    "archiver": "^7.0.1",
     "jsforce": "^3.6.5"
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.4",
     "@types/node": "^20.14.0",
     "typescript": "^5.5.4"
   }

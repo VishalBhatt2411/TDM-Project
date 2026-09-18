@@ -7,12 +7,22 @@ import { PrismaClient } from "@prisma/client";
  * Keeping the verifier server-side (rather than embedded in the `state` value itself,
  * e.g. as a signed JWT claim) keeps the OAuth redirect URL short and keeps the
  * verifier out of browser history, referrer headers, and access logs.
+ *
+ * Also backs the onboarding wizard's "Connect Salesforce" handshake (OnboardingService)
+ * — same shape/semantics, distinguished by organizationId being set.
  */
+export interface ConsumedOAuthState {
+  codeVerifier: string;
+  organizationId: string | null;
+}
+
 export class StaffOAuthStateRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async save(state: string, codeVerifier: string, expiresAt: Date): Promise<void> {
-    await this.prisma.staffOAuthState.create({ data: { state, codeVerifier, expiresAt } });
+  async save(state: string, codeVerifier: string, expiresAt: Date, organizationId?: string): Promise<void> {
+    await this.prisma.staffOAuthState.create({
+      data: { state, codeVerifier, expiresAt, organizationId: organizationId ?? null },
+    });
   }
 
   /**
@@ -20,13 +30,13 @@ export class StaffOAuthStateRepository {
    * it turns out to be expired, so a `state` value can never be replayed even
    * within its validity window.
    */
-  async consume(state: string): Promise<string | null> {
+  async consume(state: string): Promise<ConsumedOAuthState | null> {
     const record = await this.prisma.staffOAuthState.findUnique({ where: { state } });
     if (!record) return null;
 
     await this.prisma.staffOAuthState.delete({ where: { state } }).catch(() => undefined);
     if (record.expiresAt.getTime() < Date.now()) return null;
 
-    return record.codeVerifier;
+    return { codeVerifier: record.codeVerifier, organizationId: record.organizationId };
   }
 }
