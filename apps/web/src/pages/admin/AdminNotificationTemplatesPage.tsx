@@ -5,6 +5,7 @@ import type { ConfigScopeParams, NotificationTemplateDto } from "@/api/admin";
 import { useAdminRegional } from "@/hooks/use-regional";
 import { ConfigScopePicker } from "@/components/admin/ConfigScopePicker";
 import { errorMessage } from "@/lib/api-error";
+import { QueryError } from "@/components/ui/query-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,10 +17,14 @@ function TemplateRow({ template, dealershipId }: { template: NotificationTemplat
   const queryClient = useQueryClient();
   const [subject, setSubject] = React.useState(template.subject ?? "");
   const [note, setNote] = React.useState(template.note ?? "");
+  const [notice, setNotice] = React.useState<string | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => updateNotificationTemplate(template.key, { subject: subject.trim() || undefined, note: note.trim() || undefined }, dealershipId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notification-templates"] }),
+    onSuccess: () => {
+      setNotice("Saved — new emails use this version.");
+      return queryClient.invalidateQueries({ queryKey: ["notification-templates"] });
+    },
   });
 
   const revertMutation = useMutation({
@@ -27,7 +32,8 @@ function TemplateRow({ template, dealershipId }: { template: NotificationTemplat
     onSuccess: () => {
       setSubject("");
       setNote("");
-      queryClient.invalidateQueries({ queryKey: ["notification-templates"] });
+      setNotice("Reverted to the default.");
+      return queryClient.invalidateQueries({ queryKey: ["notification-templates"] });
     },
   });
 
@@ -69,17 +75,29 @@ function TemplateRow({ template, dealershipId }: { template: NotificationTemplat
           />
         </div>
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || (!subject.trim() && !note.trim())}>
+          <Button size="sm" onClick={() => {
+              // Only the latest action's outcome is shown — a stale failure of the other one is dropped.
+              revertMutation.reset();
+              setNotice(null);
+              saveMutation.mutate();
+            }} disabled={saveMutation.isPending || (!subject.trim() && !note.trim())}>
             {saveMutation.isPending ? "Saving…" : "Save"}
           </Button>
           {template.isCustomized && (
-            <Button size="sm" variant="outline" onClick={() => revertMutation.mutate()} disabled={revertMutation.isPending}>
+            <Button size="sm" variant="outline" onClick={() => {
+                saveMutation.reset();
+                setNotice(null);
+                revertMutation.mutate();
+              }} disabled={revertMutation.isPending}>
               Revert to Default
             </Button>
           )}
         </div>
-        {(saveMutation.isError || revertMutation.isError) && (
-          <p className="text-sm text-destructive">{errorMessage(saveMutation.error ?? revertMutation.error)}</p>
+        {(saveMutation.error || revertMutation.error) && (
+          <p role="alert" className="text-sm text-destructive">{errorMessage(saveMutation.error ?? revertMutation.error)}</p>
+        )}
+        {notice && !saveMutation.error && !revertMutation.error && (
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">{notice}</p>
         )}
         {template.updatedAt && (
           <p className="text-xs text-muted-foreground">Last updated {regional.dateTime(template.updatedAt)}</p>
@@ -92,7 +110,7 @@ function TemplateRow({ template, dealershipId }: { template: NotificationTemplat
 export function AdminNotificationTemplatesPage() {
   const [scope, setScope] = React.useState<ConfigScopeParams | null>(null);
   const dealershipId = scope?.dealershipId;
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["notification-templates", dealershipId ?? null],
     queryFn: () => listNotificationTemplates(dealershipId),
     enabled: scope !== null,
@@ -119,7 +137,9 @@ export function AdminNotificationTemplatesPage() {
           ))}
         </div>
       )}
-      {isError && <p className="text-destructive">{errorMessage(error) ?? "Couldn't load notification templates."}</p>}
+      {error && !data && (
+        <QueryError error={error} subject="notification templates" onRetry={() => refetch()} isRetrying={isRefetching} />
+      )}
 
       <div className="space-y-3">
         {data?.map((template) => (

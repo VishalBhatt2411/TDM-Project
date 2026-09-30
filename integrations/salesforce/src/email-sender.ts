@@ -1,4 +1,5 @@
 import { SalesforceConnectionSource } from "./connection-source";
+import { providerErrorCode } from "./soql";
 
 export interface SalesforceEmailMessage {
   to: string;
@@ -51,12 +52,13 @@ export class SalesforceEmailSender {
       });
       const response: { success: boolean; message: string } = typeof raw === "string" ? JSON.parse(raw) : (raw as any);
       if (!response.success) {
-        this.logger.warn(JSON.stringify({ event: "email_send_rejected", provider: "salesforce", reason: response.message }));
+        // The Apex endpoint's message can quote the recipient address — log that it was rejected, not why.
+        this.logger.warn(JSON.stringify({ event: "email_send_rejected", provider: "salesforce" }));
       } else {
         this.logger.log(JSON.stringify({ event: "email_sent", provider: "salesforce" }));
       }
     } catch (err) {
-      this.logger.error(JSON.stringify({ event: "email_send_failed", provider: "salesforce", reason: (err as Error).message }));
+      this.logger.error(JSON.stringify({ event: "email_send_failed", provider: "salesforce", errorCode: providerErrorCode(err) }));
     }
   }
 }

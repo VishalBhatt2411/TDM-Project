@@ -5,6 +5,7 @@ import { ComplianceStatusDto } from "@tdm/types";
 import { ASSET_REPOSITORY, BOOKING_REPOSITORY } from "../infrastructure/tokens";
 import { SubmitComplianceDto } from "./dto";
 import { matchesImageSignature } from "../common/image-signature";
+import { errorCodeOf } from "../common/error-code";
 
 const ASSET_URL_PREFIX = "/api/v1/assets/";
 
@@ -120,7 +121,7 @@ export class ComplianceService {
       try {
         await this.assets.deleteMany(staleIds);
       } catch (error) {
-        this.logger.warn(JSON.stringify({ event: "compliance_stale_assets_delete_failed", bookingId, message: (error as Error).message }));
+        this.logger.warn(JSON.stringify({ event: "compliance_stale_assets_delete_failed", bookingId, errorCode: errorCodeOf(error) }));
       }
     }
 

@@ -37,6 +37,7 @@ import { TenantContext } from "../tenancy/tenant-context";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
+import { errorCodeOf } from "../common/error-code";
 
 export function bookingToDto(booking: Booking): BookingDto {
   const props = booking.toProps();
@@ -142,7 +143,7 @@ export class BookingsService {
         }
       } catch (error) {
         this.logger.warn(
-          `Failed to sync contact details for customer ${customer.id} during booking: ${(error as Error).message}`,
+          JSON.stringify({ event: "customer_contact_sync_failed", customerId: customer.id, errorCode: errorCodeOf(error) }),
         );
       }
     }

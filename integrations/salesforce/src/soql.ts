@@ -23,6 +23,17 @@ export async function withConnection<T>(
 }
 
 /**
+ * A provider error reduced to what is safe to log: its code, never its message — Salesforce
+ * messages routinely echo field values (email addresses, phone numbers, duplicate-rule matches).
+ */
+export function providerErrorCode(err: unknown): string {
+  const e = err as { errorCode?: unknown; name?: unknown } | null;
+  if (typeof e?.errorCode === "string") return e.errorCode;
+  if (typeof e?.name === "string") return e.name;
+  return "UNKNOWN";
+}
+
+/**
  * Escapes a value for safe interpolation inside a single-quoted SOQL string literal.
  * Backslash must be escaped first — otherwise a trailing backslash in the input would
  * combine with the escaped quote that follows it to produce an unescaped quote,

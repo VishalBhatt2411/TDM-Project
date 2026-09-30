@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { UnauthorizedException } from "@nestjs/common";
 import { DealershipScope } from "@tdm/domain";
+import { errorCodeOf } from "../common/error-code";
 
 interface TenantStore {
   /** Tenant the request's host (dealer URL) resolved to, if any. */
@@ -94,7 +95,7 @@ export async function runForEachTenant(
     try {
       await TenantContext.run(() => job(organizationId), organizationId);
     } catch (err) {
-      logger.error(JSON.stringify({ event, organizationId, reason: (err as Error).message }));
+      logger.error(JSON.stringify({ event, organizationId, errorCode: errorCodeOf(err) }));
     }
   }
 }

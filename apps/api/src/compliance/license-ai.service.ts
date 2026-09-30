@@ -2,6 +2,7 @@ import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common"
 import Anthropic from "@anthropic-ai/sdk";
 import { LicenseAiAssessment } from "@tdm/types";
 import { env } from "../common/env";
+import { errorCodeOf } from "../common/error-code";
 
 const KNOWN_FLAGS = ["blurry", "expired", "name_mismatch", "number_mismatch", "unreadable", "not_a_license"] as const;
 
@@ -70,7 +71,8 @@ export class LicenseAiService {
         assessedAt,
       };
     } catch (error) {
-      this.logger.warn(`Failed to parse AI license assessment response: ${(error as Error).message}`);
+      // The parser's message quotes the response, which describes the licence — never log it.
+      this.logger.warn(JSON.stringify({ event: "license_ai_parse_failed", errorCode: errorCodeOf(error) }));
       return { flags: ["ai_parse_error"], notes: "AI response could not be parsed — please review the image manually.", assessedAt };
     }
   }
