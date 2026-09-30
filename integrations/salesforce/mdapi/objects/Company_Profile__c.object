@@ -98,6 +98,14 @@
         <description>Calling code digits without +, e.g. 91 — prefixed to a customer phone number entered without one. Blank inherits the Salesforce org&apos;s default; when nothing sets it, customers enter numbers in international format.</description>
     </fields>
     <fields>
+        <fullName>Booking_Schedule__c</fullName>
+        <label>Booking Schedule</label>
+        <type>LongTextArea</type>
+        <length>4096</length>
+        <visibleLines>6</visibleLines>
+        <description>Test-drive booking schedule as JSON (slot length in minutes, opening hours per weekday, daily breaks). Edited from the TDM admin console, which validates it. Blank fields inherit the Salesforce org&apos;s default Business Hours; invalid JSON is ignored by the platform.</description>
+    </fields>
+    <fields>
         <fullName>Site_Content__c</fullName>
         <label>Site Content</label>
         <type>LongTextArea</type>

@@ -208,6 +208,11 @@
         <editable>true</editable>
     </fieldPermissions>
     <fieldPermissions>
+        <field>Company_Profile__c.Booking_Schedule__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
         <field>Company_Profile__c.Site_Content__c</field>
         <readable>true</readable>
         <editable>true</editable>
@@ -854,6 +859,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <field>Dealership__c.Phone_Country_Code__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Dealership__c.Booking_Schedule__c</field>
         <readable>true</readable>
         <editable>true</editable>
     </fieldPermissions>

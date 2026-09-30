@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getVehicle, getVehicleAvailability, getVehicleVariants } from "@/api/vehicles";
+import { TimeSlotSelect, findAvailableSlot, firstAvailableTime } from "@/components/TimeSlotSelect";
 import { useShoppingLocation } from "@/context/location-context";
 import { createBooking, createPublicBooking, isBookingConflictError } from "@/api/bookings";
 import { useAuth } from "@/context/auth-context";
@@ -12,16 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  SLOT_DURATION_MINUTES,
-  STANDARD_TIME_SLOTS,
-  addIsoDays,
-  zonedDateTimeToUtc,
-  type DriveType,
-  type PurchaseTimeline,
-} from "@tdm/types";
-
-export const TIME_SLOTS = STANDARD_TIME_SLOTS;
+import { addIsoDays, type DriveType, type PurchaseTimeline } from "@tdm/types";
 
 const PURCHASE_TIMELINE_OPTIONS: { value: PurchaseTimeline; label: string }[] = [
   { value: "Immediate", label: "Immediately" },
@@ -85,7 +77,7 @@ export function BookingPage() {
       pickupRequired: false,
       purchaseTimeline: "Just_Exploring",
       preferredDate: "",
-      preferredTimeSlot: TIME_SLOTS[0],
+      preferredTimeSlot: "",
     },
   });
 
@@ -93,8 +85,9 @@ export function BookingPage() {
   const isExistingCustomer = watch("isExistingCustomer");
   const pickupRequired = watch("pickupRequired");
   const preferredDate = watch("preferredDate");
+  const preferredTimeSlot = watch("preferredTimeSlot");
 
-  const { data: availability } = useQuery({
+  const { data: availability, isLoading: availabilityLoading } = useQuery({
     queryKey: ["vehicle-availability", vehicleId, preferredDate],
     queryFn: () => getVehicleAvailability(vehicleId!, preferredDate),
     enabled: !!vehicleId && !!preferredDate,
@@ -109,11 +102,11 @@ export function BookingPage() {
     if (earliestDate && !getValues("preferredDate")) setValue("preferredDate", earliestDate);
   }, [earliestDate, getValues, setValue]);
 
-  const bookedTimes = React.useMemo(() => {
-    if (!availability) return null;
-    const available = new Set(availability.availableSlots.map((slot) => regional.wallTime(slot.start, availability.timeZone)));
-    return new Set(TIME_SLOTS.filter((t) => !available.has(t)));
-  }, [availability, regional]);
+  // Keep the picked time on a free slot of the dealership's schedule as the day changes.
+  React.useEffect(() => {
+    if (!findAvailableSlot(availability, getValues("preferredTimeSlot"))) setValue("preferredTimeSlot", firstAvailableTime(availability));
+  }, [availability, getValues, setValue]);
+  const hasBookedSlots = !!availability?.slots.some((slot) => !slot.available);
 
   // A logged-in customer's name/email/phone are already known server-side — this only
   // pre-fills them for a fallback guest submission if `profile` hasn't resolved yet by
@@ -149,19 +142,18 @@ export function BookingPage() {
 
   const onSubmit = async (values: FormValues) => {
     setServerError(null);
-    if (!timeZone) {
-      setServerError("This showroom's schedule couldn't be loaded. Please try again.");
+    const slot = findAvailableSlot(availability, values.preferredTimeSlot);
+    if (!slot) {
+      setServerError("Pick one of the free times on this date.");
       return;
     }
-    const start = zonedDateTimeToUtc(values.preferredDate, values.preferredTimeSlot, timeZone);
-    const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
 
     const commonFields = {
       vehicleId: vehicle.id,
       preferredVariantId: values.preferredVariantId || undefined,
       branchId: vehicle.branchId,
       driveType: values.driveType,
-      slot: { start: start.toISOString(), end: end.toISOString() },
+      slot: { start: slot.start, end: slot.end },
       homeAddress:
         values.driveType === "Home"
           ? { line1: values.homeAddress, city: values.city, state: values.state, postalCode: "", country: branch?.address.country ?? "" }
@@ -374,14 +366,13 @@ export function BookingPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="preferredTimeSlot">Preferred Time Slot</Label>
-                  <select id="preferredTimeSlot" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...register("preferredTimeSlot", { required: true })}>
-                    {TIME_SLOTS.map((slot) => (
-                      <option key={slot} value={slot} disabled={bookedTimes?.has(slot)}>
-                        {slot}{bookedTimes?.has(slot) ? " (already booked)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {bookedTimes && bookedTimes.size > 0 && (
+                  <TimeSlotSelect
+                    id="preferredTimeSlot"
+                    availability={availability}
+                    isLoading={availabilityLoading}
+                    {...register("preferredTimeSlot", { required: true })}
+                  />
+                  {hasBookedSlots && (
                     <p className="text-xs text-muted-foreground">
                       Some slots on this date are already booked for this vehicle — pick another time or we'll offer alternatives if there's a conflict.
                     </p>
@@ -422,7 +413,7 @@ export function BookingPage() {
 
             {serverError && <p className="text-sm text-destructive">{serverError}</p>}
 
-            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || !branch || !timeZone || (isAuthenticated && !profile)}>
+            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || !branch || !findAvailableSlot(availability, preferredTimeSlot) || (isAuthenticated && !profile)}>
               {isSubmitting ? "Booking…" : "Confirm Test Drive Booking"}
             </Button>
           </form>

@@ -1,6 +1,14 @@
 import { adminApiClient } from "@/lib/admin-api-client";
 import type { RegionalSettingsDto } from "@/api/config";
-import type { BookingDto, BookingStatus, ComplianceStatusDto, LicenseAiAssessment, Paginated, VehicleDto } from "@tdm/types";
+import type {
+  BookingDto,
+  BookingStatus,
+  ComplianceStatusDto,
+  LicenseAiAssessment,
+  Paginated,
+  VehicleAvailabilityResponse,
+  VehicleDto,
+} from "@tdm/types";
 
 export type StaffRole = "Company_Admin" | "Dealer_Admin" | "Manager" | "Sales_Rep";
 
@@ -132,6 +140,12 @@ export async function cancelBookingAsStaff(bookingId: string, reason: string): P
 
 export async function rescheduleBookingAsStaff(bookingId: string, slot: { start: string; end: string }): Promise<BookingDto> {
   const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/reschedule`, { slot });
+  return data;
+}
+
+/** The slots a booking can be moved to on `date` (a calendar date on its dealership's clock). */
+export async function getBookingSlotsAsStaff(bookingId: string, date: string): Promise<VehicleAvailabilityResponse> {
+  const { data } = await adminApiClient.get<VehicleAvailabilityResponse>(`/admin/bookings/${bookingId}/slots`, { params: { date } });
   return data;
 }
 
@@ -532,6 +546,45 @@ export async function getRegionalSettings(scope: ConfigScopeParams): Promise<Reg
 /** Replaces the whole layer at this scope — anything omitted inherits again. */
 export async function saveRegionalSettings(scope: ConfigScopeParams, layer: RegionalSettingsLayerDto): Promise<RegionalSettingsEditorDto> {
   const { data } = await adminApiClient.put<RegionalSettingsEditorDto>("/admin/regional-settings", layer, { params: scope });
+  return data;
+}
+
+/** A wall-clock window on the dealership's clock, "HH:MM"; `end` may be "24:00" (midnight). */
+export interface TimeWindowDto {
+  start: string;
+  end: string;
+}
+
+/** Opening hours keyed by weekday ("monday"…); null is closed all day. */
+export type WeeklyHoursDto = Record<string, TimeWindowDto | null>;
+
+/** One scope's own booking schedule; an unset field inherits. An empty `breaks` list means no breaks. */
+export interface BookingScheduleLayerDto {
+  slotMinutes?: number;
+  weeklyHours?: WeeklyHoursDto;
+  breaks?: TimeWindowDto[];
+}
+
+export interface BookingScheduleEditorDto {
+  own: BookingScheduleLayerDto;
+  /** The company layer when editing a dealership; null company-wide. */
+  inherited: BookingScheduleLayerDto | null;
+  /** The connected org's default business hours — what opening hours fall back to. */
+  providerHours: WeeklyHoursDto;
+  /** What each field this scope leaves unset resolves to. */
+  fallback: Required<BookingScheduleLayerDto>;
+  effective: Required<BookingScheduleLayerDto>;
+  schema: { slotMinutes: { min: number; max: number; step: number }; maxBreaks: number; weekdays: string[] };
+}
+
+export async function getBookingSchedule(scope: ConfigScopeParams): Promise<BookingScheduleEditorDto> {
+  const { data } = await adminApiClient.get<BookingScheduleEditorDto>("/admin/booking-schedule", { params: scope });
+  return data;
+}
+
+/** Replaces the whole schedule at this scope — anything omitted inherits again. */
+export async function saveBookingSchedule(scope: ConfigScopeParams, layer: BookingScheduleLayerDto): Promise<BookingScheduleEditorDto> {
+  const { data } = await adminApiClient.put<BookingScheduleEditorDto>("/admin/booking-schedule", layer, { params: scope });
   return data;
 }
 

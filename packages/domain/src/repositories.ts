@@ -4,6 +4,7 @@ import { Customer } from "./entities/customer";
 import { Dealership } from "./entities/dealership";
 import { BrandLayer } from "./entities/site-content";
 import { ProviderRegionalDefaults, RegionalSettings } from "./entities/regional-settings";
+import { BookingSchedule, WeeklyHours } from "./entities/booking-schedule";
 import { StaffAssignment, StaffRole } from "./entities/staff-assignment";
 import { VehicleAllocation, WishlistItem } from "./entities/inventory";
 import { SalesOpportunity } from "./entities/sales-opportunity";
@@ -342,6 +343,19 @@ export interface RegionalSettingsRepository {
   saveLayer(settings: RegionalSettings, dealershipId?: string): Promise<void>;
   /** The data provider org's own locale, time zone and currency — the fallback for anything unset. */
   findProviderDefaults(): Promise<ProviderRegionalDefaults>;
+}
+
+/**
+ * Booking schedule layers — company-wide and per dealership — and the data provider org's
+ * default business hours they inherit unset fields from (see resolveBookingSchedule).
+ */
+export interface BookingScheduleRepository {
+  /** Null when the dealership doesn't exist; company-wide returns an empty schedule until one is saved. */
+  findLayer(dealershipId?: string): Promise<BookingSchedule | null>;
+  /** Replaces the whole schedule at that scope. */
+  saveLayer(schedule: BookingSchedule, dealershipId?: string): Promise<void>;
+  /** The data provider org's default business hours — the fallback when no scope sets opening hours. */
+  findProviderHours(): Promise<WeeklyHours>;
 }
 
 export type BrandAssetKind = "logo" | "hero";

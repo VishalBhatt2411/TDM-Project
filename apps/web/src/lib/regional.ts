@@ -34,6 +34,8 @@ export interface RegionalFormatter {
   /** `currency` defaults to the tenant's; a bare number is shown when neither is known yet. */
   money(amount: number, currency?: string): string;
   dateTime(value: DateInput, timeZone?: string): string;
+  /** A time of day for display, in the locale's own style ("9:30 AM", "09:30"). */
+  time(value: DateInput, timeZone?: string): string;
   /** Wall-clock "HH:mm" (24-hour) — for matching against slot times like "09:30". */
   wallTime(value: DateInput, timeZone?: string): string;
   /** Today's date ("YYYY-MM-DD") in the zone. */
@@ -56,6 +58,9 @@ export function createRegionalFormatter(settings: RegionalSettingsDto | undefine
     },
     dateTime(value, timeZone) {
       return new Date(value).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short", timeZone: zoneOf(timeZone) });
+    },
+    time(value, timeZone) {
+      return new Date(value).toLocaleTimeString(locale, { timeStyle: "short", timeZone: zoneOf(timeZone) });
     },
     wallTime(value, timeZone) {
       return new Date(value).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zoneOf(timeZone) });

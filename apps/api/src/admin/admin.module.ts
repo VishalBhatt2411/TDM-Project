@@ -26,6 +26,8 @@ import { AdminBrandingService } from "./admin-branding.service";
 import { DealershipConfigModule } from "../config/config.module";
 import { AdminRegionalSettingsController } from "./admin-regional-settings.controller";
 import { AdminRegionalSettingsService } from "./admin-regional-settings.service";
+import { AdminBookingScheduleController } from "./admin-booking-schedule.controller";
+import { AdminBookingScheduleService } from "./admin-booking-schedule.service";
 
 @Module({
   imports: [AuthModule, NotificationsModule, BookingsModule, StaffAuthModule, ComplianceModule, DealershipConfigModule],
@@ -44,7 +46,8 @@ import { AdminRegionalSettingsService } from "./admin-regional-settings.service"
     AdminComplianceController,
     AdminBrandingController,
     AdminRegionalSettingsController,
+    AdminBookingScheduleController,
   ],
-  providers: [AdminAuthService, AdminUsersService, AdminBookingsService, AdminComplianceService, AdminBrandingService, AdminRegionalSettingsService, ConfigScopeResolver],
+  providers: [AdminAuthService, AdminUsersService, AdminBookingsService, AdminComplianceService, AdminBrandingService, AdminRegionalSettingsService, AdminBookingScheduleService, ConfigScopeResolver],
 })
 export class AdminModule {}

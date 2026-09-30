@@ -11,6 +11,7 @@ import type { StaffAccess } from "./staff-access";
 import { AdminBookingsService } from "./admin-bookings.service";
 import { AssignSalesRepDto, CheckInBookingDto, CompleteDriveDto, SetStaffNotesDto, StartDriveDto } from "./dto";
 import { CancelBookingDto, RescheduleBookingDto } from "../bookings/dto";
+import { VehicleAvailabilityQueryDto } from "../vehicles/dto";
 
 /**
  * Every route requires a valid staff session with at least one active assignment. The
@@ -109,6 +110,11 @@ export class AdminBookingsController {
   @Patch(":id/cancel")
   cancel(@Param("id") id: string, @Body() dto: CancelBookingDto, @CurrentStaff() staff: AuthenticatedStaff) {
     return this.adminBookingsService.cancel(id, dto, staff);
+  }
+
+  @Get(":id/slots")
+  slots(@Param("id") id: string, @Query() query: VehicleAvailabilityQueryDto, @CurrentStaff() staff: AuthenticatedStaff) {
+    return this.adminBookingsService.slots(id, query.date, staff);
   }
 
   @Patch(":id/reschedule")

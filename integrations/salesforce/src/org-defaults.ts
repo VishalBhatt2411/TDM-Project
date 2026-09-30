@@ -1,4 +1,4 @@
-import { ProviderRegionalDefaults } from "@tdm/domain";
+import { ProviderRegionalDefaults, TimeWindow, WEEKDAYS, WeeklyHours } from "@tdm/domain";
 import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "./connection-source";
 
@@ -55,4 +55,47 @@ export async function orgRegionalDefaults(provider: SalesforceConnectionSource, 
   if (cache.size >= MAX_CACHE_ENTRIES) cache.clear();
   cache.set(orgId, { defaults, expiresAt: Date.now() + CACHE_TTL_MS });
   return defaults;
+}
+
+const hoursCache = new Map<string, { hours: WeeklyHours; expiresAt: number }>();
+
+/** A Salesforce Time value ("09:30:00.000Z") as "HH:MM". */
+function wallTimeOf(value: string): string {
+  return value.slice(0, 5);
+}
+
+/**
+ * One weekday of BusinessHours: no start time is closed; 00:00 to 00:00 is open all day
+ * ("24 hours" in Setup); an end of 00:00 otherwise means midnight at the end of the day.
+ */
+function dayWindow(start: string | null, end: string | null): TimeWindow | null {
+  if (!start || !end) return null;
+  const endTime = wallTimeOf(end);
+  return { start: wallTimeOf(start), end: endTime === "00:00" ? "24:00" : endTime };
+}
+
+async function queryBusinessHours(conn: Connection): Promise<WeeklyHours> {
+  const columns = WEEKDAYS.map((day) => {
+    const name = day[0]!.toUpperCase() + day.slice(1);
+    return `${name}StartTime, ${name}EndTime`;
+  }).join(", ");
+  const record = (await conn.query<any>(`SELECT ${columns} FROM BusinessHours WHERE IsDefault = true AND IsActive = true LIMIT 1`)).records[0];
+  if (!record) throw new Error("Salesforce returned no active default BusinessHours record.");
+  return Object.fromEntries(
+    WEEKDAYS.map((day) => {
+      const name = day[0]!.toUpperCase() + day.slice(1);
+      return [day, dayWindow(record[`${name}StartTime`], record[`${name}EndTime`])];
+    }),
+  ) as WeeklyHours;
+}
+
+/** The connected org's default business hours (Setup → Business Hours), cached per org. */
+export async function orgBusinessHours(provider: SalesforceConnectionSource, conn: Connection): Promise<WeeklyHours> {
+  const orgId = await provider.getSalesforceOrgId();
+  const cached = hoursCache.get(orgId);
+  if (cached && cached.expiresAt > Date.now()) return cached.hours;
+  const hours = await queryBusinessHours(conn);
+  if (hoursCache.size >= MAX_CACHE_ENTRIES) hoursCache.clear();
+  hoursCache.set(orgId, { hours, expiresAt: Date.now() + CACHE_TTL_MS });
+  return hours;
 }

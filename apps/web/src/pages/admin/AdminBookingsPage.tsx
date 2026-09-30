@@ -16,6 +16,8 @@ import {
   type SalesRepLookupDto,
 } from "@/api/admin";
 import { useAdminRegional, useDealershipTimeZones } from "@/hooks/use-regional";
+import { useStaffSlotPicker } from "@/hooks/use-slot-picker";
+import { TimeSlotSelect } from "@/components/TimeSlotSelect";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QrScanner } from "@/components/admin/QrScanner";
 import { ComplianceReviewPanel } from "@/components/admin/ComplianceReviewPanel";
-import { SLOT_DURATION_MINUTES, zonedDateTimeToUtc, type BookingDto, type BookingStatus } from "@tdm/types";
+import type { BookingDto, BookingStatus } from "@tdm/types";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
   Requested: "warning",
@@ -166,7 +168,7 @@ function BookingActionsPanel({
   // The booking happens at its dealership: dates and times are picked on that wall clock.
   const timeZone = useDealershipTimeZones().get(booking.dealershipId) ?? regional.timeZone;
   const [rescheduleDate, setRescheduleDate] = React.useState(() => regional.today(timeZone));
-  const [rescheduleTime, setRescheduleTime] = React.useState("10:00");
+  const reschedulePicker = useStaffSlotPicker(booking.id, rescheduleDate, showReschedule);
   const [cancelReason, setCancelReason] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
@@ -182,10 +184,12 @@ function BookingActionsPanel({
   });
 
   const submitReschedule = () => {
-    if (!timeZone) return;
-    const start = zonedDateTimeToUtc(rescheduleDate, rescheduleTime, timeZone);
-    const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
-    run.mutate(() => rescheduleBookingAsStaff(booking.id, { start: start.toISOString(), end: end.toISOString() }));
+    const { slot } = reschedulePicker;
+    if (!slot) {
+      setError("Pick one of the free times on this date.");
+      return;
+    }
+    run.mutate(() => rescheduleBookingAsStaff(booking.id, { start: slot.start, end: slot.end }));
   };
 
   return (
@@ -306,15 +310,20 @@ function BookingActionsPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`admin-reschedule-time-${booking.id}`}>New Time{timeZone ? ` (${timeZone})` : ""}</Label>
-            <Input
+            <Label htmlFor={`admin-reschedule-time-${booking.id}`}>
+              New Time{reschedulePicker.availability ? ` (${reschedulePicker.availability.timeZone})` : ""}
+            </Label>
+            <TimeSlotSelect
               id={`admin-reschedule-time-${booking.id}`}
-              type="time"
-              value={rescheduleTime}
-              onChange={(e) => setRescheduleTime(e.target.value)}
+              className="w-auto min-w-40"
+              formatter={regional}
+              availability={reschedulePicker.availability}
+              isLoading={reschedulePicker.isLoading}
+              value={reschedulePicker.time}
+              onChange={(e) => reschedulePicker.setTime(e.target.value)}
             />
           </div>
-          <Button size="sm" disabled={run.isPending || !timeZone || !rescheduleDate || !rescheduleTime} onClick={submitReschedule}>
+          <Button size="sm" disabled={run.isPending || !reschedulePicker.slot} onClick={submitReschedule}>
             Confirm New Slot
           </Button>
           <Button size="sm" variant="outline" onClick={() => setShowReschedule(false)}>

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { isBookingConflictError, cancelBooking, listMyBookings, rescheduleBooking } from "@/api/bookings";
 import { getDashboard, getRecommendations } from "@/api/customers";
-import { TIME_SLOTS } from "@/pages/BookingPage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { VehicleCard } from "@/components/VehicleCard";
 import { QrCheckInCode } from "@/components/QrCheckInCode";
+import { TimeSlotSelect } from "@/components/TimeSlotSelect";
 import { downloadBookingIcs } from "@/lib/ics";
 import { useShoppingLocation } from "@/context/location-context";
 import { useRegional } from "@/hooks/use-regional";
-import { SLOT_DURATION_MINUTES, zonedDateTimeToUtc, type BookingDto } from "@tdm/types";
+import { useSlotPicker } from "@/hooks/use-slot-picker";
+import type { BookingDto } from "@tdm/types";
 
 function addToCalendar(booking: BookingDto) {
   downloadBookingIcs({
@@ -51,7 +52,8 @@ export function MyBookingsPage() {
   // A drive happens at its branch: its times are shown, and a new one picked, on that wall clock.
   const zoneOf = (booking: BookingDto) => branches.find((b) => b.id === booking.branchId)?.timeZone ?? regional.timeZone;
   const [rescheduleDate, setRescheduleDate] = React.useState("");
-  const [rescheduleTime, setRescheduleTime] = React.useState(TIME_SLOTS[0]);
+  // Slots come from the vehicle's dealership schedule, less what's already booked.
+  const reschedulePicker = useSlotPicker(data?.find((b) => b.id === reschedulingId)?.vehicleId, reschedulingId ? rescheduleDate : "");
   const [rescheduleError, setRescheduleError] = React.useState<string | null>(null);
   const [qrBookingId, setQrBookingId] = React.useState<string | null>(null);
 
@@ -83,17 +85,17 @@ export function MyBookingsPage() {
   const startReschedule = (booking: BookingDto) => {
     setReschedulingId(booking.id);
     setRescheduleDate(regional.today(zoneOf(booking)));
-    setRescheduleTime(TIME_SLOTS[0]);
     setRescheduleError(null);
   };
 
   const submitReschedule = (booking: BookingDto) => {
     setRescheduleError(null);
-    const timeZone = zoneOf(booking);
-    if (!timeZone || !rescheduleDate) return;
-    const start = zonedDateTimeToUtc(rescheduleDate, rescheduleTime, timeZone);
-    const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
-    rescheduleMutation.mutate({ id: booking.id, start: start.toISOString(), end: end.toISOString() });
+    const { slot } = reschedulePicker;
+    if (!slot) {
+      setRescheduleError("Pick one of the free times on this date.");
+      return;
+    }
+    rescheduleMutation.mutate({ id: booking.id, start: slot.start, end: slot.end });
   };
 
   return (
@@ -215,18 +217,16 @@ export function MyBookingsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor={`reschedule-time-${booking.id}`}>New Time</Label>
-                    <select
+                    <TimeSlotSelect
                       id={`reschedule-time-${booking.id}`}
-                      className="flex h-10 rounded-md border border-input bg-background px-3 text-sm"
-                      value={rescheduleTime}
-                      onChange={(e) => setRescheduleTime(e.target.value)}
-                    >
-                      {TIME_SLOTS.map((slot) => (
-                        <option key={slot} value={slot}>{slot}</option>
-                      ))}
-                    </select>
+                      className="w-auto min-w-40"
+                      availability={reschedulePicker.availability}
+                      isLoading={reschedulePicker.isLoading}
+                      value={reschedulePicker.time}
+                      onChange={(e) => reschedulePicker.setTime(e.target.value)}
+                    />
                   </div>
-                  <Button size="sm" disabled={rescheduleMutation.isPending || !zoneOf(booking) || !rescheduleDate} onClick={() => submitReschedule(booking)}>
+                  <Button size="sm" disabled={rescheduleMutation.isPending || !reschedulePicker.slot} onClick={() => submitReschedule(booking)}>
                     {rescheduleMutation.isPending ? "Saving…" : "Confirm New Slot"}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => { setReschedulingId(null); setRescheduleError(null); }}>

@@ -1,7 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  BookingRepository,
-  TimeSlot,
   Vehicle,
   VehicleLocationFilter,
   VehicleRepository,
@@ -12,15 +10,13 @@ import {
   EmiEstimateRequest,
   EmiEstimateResponse,
   Paginated,
-  SLOT_DURATION_MINUTES,
-  STANDARD_TIME_SLOTS,
   VehicleAvailabilityResponse,
   VehicleDto,
   VehicleVariantDto,
-  zonedDateTimeToUtc,
 } from "@tdm/types";
-import { BOOKING_REPOSITORY, VEHICLE_REPOSITORY, VEHICLE_VARIANT_REPOSITORY } from "../infrastructure/tokens";
+import { VEHICLE_REPOSITORY, VEHICLE_VARIANT_REPOSITORY } from "../infrastructure/tokens";
 import { RegionalSettingsService } from "../config/regional-settings.service";
+import { BookingScheduleService } from "../config/booking-schedule.service";
 import { TenantContext } from "../tenancy/tenant-context";
 import { VehicleSearchQueryDto } from "./dto";
 
@@ -85,8 +81,8 @@ export class VehiclesService {
   constructor(
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     @Inject(VEHICLE_VARIANT_REPOSITORY) private readonly variants: VehicleVariantRepository,
-    @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     private readonly regional: RegionalSettingsService,
+    private readonly schedule: BookingScheduleService,
   ) {}
 
   async search(query: VehicleSearchQueryDto): Promise<Paginated<VehicleDto>> {
@@ -133,28 +129,16 @@ export class VehiclesService {
     return variants.map(variantToDto);
   }
 
-  /** Free/busy for the canonical daily slot template (see STANDARD_TIME_SLOTS) on a given date, as wall-clock times in the vehicle's dealership time zone — a slot is unavailable if it overlaps a Confirmed/InProgress booking for this vehicle. Branch is accepted for API-contract parity with the booking flow (a vehicle belongs to one branch) but isn't filtered on since conflicts are vehicle-scoped, not branch-scoped. */
+  /** Free/busy for the dealership's booking schedule (see BookingScheduleService) on a given date, as wall-clock times in the vehicle's dealership time zone — a slot is unavailable if it overlaps a Confirmed/InProgress booking for this vehicle. Branch is accepted for API-contract parity with the booking flow (a vehicle belongs to one branch) but isn't filtered on since conflicts are vehicle-scoped, not branch-scoped. */
   async getAvailability(vehicleId: string, date: string): Promise<VehicleAvailabilityResponse> {
     const vehicle = await this.requireVisible(vehicleId);
 
-    const [activeBookings, { timeZone, phoneCountryCode }] = await Promise.all([
-      this.bookings.findActiveByVehicle(vehicleId),
+    const [{ timeZone, slots }, { phoneCountryCode }] = await Promise.all([
+      this.schedule.vehicleDay({ id: vehicleId, dealershipId: vehicle.dealershipId }, date),
       this.regional.resolve(vehicle.dealershipId),
     ]);
-    const daySlots = STANDARD_TIME_SLOTS.map((time) => {
-      const start = zonedDateTimeToUtc(date, time, timeZone);
-      const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
-      return { start, end };
-    });
 
-    const availableSlots = daySlots
-      .filter((candidate) => {
-        const candidateSlot = TimeSlot.create(candidate.start, candidate.end);
-        return !activeBookings.some((booking) => candidateSlot.overlaps(booking.toProps().slot));
-      })
-      .map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() }));
-
-    return { vehicleId, date, availableSlots, timeZone, ...(phoneCountryCode ? { phoneCountryCode } : {}) };
+    return { vehicleId, date, slots, timeZone, ...(phoneCountryCode ? { phoneCountryCode } : {}) };
   }
 
   /** A vehicle of another dealership is reported as missing on a dealer host — its existence isn't disclosed. */

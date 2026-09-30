@@ -2,6 +2,8 @@ import {
   BrandAssetInfo,
   BrandAssetKind,
   BrandAssetRepository,
+  BookingSchedule,
+  BookingScheduleRepository,
   BrandLayer,
   BrandingRepository,
   DataProviderOutdatedError,
@@ -10,13 +12,15 @@ import {
   RegionalSettings,
   RegionalSettingsRepository,
   SiteContent,
+  WeeklyHours,
+  parseBookingSchedule,
   parseRegionalSettings,
   parseSiteContent,
 } from "@tdm/domain";
 import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "../connection-source";
 import { brandingFromRecord, brandingToRecord } from "../mappers";
-import { orgRegionalDefaults } from "../org-defaults";
+import { orgBusinessHours, orgRegionalDefaults } from "../org-defaults";
 import { BRANDING_FIELDS, escapeSoql, toEighteenCharId, withConnection } from "../soql";
 import { isContentDocumentId, CONTENT_TYPE_BY_EXTENSION, EXTENSION_BY_CONTENT_TYPE, readAll } from "../files";
 
@@ -198,6 +202,62 @@ export class SalesforceRegionalSettingsRepository implements RegionalSettingsRep
 
   async findProviderDefaults(): Promise<ProviderRegionalDefaults> {
     return withConnection(this.connectionProvider, (conn) => orgRegionalDefaults(this.connectionProvider, conn));
+  }
+}
+
+const SCHEDULE_FEATURE = "booking schedule";
+
+/** Stored JSON is editable straight in Salesforce, so a malformed value is skipped (inherited) rather than breaking booking. */
+function scheduleFromRecord(record: any, object: string): BookingSchedule {
+  const raw = record.Booking_Schedule__c;
+  if (!raw) return {};
+  try {
+    return parseBookingSchedule(JSON.parse(raw));
+  } catch (err) {
+    warn("booking_schedule_invalid", { object, recordId: record.Id, reason: err instanceof Error ? err.message : String(err) });
+    return {};
+  }
+}
+
+/** Booking schedules as Booking_Schedule__c JSON on Dealership__c and the Company_Profile__c singleton, over the org's default BusinessHours. */
+export class SalesforceBookingScheduleRepository implements BookingScheduleRepository {
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
+
+  async findLayer(dealershipId?: string): Promise<BookingSchedule | null> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const object = dealershipId ? "Dealership__c" : "Company_Profile__c";
+      const where = dealershipId ? `Id = '${escapeSoql(dealershipId)}'` : `Singleton_Key__c = '${COMPANY_SINGLETON_KEY}'`;
+      try {
+        const record = (await conn.query(`SELECT Id, Booking_Schedule__c FROM ${object} WHERE ${where} LIMIT 1`)).records[0];
+        if (record) return scheduleFromRecord(record, object);
+        return dealershipId ? null : {};
+      } catch (err) {
+        if (!isMissingMetadata(err)) throw err;
+        warn("booking_schedule_metadata_missing", { object });
+        if (!dealershipId) return {};
+        const exists = await conn.query(`SELECT Id FROM Dealership__c WHERE ${where} LIMIT 1`);
+        return exists.records[0] ? {} : null;
+      }
+    });
+  }
+
+  async saveLayer(schedule: BookingSchedule, dealershipId?: string): Promise<void> {
+    await withConnection(this.connectionProvider, async (conn) => {
+      try {
+        const id = dealershipId ?? (await ensureCompanyProfileId(conn));
+        const object = dealershipId ? "Dealership__c" : "Company_Profile__c";
+        const value = Object.keys(schedule).length ? JSON.stringify(schedule) : null;
+        const result = await conn.sobject(object).update({ Id: id, Booking_Schedule__c: value });
+        assertSaved(result, `${object} ${id}`);
+      } catch (err) {
+        if (isMissingMetadata(err)) throw new DataProviderOutdatedError(SCHEDULE_FEATURE);
+        throw err;
+      }
+    });
+  }
+
+  async findProviderHours(): Promise<WeeklyHours> {
+    return withConnection(this.connectionProvider, (conn) => orgBusinessHours(this.connectionProvider, conn));
   }
 }
 

@@ -1,10 +1,11 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditLogRepository, Booking, BookingRepository, BookingStatus, SalesRepRepository, SalesRepresentative } from "@tdm/domain";
-import { BookingDto } from "@tdm/types";
+import { BookingDto, VehicleAvailabilityResponse } from "@tdm/types";
 import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, SALES_REP_REPOSITORY } from "../infrastructure/tokens";
 import { bookingToDto } from "../bookings/bookings.service";
 import { BookingMutationService } from "../bookings/booking-mutation.service";
 import { QrCheckinService } from "../bookings/qr-checkin.service";
+import { BookingScheduleService } from "../config/booking-schedule.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 import { BookingAccessPolicy } from "./booking-access.policy";
@@ -30,6 +31,7 @@ export class AdminBookingsService {
     private readonly emailContext: BookingEmailContextService,
     private readonly mutations: BookingMutationService,
     private readonly qrCheckin: QrCheckinService,
+    private readonly schedule: BookingScheduleService,
   ) {}
 
   /** Every booking at the dealerships where the actor holds MANAGE_BOOKINGS. */
@@ -196,6 +198,14 @@ export class AdminBookingsService {
 
     const saved = await this.mutations.rescheduleBooking(booking, dto.slot, staff.staffUserId);
     return adminBookingToDto(saved);
+  }
+
+  /** The booking's vehicle's slots on `date` at its dealership — what a reschedule can pick from. */
+  async slots(bookingId: string, date: string, staff: AuthenticatedStaff): Promise<VehicleAvailabilityResponse> {
+    const booking = await this.requireBooking(bookingId);
+    await this.access.assertCanActOn(staff, booking);
+    const { vehicleId, dealershipId } = booking.toProps();
+    return { vehicleId, date, ...(await this.schedule.vehicleDay({ id: vehicleId, dealershipId }, date)) };
   }
 
   private async requireBooking(bookingId: string): Promise<Booking> {

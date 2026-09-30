@@ -31,6 +31,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 import { RegionalSettingsService } from "../config/regional-settings.service";
+import { BookingScheduleService } from "../config/booking-schedule.service";
 import { TenantContext } from "../tenancy/tenant-context";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
@@ -82,6 +83,7 @@ export class BookingsService {
     private readonly mutations: BookingMutationService,
     private readonly qrCheckin: QrCheckinService,
     private readonly regional: RegionalSettingsService,
+    private readonly schedule: BookingScheduleService,
   ) {}
 
   /** Authenticated booking creation — for a customer who already has an account/session. */
@@ -231,7 +233,8 @@ export class BookingsService {
 
   /**
    * A vehicle is test-driven at the branch that stocks it. The booking's dealership is derived
-   * from that branch, never taken from the request, and must be one this host serves.
+   * from that branch, never taken from the request, and must be one this host serves. The slot
+   * must be one of that dealership's scheduled slots — checked here, before any account is touched.
    */
   private async resolveBookingBranch(dto: CreateBookingDto): Promise<Branch> {
     const [vehicle, branch] = await Promise.all([this.vehicles.findById(dto.vehicleId), this.branches.findById(dto.branchId)]);
@@ -240,6 +243,7 @@ export class BookingsService {
       throw new BadRequestException("This vehicle can only be test-driven at the branch that stocks it.");
     }
     if (!branch || !branch.isActive) throw new NotFoundException("Branch not found.");
+    await this.schedule.assertBookable(branch.dealershipId, TimeSlot.create(dto.slot.start, dto.slot.end));
     return branch;
   }
 

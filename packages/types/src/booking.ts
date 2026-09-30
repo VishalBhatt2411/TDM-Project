@@ -1,14 +1,5 @@
 import type { Address, TimeSlot } from "./common";
 
-/** Canonical dealership drive-slot template (30-minute slots, closed 13:00-14:00 for lunch) — the single source of truth shared by the booking UI and the availability endpoint so they can never drift apart. */
-export const STANDARD_TIME_SLOTS: string[] = [
-  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
-];
-
-export const SLOT_DURATION_MINUTES = 30;
-
 export type DriveType = "Dealership" | "Home";
 
 export type BookingStatus =

@@ -124,7 +124,8 @@ export interface VehicleAvailabilityQuery {
 export interface VehicleAvailabilityResponse {
   vehicleId: string;
   date: string;
-  availableSlots: { start: string; end: string }[];
+  /** Every scheduled slot of the day in order — `time` is its wall-clock start in `timeZone`; a booked one is `available: false`. Empty on a closed day. */
+  slots: { time: string; start: string; end: string; available: boolean }[];
   /** IANA zone of the vehicle's dealership — `date` and slot wall-clock times are in it. */
   timeZone: string;
   /** Calling code a national phone number is prefixed with when booking; absent means enter "+<code>...". */

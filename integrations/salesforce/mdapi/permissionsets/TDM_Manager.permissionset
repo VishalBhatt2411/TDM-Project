@@ -150,6 +150,11 @@
         <editable>false</editable>
     </fieldPermissions>
     <fieldPermissions>
+        <field>Dealership__c.Booking_Schedule__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
         <field>Branch__c.Address__c</field>
         <readable>true</readable>
         <editable>false</editable>
