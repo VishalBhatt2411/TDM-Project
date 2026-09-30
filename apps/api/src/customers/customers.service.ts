@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ConflictException, Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   BookingRepository,
   HeuristicRecommendationEngine,
@@ -13,8 +13,11 @@ import { BOOKING_REPOSITORY, VEHICLE_REPOSITORY, WISHLIST_REPOSITORY } from "../
 import { bookingToDto } from "../bookings/bookings.service";
 import { FeatureFlagService } from "../config/feature-flag.service";
 import { vehicleToDto } from "../vehicles/vehicles.service";
+import { TenantContext } from "../tenancy/tenant-context";
 
 const UPCOMING_STATUSES = new Set(["Requested", "Confirmed", "Waitlisted", "InProgress"]);
+/** Size of the available-stock pool recommendations are ranked from. */
+const RECOMMENDATION_POOL_SIZE = 50;
 const recommendationEngine = new HeuristicRecommendationEngine();
 
 @Injectable()
@@ -29,15 +32,15 @@ export class CustomersService {
   async listWishlist(customerId: string): Promise<VehicleDto[]> {
     await this.featureFlags.assertEnabled("wishlist");
     const items = await this.wishlist.findByCustomer(customerId);
-    const vehicles = await Promise.all(items.map((item) => this.vehicles.findById(item.toProps().vehicleId)));
-    return vehicles.filter((v): v is Vehicle => v !== null).map(vehicleToDto);
+    const vehicles = await this.findVisible(items.map((item) => item.toProps().vehicleId));
+    return [...vehicles.values()].map(vehicleToDto);
   }
 
   async addToWishlist(customerId: string, vehicleId: string): Promise<{ added: true }> {
     await this.featureFlags.assertEnabled("wishlist");
     const vehicle = await this.vehicles.findById(vehicleId);
-    if (!vehicle) {
-      throw new ConflictException(`Vehicle ${vehicleId} was not found.`);
+    if (!vehicle || !TenantContext.isVisibleOnHost(vehicle.dealershipId)) {
+      throw new NotFoundException("Vehicle not found.");
     }
     const existing = await this.wishlist.findByCustomer(customerId);
     if (existing.some((item) => item.toProps().vehicleId === vehicleId)) {
@@ -48,6 +51,7 @@ export class CustomersService {
   }
 
   async removeFromWishlist(customerId: string, vehicleId: string): Promise<{ removed: true }> {
+    await this.featureFlags.assertEnabled("wishlist");
     await this.wishlist.remove(customerId, vehicleId);
     return { removed: true };
   }
@@ -58,10 +62,11 @@ export class CustomersService {
       this.wishlist.findByCustomer(customerId),
     ]);
 
-    const upcoming = bookings
-      .filter((b) => UPCOMING_STATUSES.has(b.status))
-      .sort((a, b) => a.toProps().slot.start.getTime() - b.toProps().slot.start.getTime());
-    const past = bookings.filter((b) => !UPCOMING_STATUSES.has(b.status));
+    // A booking whose slot has ended is history even if nobody closed it out.
+    const now = Date.now();
+    const isUpcoming = (b: (typeof bookings)[number]) => UPCOMING_STATUSES.has(b.status) && b.slot.end.getTime() > now;
+    const upcoming = bookings.filter(isUpcoming).sort((a, b) => a.slot.start.getTime() - b.slot.start.getTime());
+    const past = bookings.filter((b) => !isUpcoming(b));
     const recent = [...bookings]
       .sort((a, b) => b.toProps().createdAt.getTime() - a.toProps().createdAt.getTime())
       .slice(0, 5);
@@ -83,25 +88,34 @@ export class CustomersService {
       this.wishlist.findByCustomer(customerId),
     ]);
 
-    const priorVehicleIds = new Set([
-      ...wishlistItems.map((item) => item.toProps().vehicleId),
-      ...bookings.map((b) => b.vehicleId),
-    ]);
+    const wishlistedIds = wishlistItems.map((item) => item.toProps().vehicleId);
+    const bookedIds = bookings.map((b) => b.vehicleId);
+    const priorVehicleIds = new Set([...wishlistedIds, ...bookedIds]);
 
     const [priorVehicles, candidatePool] = await Promise.all([
-      Promise.all([...priorVehicleIds].map((id) => this.vehicles.findById(id))),
-      this.vehicles.search({ status: "Available", pageSize: 50 }),
+      this.findVisible(priorVehicleIds),
+      this.vehicles.search({ status: "Available", pageSize: RECOMMENDATION_POOL_SIZE, ...TenantContext.hostDealershipScope() }),
     ]);
 
-    const wishlistedVehicles = priorVehicles.filter((v): v is Vehicle => v !== null);
+    const pick = (ids: string[]) => [...new Set(ids)].flatMap((id) => priorVehicles.get(id) ?? []);
     const candidates = candidatePool.items.filter((v) => !priorVehicleIds.has(v.toProps().id));
 
     const scored = recommendationEngine.recommend(
-      { wishlistedVehicles, pastBookedVehicles: wishlistedVehicles },
+      { wishlistedVehicles: pick(wishlistedIds), pastBookedVehicles: pick(bookedIds) },
       candidates,
       limit,
     );
 
     return scored.map((s) => ({ vehicle: vehicleToDto(s.vehicle), score: s.score, reasons: s.reasons }));
+  }
+
+  /** Each distinct vehicle once, keyed by id — dropping any gone or belonging to a dealership this host doesn't show. */
+  private async findVisible(ids: Iterable<string>): Promise<Map<string, Vehicle>> {
+    const vehicles = await Promise.all([...new Set(ids)].map((id) => this.vehicles.findById(id)));
+    return new Map(
+      vehicles
+        .filter((v): v is Vehicle => v !== null && TenantContext.isVisibleOnHost(v.dealershipId))
+        .map((v) => [v.toProps().id, v]),
+    );
   }
 }

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { adminApiClient } from "@/lib/admin-api-client";
 import type { StaffRole } from "@/api/admin";
 
@@ -59,13 +60,16 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = `/api/v1/admin/auth/salesforce/login${query}`;
   }, []);
 
+  const queryClient = useQueryClient();
   const logout = React.useCallback(async () => {
     try {
       await adminApiClient.post("/admin/auth/logout");
     } finally {
       setStaff(null);
+      // Admin data is scoped per staff member — never let it outlive their session.
+      queryClient.clear();
     }
-  }, []);
+  }, [queryClient]);
 
   const hasPermission = React.useCallback(
     (key: string) => !!staff && staff.permissions.includes(key),

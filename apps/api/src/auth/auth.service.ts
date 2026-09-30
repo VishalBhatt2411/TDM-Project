@@ -103,6 +103,22 @@ export class AuthService {
     return this.issueTokens(payload.sub);
   }
 
+  async logout(dto: RefreshDto): Promise<void> {
+    let payload: { sub: string; scope?: string; org?: string };
+    try {
+      payload = this.jwtService.verify<{ sub: string; scope?: string; org?: string }>(dto.refreshToken);
+    } catch {
+      return; // Expired or forged — nothing live to revoke.
+    }
+    if (payload.scope !== AUTH_SCOPE.CUSTOMER) return;
+    try {
+      TenantContext.bindSession(payload.org);
+    } catch {
+      return; // Another tenant's token — never revoke across tenants.
+    }
+    await this.authRepo.revokeRefreshToken(payload.sub, sha256Hex(dto.refreshToken));
+  }
+
   /**
    * Creates an account inline as a side effect of a public (unauthenticated) test
    * drive booking — no separate register/verify-OTP step. The customer proves

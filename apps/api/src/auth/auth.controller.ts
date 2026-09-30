@@ -60,6 +60,13 @@ export class AuthController {
     return this.authService.refresh(dto);
   }
 
+  /** Revokes the presented refresh token. Always 204, so it reveals nothing about the token. */
+  @Post("logout")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@Body() dto: RefreshDto): Promise<void> {
+    await this.authService.logout(dto);
+  }
+
   @Post("magic-login")
   @HttpCode(HttpStatus.OK)
   @Throttle(AUTH_THROTTLE)

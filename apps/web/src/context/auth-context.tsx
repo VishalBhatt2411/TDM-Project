@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { AuthTokens, CustomerDto, LoginRequest, RegisterRequest, RegisterResponse, VerifyOtpRequest } from "@tdm/types";
 import { apiClient } from "@/lib/api-client";
 import { decodeCustomerId, tokenStorage } from "@/lib/token-storage";
@@ -95,10 +96,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await apiClient.post("/auth/reset-password", { token, newPassword });
   }, []);
 
+  const queryClient = useQueryClient();
   const logout = React.useCallback(() => {
+    const refreshToken = tokenStorage.getRefreshToken();
     tokenStorage.clear();
     setCustomerId(null);
-  }, []);
+    // Nothing the signed-out customer saw may be served to whoever signs in next.
+    queryClient.clear();
+    // Best effort: the local session is already gone, the server-side revoke just retires the token early.
+    if (refreshToken) apiClient.post("/auth/logout", { refreshToken }).catch(() => undefined);
+  }, [queryClient]);
 
   const value = React.useMemo(
     () => ({
