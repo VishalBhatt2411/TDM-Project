@@ -28,6 +28,8 @@ export const ANALYTICS_REPOSITORY = Symbol("AnalyticsRepository");
 export const SALESFORCE_IDENTITY_PROVIDER_FACTORY = Symbol("SalesforceIdentityProviderFactory");
 /** `{ name, ping() }` for the current tenant's business-data provider — see DataProviderHealth. */
 export const DATA_PROVIDER_HEALTH = Symbol("DataProviderHealth");
+/** `{ name, ping() }` for the platform's own store (tenants, sessions, audit) — gates readiness. */
+export const PLATFORM_STORE_HEALTH = Symbol("PlatformStoreHealth");
 /** `(organizationId) => Promise<MetadataDeployResult>` — deploys the TDM package into that tenant's connected org. */
 export const TENANT_METADATA_DEPLOYER = Symbol("TenantMetadataDeployer");
 export const REMINDER_LOG_REPOSITORY = Symbol("ReminderLogRepository");

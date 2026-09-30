@@ -51,6 +51,7 @@ import {
   CUSTOMER_PASSWORD_TOKEN_REPOSITORY,
   CUSTOMER_REPOSITORY,
   DATA_PROVIDER_HEALTH,
+  PLATFORM_STORE_HEALTH,
   DEALERSHIP_REPOSITORY,
   BRANDING_REPOSITORY,
   BRAND_ASSET_REPOSITORY,
@@ -118,6 +119,13 @@ const dataProviderHealth: DataProviderHealth = {
   ping: () => connectionProvider.ping(),
 };
 
+const platformStoreHealth: DataProviderHealth = {
+  name: "Postgres",
+  ping: async () => {
+    await prisma.$queryRaw`SELECT 1`;
+  },
+};
+
 /** Emails go out under the tenant's own company name — never a hardcoded brand. */
 const resolveSenderDisplayName = async (): Promise<string> => {
   const organizationId = TenantContext.currentOrganizationId();
@@ -135,6 +143,7 @@ const resolveSenderDisplayName = async (): Promise<string> => {
   providers: [
     { provide: SALESFORCE_IDENTITY_PROVIDER_FACTORY, useValue: identityProviderFactory },
     { provide: DATA_PROVIDER_HEALTH, useValue: dataProviderHealth },
+    { provide: PLATFORM_STORE_HEALTH, useValue: platformStoreHealth },
     { provide: TENANT_METADATA_DEPLOYER, useValue: tenantMetadataDeployer },
     {
       provide: EMAIL_SENDER,
@@ -174,6 +183,7 @@ const resolveSenderDisplayName = async (): Promise<string> => {
   exports: [
     SALESFORCE_IDENTITY_PROVIDER_FACTORY,
     DATA_PROVIDER_HEALTH,
+    PLATFORM_STORE_HEALTH,
     TENANT_METADATA_DEPLOYER,
     EMAIL_SENDER,
     CUSTOMER_REPOSITORY,

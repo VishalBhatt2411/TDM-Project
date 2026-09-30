@@ -66,7 +66,7 @@ async function bootstrap() {
     },
   });
   app.enableShutdownHooks();
-  app.setGlobalPrefix("api/v1", { exclude: ["health"] });
+  app.setGlobalPrefix("api/v1", { exclude: ["health", "health/ready"] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
   app.useGlobalFilters(new DomainExceptionFilter());
 

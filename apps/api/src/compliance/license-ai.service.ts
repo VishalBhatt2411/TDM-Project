@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import Anthropic from "@anthropic-ai/sdk";
 import { LicenseAiAssessment } from "@tdm/types";
 import { env } from "../common/env";
@@ -31,7 +31,7 @@ export class LicenseAiService {
 
   async assess(image: Buffer, contentType: string, submittedName: string, submittedLicenseNumber: string): Promise<LicenseAiAssessment> {
     if (!this.client) {
-      throw new InternalServerErrorException("AI license verification is not configured (missing ANTHROPIC_API_KEY).");
+      throw new ServiceUnavailableException("AI license verification is not configured (missing ANTHROPIC_API_KEY).");
     }
 
     const response = await this.client.messages.create({

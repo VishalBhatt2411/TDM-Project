@@ -41,7 +41,7 @@ infrastructure/docker-compose.yml   Local Postgres container
 
 - **Node.js 20+** and npm (npm workspaces are used — no yarn/pnpm).
 - **Docker** (or a local PostgreSQL 16 instance) — used for the auth/staff database.
-- **Salesforce CLI (`sf`)** and a Salesforce org (a free Developer Edition org works) with the TDM custom objects deployed from `integrations/salesforce/mdapi`. The backend does **not** store Salesforce credentials — it shells out to an already-authenticated `sf` CLI session to obtain a short-lived access token (see `integrations/salesforce/src/connection.ts`). This is explicitly a dev-mode convenience; production hosting requires replacing it with a Connected App using the JWT Bearer flow (see "Hosting" below).
+- **A Salesforce org** (a free Developer Edition org works) and permission to create a Connected App in it. Each company connects its own org through the onboarding wizard; the API stores that org's Connected App credentials and refresh token encrypted and never uses a shared or CLI-derived session. The `sf` CLI is only needed for the standalone dev seed scripts.
 - An email-sending capability if you want transactional emails (confirmation, magic link, OTP) to actually deliver — check `apps/api/src/notifications` / `apps/api/src/auth/otp-sender.ts` for the provider used in this environment.
 - A **Salesforce Connected App** per client org (OAuth2 Authorization Code + PKCE) — used both for staff "Login with Salesforce" and for the onboarding wizard's business-data connection. Most orgs block creating Connected Apps via the Metadata API, and the TDM package (`integrations/salesforce/mdapi`) deliberately never contains one, so each tenant creates it by hand: Setup → App Manager → New Connected App, with:
   - **Enable OAuth Settings:** on; **Require PKCE:** on; **Require Secret for Web Server Flow:** on.
@@ -64,9 +64,7 @@ infrastructure/docker-compose.yml   Local Postgres container
    docker compose -f infrastructure/docker-compose.yml up -d
    ```
 
-3. **Configure environment variables**. Each service reads its own `.env` (see `apps/api/.env` and `integrations/postgres/.env` — not committed, `.gitignore`d):
-   - `apps/api/.env`: `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY` (64 hex chars — encrypts each tenant's Consumer Secret and refresh token), `WEB_ORIGIN`, `ADMIN_WEB_ORIGIN`, `PORT`, `TENANT_BASE_DOMAIN`, `SF_OAUTH_REDIRECT_URI`, `SF_ONBOARDING_REDIRECT_URI`
-   - `integrations/postgres/.env`: `DATABASE_URL` (used by Prisma CLI commands)
+3. **Configure environment variables**. Copy `apps/api/.env.example` to `apps/api/.env` and `integrations/postgres/.env.example` to `integrations/postgres/.env` (both `.gitignore`d). Every variable is documented in the example file and validated at boot by `apps/api/src/common/env.ts` — the API refuses to start on a missing or weak secret.
 
    There are no platform-wide Salesforce credentials: every tenant (company) connects its own org with its own Connected App.
 
@@ -100,9 +98,11 @@ infrastructure/docker-compose.yml   Local Postgres container
 
 - **Salesforce auth**: per tenant — each company's Connected App credentials and refresh token are stored encrypted (`ENCRYPTION_KEY`) and used per request via `TenantSalesforceConnectionProvider`. Register `SF_OAUTH_REDIRECT_URI` and `SF_ONBOARDING_REDIRECT_URI` as callback URLs on each tenant's Connected App.
 - **DNS / TLS**: a wildcard record and certificate for `*.<TENANT_BASE_DOMAIN>`; serve the API same-host under `/api` so the tenant is resolved from the request host.
-- **Managed PostgreSQL** for the auth/staff database (RDS, Cloud SQL, etc.), with `DATABASE_URL` pointed at it and migrations applied via `prisma migrate deploy`.
+- **Managed PostgreSQL** for the auth/staff database (RDS, Cloud SQL, etc.), with `DATABASE_URL` pointed at it and migrations applied with `npm run db:deploy` as a release step, before new API instances take traffic.
 - **Secrets management** for `JWT_SECRET`, `ENCRYPTION_KEY`, and any email-provider credentials — injected as environment variables, never committed.
 - **CORS**: set `WEB_ORIGIN` to the deployed frontend's real origin.
 - **Process management**: run `npm run build` then `node apps/api/dist/main.js` behind a process manager (PM2/systemd) or containerize it; the frontend build (`npm run build --workspace=apps/web`) is static output servable via any CDN/static host (Nginx, S3+CloudFront, Vercel, etc.).
 - **HTTPS** termination in front of both the API and the static frontend.
+- **Reverse proxy headers**: the tenant is resolved from the request host, and with `TRUST_PROXY_HOPS=N` the API trusts `X-Forwarded-Host`/`X-Forwarded-For` from exactly N proxies. Each proxy must **overwrite** those headers (never pass through client-supplied values); otherwise a client could pick another tenant's host or spoof its IP for rate limiting.
+- **Health probes**: `GET /health` is liveness (process up); `GET /health/ready` is readiness (platform database reachable, 503 otherwise). A tenant's Salesforce connection is deliberately not part of readiness — one tenant's outage must not take instances out of rotation; staff see it in the admin System Health page.
 - **Salesforce API limits**: since Salesforce is the system of record for bookings/vehicles/customers, plan for org API call limits under real traffic (the domain layer's repository pattern makes it possible to add caching or a read-replica adapter later without touching business logic).
