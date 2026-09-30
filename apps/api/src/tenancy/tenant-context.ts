@@ -7,6 +7,8 @@ interface TenantStore {
   hostOrganizationId?: string;
   /** Dealership (data-provider id) the host resolved to; absent on a company-wide host or no host. */
   hostDealershipId?: string;
+  /** Public origin of the resolved host, e.g. "https://acme-downtown.tdm.example.com"; absent when no host resolved. */
+  hostSiteOrigin?: string;
   /** Tenant every data-provider call in this unit of work runs against. */
   organizationId?: string;
 }
@@ -21,9 +23,19 @@ const storage = new AsyncLocalStorage<TenantStore>();
  * never touching another tenant's org. Absent context always fails closed.
  */
 export const TenantContext = {
-  run<T>(fn: () => T, organizationId?: string, dealershipId?: string): T {
+  run<T>(fn: () => T, organizationId?: string, dealershipId?: string, siteOrigin?: string): T {
     const hostDealershipId = organizationId ? dealershipId : undefined;
-    return storage.run({ hostOrganizationId: organizationId, hostDealershipId, organizationId }, fn);
+    const hostSiteOrigin = organizationId ? siteOrigin : undefined;
+    return storage.run({ hostOrganizationId: organizationId, hostDealershipId, hostSiteOrigin, organizationId }, fn);
+  },
+
+  /**
+   * Where the current customer is browsing — the origin links in their emails must point back
+   * to, so they land on the same dealer site. Only ever a registered host (see TenantMiddleware),
+   * never an arbitrary Host header.
+   */
+  hostSiteOrigin(): string | undefined {
+    return storage.getStore()?.hostSiteOrigin;
   },
 
   currentOrganizationId(): string | undefined {

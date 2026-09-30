@@ -10,6 +10,11 @@ import { isAssignableSubdomainLabel } from "./organization-slug";
 export function tenantSiteOrigin(label: string | undefined): string | undefined {
   const normalized = label?.trim().toLowerCase();
   if (!isAssignableSubdomainLabel(normalized)) return undefined;
+  return siteOriginOf(`${normalized}.${env.tenantBaseDomain}`);
+}
+
+/** Public origin of a site served on `hostname` — WEB_ORIGIN's scheme and port, which every tenant host shares. */
+export function siteOriginOf(hostname: string): string {
   const { protocol, port } = new URL(env.webOrigin);
-  return `${protocol}//${normalized}.${env.tenantBaseDomain}${port ? `:${port}` : ""}`;
+  return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
 }

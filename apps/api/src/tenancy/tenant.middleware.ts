@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from "express";
 import { TenantContext } from "./tenant-context";
 import { HostRoute } from "@tdm/postgres-adapter";
 import { TenantResolverService } from "./tenant-resolver.service";
+import { siteOriginOf } from "./tenant-site-origin";
 
 /**
  * Routes whose tenant comes from the authenticated staff session (or that are
@@ -53,6 +54,8 @@ export class TenantMiddleware implements NestMiddleware {
       res.status(404).json({ error: "unknown_tenant", message: "No dealership is configured for this address." });
       return;
     }
-    TenantContext.run(() => next(), route?.organizationId, route?.dealershipId ?? undefined);
+    // req.hostname only counts once it resolved to a route — the registry vouches for it.
+    const siteOrigin = route ? siteOriginOf(req.hostname.toLowerCase()) : undefined;
+    TenantContext.run(() => next(), route?.organizationId, route?.dealershipId ?? undefined, siteOrigin);
   }
 }

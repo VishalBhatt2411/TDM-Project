@@ -9,6 +9,8 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { DomainExceptionFilter } from "./common/domain-exception.filter";
+import { TenantResolverService } from "./tenancy/tenant-resolver.service";
+import { siteOriginOf } from "./tenancy/tenant-site-origin";
 
 // Node kills the whole process on an unhandled promise rejection by default — in a multi-tenant
 // server, one background task's uncaught error (e.g. a fire-and-forget metadata deploy) would
@@ -42,7 +44,27 @@ async function bootstrap() {
   app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
 
   app.use(helmet());
-  app.enableCors({ origin: env.corsOrigins, credentials: true });
+  // The web app calls the API same-origin through /api, so CORS only matters when a deployment
+  // serves them apart: the platform origins, plus any registered tenant host (subdomain or
+  // custom domain) on the shared scheme and port.
+  const tenantHosts = app.get(TenantResolverService);
+  app.enableCors({
+    credentials: true,
+    origin: (origin, callback) => {
+      if (!origin || env.corsOrigins.includes(origin)) return callback(null, true);
+      let hostname: string;
+      try {
+        hostname = new URL(origin).hostname;
+      } catch {
+        return callback(null, false);
+      }
+      if (siteOriginOf(hostname) !== origin) return callback(null, false);
+      tenantHosts.resolveHost(hostname).then(
+        (route) => callback(null, !!route),
+        () => callback(null, false),
+      );
+    },
+  });
   app.enableShutdownHooks();
   app.setGlobalPrefix("api/v1", { exclude: ["health"] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));

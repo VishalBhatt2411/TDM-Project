@@ -9,7 +9,6 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateProfileDto, VerifyOtpDto } from "./dto";
 import { OTP_SENDER, OtpSender } from "./otp-sender";
 import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from "./auth.constants";
-import { env } from "../common/env";
 import { TenantContext } from "../tenancy/tenant-context";
 
 const OTP_TTL_MINUTES = 10;
@@ -138,7 +137,7 @@ export class AuthService {
     await this.magicLoginRepo.save(customerId, sha256Hex(rawToken), new Date(Date.now() + MAGIC_LINK_TTL_MS));
     // Never log the link itself — it is a bearer credential for this account.
     this.logger.log(JSON.stringify({ event: "magic_login_link_issued", customerId }));
-    return `${env.webOrigin}/magic-login?token=${rawToken}`;
+    return `${this.customerSiteOrigin()}/magic-login?token=${rawToken}`;
   }
 
   async verifyMagicLogin(token: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
@@ -156,11 +155,23 @@ export class AuthService {
    * and for customer-initiated forgot-password requests (isNewAccount = false).
    */
   async issuePasswordSetupEmail(customerId: string, email: string, name: string, isNewAccount: boolean): Promise<void> {
+    const siteOrigin = this.customerSiteOrigin();
     const rawToken = randomBytes(32).toString("hex");
     await this.passwordTokens.save(customerId, sha256Hex(rawToken), new Date(Date.now() + PASSWORD_TOKEN_TTL_MS));
-    const setupUrl = `${env.webOrigin}/set-password?token=${rawToken}`;
+    const setupUrl = `${siteOrigin}/set-password?token=${rawToken}`;
     this.logger.log(JSON.stringify({ event: "password_setup_link_issued", customerId, isNewAccount }));
     await this.notifications.sendPasswordSetup(email, name, setupUrl, isNewAccount);
+  }
+
+  /**
+   * The dealer site the customer is on — sign-in links must return them there, not to a
+   * shared origin that can't resolve their tenant. Customer routes always run on a resolved
+   * host (TenantMiddleware fails closed otherwise), so a missing one is a programming error.
+   */
+  private customerSiteOrigin(): string {
+    const origin = TenantContext.hostSiteOrigin();
+    if (!origin) throw new Error("Customer links need a resolved dealer host.");
+    return origin;
   }
 
   /** Always returns the same generic result whether or not the email exists, to avoid leaking which customer emails are registered. */
