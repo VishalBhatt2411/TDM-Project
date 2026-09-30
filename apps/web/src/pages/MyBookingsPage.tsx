@@ -2,12 +2,28 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { isBookingConflictError, cancelBooking, listMyBookings, rescheduleBooking } from "@/api/bookings";
+import { getDashboard, getRecommendations } from "@/api/customers";
 import { TIME_SLOTS } from "@/pages/BookingPage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { VehicleCard } from "@/components/VehicleCard";
+import { QrCheckInCode } from "@/components/QrCheckInCode";
+import { downloadBookingIcs } from "@/lib/ics";
+import type { BookingDto } from "@tdm/types";
+
+function addToCalendar(booking: BookingDto) {
+  downloadBookingIcs({
+    uid: booking.id,
+    title: `Test Drive · ${booking.driveType === "Home" ? "Home Visit" : "Showroom"}`,
+    description: "Test drive appointment booked via TDM Studio.",
+    location: booking.homeAddress ? booking.homeAddress.line1 : "Dealership",
+    start: booking.slot.start,
+    end: booking.slot.end,
+  });
+}
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -28,11 +44,14 @@ const CANCELLABLE_STATUSES = new Set(["Requested", "Confirmed"]);
 export function MyBookingsPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["my-bookings"], queryFn: listMyBookings });
+  const { data: dashboard } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
+  const { data: recommendations } = useQuery({ queryKey: ["recommendations"], queryFn: () => getRecommendations(3) });
   const [cancellingId, setCancellingId] = React.useState<string | null>(null);
   const [reschedulingId, setReschedulingId] = React.useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = React.useState(todayIsoDate());
   const [rescheduleTime, setRescheduleTime] = React.useState(TIME_SLOTS[0]);
   const [rescheduleError, setRescheduleError] = React.useState<string | null>(null);
+  const [qrBookingId, setQrBookingId] = React.useState<string | null>(null);
 
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => cancelBooking(id, reason),
@@ -84,6 +103,29 @@ export function MyBookingsPage() {
         </Link>
       </div>
 
+      {dashboard && (
+        <div className="mb-6 grid grid-cols-3 gap-3">
+          <Card>
+            <CardContent className="py-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{dashboard.upcomingBookingsCount}</p>
+              <p className="text-xs text-muted-foreground">Upcoming</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{dashboard.pastBookingsCount}</p>
+              <p className="text-xs text-muted-foreground">Completed</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-4 text-center">
+              <p className="text-2xl font-bold text-foreground">{dashboard.wishlistCount}</p>
+              <p className="text-xs text-muted-foreground">Wishlisted</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {isLoading && (
         <div className="space-y-3">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -107,6 +149,24 @@ export function MyBookingsPage() {
               </CardTitle>
               <Badge variant={STATUS_VARIANT[booking.status] ?? "secondary"}>{booking.status}</Badge>
             </CardHeader>
+            {booking.status === "Confirmed" && (
+              <CardContent className="flex flex-wrap gap-2 border-b pb-4">
+                <Link to={`/bookings/${booking.id}/compliance`}>
+                  <Button size="sm" variant="outline">Pre-Drive Check-In</Button>
+                </Link>
+                <Button size="sm" variant="outline" onClick={() => setQrBookingId(qrBookingId === booking.id ? null : booking.id)}>
+                  {qrBookingId === booking.id ? "Hide Check-In Code" : "Show Check-In Code"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => addToCalendar(booking)}>
+                  Add to Calendar
+                </Button>
+              </CardContent>
+            )}
+            {qrBookingId === booking.id && (
+              <CardContent className="border-b py-4">
+                <QrCheckInCode bookingId={booking.id} />
+              </CardContent>
+            )}
             <CardContent className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">Booking ref: {booking.id}</p>
               {CANCELLABLE_STATUSES.has(booking.status) && reschedulingId !== booking.id && (
@@ -177,6 +237,17 @@ export function MyBookingsPage() {
           </Card>
         ))}
       </div>
+
+      {recommendations && recommendations.length > 0 && (
+        <div className="mt-10">
+          <h2 className="mb-4 text-lg font-semibold tracking-tight">Recommended for you</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {recommendations.map((rec, i) => (
+              <VehicleCard key={rec.vehicle.id} vehicle={rec.vehicle} index={i} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

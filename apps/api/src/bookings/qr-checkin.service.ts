@@ -1,0 +1,31 @@
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { AUTH_SCOPE, CHECKIN_TOKEN_TTL_SECONDS } from "../auth/auth.constants";
+
+export interface CheckInToken {
+  token: string;
+  expiresAt: string;
+}
+
+/** Issues and verifies the signed token encoded in a booking's QR check-in code — see CheckInBookingDto.qrToken. */
+@Injectable()
+export class QrCheckinService {
+  constructor(private readonly jwtService: JwtService) {}
+
+  issueToken(bookingId: string): CheckInToken {
+    const token = this.jwtService.sign({ sub: bookingId, scope: AUTH_SCOPE.CHECKIN }, { expiresIn: CHECKIN_TOKEN_TTL_SECONDS });
+    return { token, expiresAt: new Date(Date.now() + CHECKIN_TOKEN_TTL_SECONDS * 1000).toISOString() };
+  }
+
+  verifyToken(token: string, bookingId: string): void {
+    let payload: { sub: string; scope?: string };
+    try {
+      payload = this.jwtService.verify(token);
+    } catch {
+      throw new UnauthorizedException("This QR code is invalid or has expired.");
+    }
+    if (payload.scope !== AUTH_SCOPE.CHECKIN || payload.sub !== bookingId) {
+      throw new UnauthorizedException("This QR code does not match this booking.");
+    }
+  }
+}

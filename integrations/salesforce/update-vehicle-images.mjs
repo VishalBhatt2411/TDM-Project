@@ -15,7 +15,7 @@ const execFileAsync = promisify(execFile);
 async function getConnection() {
   const { stdout } = await execFileAsync(
     "sf",
-    ["org", "display", "--target-org", "tdm-dev", "--json"],
+    ["org", "display", "--target-org", "tdmProjectOrg", "--json"],
     { env: { ...process.env, SF_TEMP_SHOW_SECRETS: "true" }, shell: process.platform === "win32" },
   );
   const { result } = JSON.parse(stdout);

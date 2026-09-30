@@ -12,9 +12,11 @@ export function SalesforceCredentialsPage() {
   const { organizationId } = useParams<{ organizationId: string }>();
   const [consumerKey, setConsumerKey] = React.useState("");
   const [consumerSecret, setConsumerSecret] = React.useState("");
+  const [loginUrl, setLoginUrl] = React.useState("");
 
   const mutation = useMutation({
-    mutationFn: () => saveSalesforceCredentials(organizationId!, { consumerKey, consumerSecret }),
+    mutationFn: () =>
+      saveSalesforceCredentials(organizationId!, { consumerKey, consumerSecret, loginUrl: loginUrl.trim() || undefined }),
     onSuccess: () => {
       // Full-page navigation, same convention as AdminLoginPage's "Login with Salesforce" —
       // this must leave the SPA entirely to reach Salesforce's hosted authorization page.
@@ -52,6 +54,21 @@ export function SalesforceCredentialsPage() {
                 required
                 minLength={10}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="loginUrl">
+                Salesforce Login URL <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="loginUrl"
+                value={loginUrl}
+                onChange={(e) => setLoginUrl(e.target.value)}
+                placeholder="https://your-domain.my.salesforce.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Find this under Setup → My Domain. Leave blank to use the default Salesforce login page — but many orgs require their own My
+                Domain URL here, or the connection will fail with "cross-org OAuth" blocked.
+              </p>
             </div>
             {mutation.isError && (
               <p className="text-sm text-destructive">

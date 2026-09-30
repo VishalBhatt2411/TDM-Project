@@ -15,6 +15,8 @@ interface AuthContextValue {
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => void;
+  /** Re-fetches GET /auth/me — call after a profile update so the rest of the app (nav, booking pre-fill) sees the new details immediately. */
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -25,6 +27,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return token ? decodeCustomerId(token) : null;
   });
   const [profile, setProfile] = React.useState<CustomerDto | null>(null);
+
+  const fetchProfile = React.useCallback(async () => {
+    const { data } = await apiClient.get<CustomerDto>("/auth/me");
+    setProfile(data);
+  }, []);
 
   React.useEffect(() => {
     if (!customerId) {
@@ -44,6 +51,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [customerId]);
+
+  const refreshProfile = React.useCallback(async () => {
+    if (!customerId) return;
+    await fetchProfile();
+  }, [customerId, fetchProfile]);
 
   const applyTokens = React.useCallback((tokens: AuthTokens) => {
     tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);
@@ -100,8 +112,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgotPassword,
       resetPassword,
       logout,
+      refreshProfile,
     }),
-    [customerId, profile, register, verifyOtp, login, magicLogin, forgotPassword, resetPassword, logout],
+    [customerId, profile, register, verifyOtp, login, magicLogin, forgotPassword, resetPassword, logout, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

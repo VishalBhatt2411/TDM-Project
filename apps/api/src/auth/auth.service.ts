@@ -1,14 +1,16 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { AuthRepository, Customer, CustomerRepository, Email, PersonName, PhoneNumber } from "@tdm/domain";
+import { AuthRepository, Customer, CustomerRepository, Email, PersonName, PhoneNumber, TenantContextMissingError } from "@tdm/domain";
 import { CustomerPasswordTokenRepository, generateOtpCode, hashSecret, MagicLoginRepository, sha256Hex, verifySecret } from "@tdm/postgres-adapter";
 import type { CustomerDto } from "@tdm/types";
 import { AUTH_REPOSITORY, CUSTOMER_PASSWORD_TOKEN_REPOSITORY, CUSTOMER_REPOSITORY, MAGIC_LOGIN_REPOSITORY } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
-import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, VerifyOtpDto } from "./dto";
+import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateProfileDto, VerifyOtpDto } from "./dto";
 import { OTP_SENDER, OtpSender } from "./otp-sender";
 import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from "./auth.constants";
+import { env } from "../common/env";
+import { TenantContext } from "../tenancy/tenant-context";
 
 const OTP_TTL_MINUTES = 10;
 const MAGIC_LINK_TTL_MS = 48 * 60 * 60 * 1000;
@@ -83,15 +85,17 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    let payload: { sub: string; scope?: string };
+    let payload: { sub: string; scope?: string; org?: string };
     try {
-      payload = this.jwtService.verify<{ sub: string; scope?: string }>(dto.refreshToken);
+      payload = this.jwtService.verify<{ sub: string; scope?: string; org?: string }>(dto.refreshToken);
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token.");
     }
     if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
       throw new UnauthorizedException("This token is not valid for customer endpoints.");
     }
+    // A customer id is a record in one tenant's org — its session is only ever valid on that tenant's host.
+    TenantContext.bindSession(payload.org);
     const isValid = await this.authRepo.isRefreshTokenValid(payload.sub, sha256Hex(dto.refreshToken));
     if (!isValid) {
       throw new UnauthorizedException("Refresh token has been revoked.");
@@ -132,10 +136,9 @@ export class AuthService {
   async issueMagicLoginLink(customerId: string): Promise<string> {
     const rawToken = randomBytes(32).toString("hex");
     await this.magicLoginRepo.save(customerId, sha256Hex(rawToken), new Date(Date.now() + MAGIC_LINK_TTL_MS));
-    const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
-    const link = `${webOrigin}/magic-login?token=${rawToken}`;
-    this.logger.log(`Magic login link for ${customerId}: ${link}`);
-    return link;
+    // Never log the link itself — it is a bearer credential for this account.
+    this.logger.log(JSON.stringify({ event: "magic_login_link_issued", customerId }));
+    return `${env.webOrigin}/magic-login?token=${rawToken}`;
   }
 
   async verifyMagicLogin(token: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
@@ -155,9 +158,8 @@ export class AuthService {
   async issuePasswordSetupEmail(customerId: string, email: string, name: string, isNewAccount: boolean): Promise<void> {
     const rawToken = randomBytes(32).toString("hex");
     await this.passwordTokens.save(customerId, sha256Hex(rawToken), new Date(Date.now() + PASSWORD_TOKEN_TTL_MS));
-    const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
-    const setupUrl = `${webOrigin}/set-password?token=${rawToken}`;
-    this.logger.log(`Password setup link for ${email}: ${setupUrl}`);
+    const setupUrl = `${env.webOrigin}/set-password?token=${rawToken}`;
+    this.logger.log(JSON.stringify({ event: "password_setup_link_issued", customerId, isNewAccount }));
     await this.notifications.sendPasswordSetup(email, name, setupUrl, isNewAccount);
   }
 
@@ -206,17 +208,35 @@ export class AuthService {
     };
   }
 
+  /** Backs PATCH /auth/me — name/language/marketing-opt-in only; email and phone stay fixed here since they're the verified identity the platform trusts (changing either would require re-verification, not a plain profile edit). */
+  async updateProfile(customerId: string, dto: UpdateProfileDto): Promise<CustomerDto> {
+    const customer = await this.customers.findById(customerId);
+    if (!customer) {
+      throw new UnauthorizedException("Account no longer exists.");
+    }
+    customer.updateProfile({
+      name: dto.firstName || dto.lastName ? PersonName.create(dto.firstName ?? customer.name.firstName, dto.lastName ?? customer.name.lastName) : undefined,
+      preferredLanguage: dto.preferredLanguage,
+      marketingOptIn: dto.marketingOptIn,
+    });
+    await this.customers.save(customer);
+    return this.getProfile(customerId);
+  }
+
   private async issueOtp(customer: Customer): Promise<void> {
     const code = generateOtpCode();
     const codeHash = await hashSecret(code);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
     await this.authRepo.saveOtp(customer.id, codeHash, expiresAt);
-    await this.otpSender.send({ email: customer.email.value, phone: customer.phone.value }, code);
+    await this.otpSender.send({ email: customer.email.value, phone: customer.phone.value }, code, OTP_TTL_MINUTES);
   }
 
   private async issueTokens(customerId: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    const accessToken = this.jwtService.sign({ sub: customerId, scope: AUTH_SCOPE.CUSTOMER }, { expiresIn: ACCESS_TOKEN_TTL });
-    const refreshToken = this.jwtService.sign({ sub: customerId, scope: AUTH_SCOPE.CUSTOMER }, { expiresIn: REFRESH_TOKEN_TTL });
+    const organizationId = TenantContext.currentOrganizationId();
+    if (!organizationId) throw new TenantContextMissingError();
+    const payload = { sub: customerId, scope: AUTH_SCOPE.CUSTOMER, org: organizationId };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: REFRESH_TOKEN_TTL });
     await this.authRepo.saveRefreshToken(customerId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
     return { accessToken, refreshToken, expiresIn: 15 * 60 };
   }

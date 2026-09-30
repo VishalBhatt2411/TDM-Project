@@ -1,67 +1,68 @@
-import { IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, Min } from "class-validator";
-import { StaffRole } from "@tdm/postgres-adapter";
-import { ALL_PERMISSIONS, PermissionKey } from "./permissions";
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from "class-validator";
+import { STAFF_ROLES, StaffRole } from "@tdm/domain";
+import { IsRecordId } from "../common/record-id";
 
-export class CreateStaffUserDto {
-  @IsEmail()
-  email!: string;
-
+export class StaffDirectoryQueryDto {
+  @IsOptional()
   @IsString()
-  name!: string;
+  @MaxLength(80)
+  q?: string;
+}
 
-  @IsEnum(StaffRole)
+/** Grants a Salesforce user a role — the user is picked from GET /admin/users/directory. */
+export class CreateStaffAssignmentDto {
+  @IsRecordId()
+  userId!: string;
+
+  @IsIn(STAFF_ROLES)
   role!: StaffRole;
 
+  /** Required for every role except Company_Admin, which spans all dealerships. */
   @IsOptional()
-  @IsArray()
-  @IsIn(ALL_PERMISSIONS, { each: true })
-  permissions?: PermissionKey[];
+  @IsRecordId()
+  dealershipId?: string;
 
-  /** Dealership profile fields, relevant for a "SalesRep" role — bookings assign to their real Salesforce login once they've signed in once. */
+  /** Required for a Sales_Rep — the branch whose bookings they are auto-assigned. */
   @IsOptional()
-  @IsString()
+  @IsRecordId()
   branchId?: string;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(100)
   maxDailyBookings?: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   phone?: string;
 }
 
-export class UpdateStaffUserDto {
+/** `null` clears an optional field; an omitted field is left unchanged. The user is fixed for an assignment's life. */
+export class UpdateStaffAssignmentDto {
   @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @IsOptional()
-  @IsEnum(StaffRole)
+  @IsIn(STAFF_ROLES)
   role?: StaffRole;
 
-  @IsOptional()
-  @IsArray()
-  @IsIn(ALL_PERMISSIONS, { each: true })
-  permissions?: PermissionKey[];
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsRecordId()
+  dealershipId?: string | null;
 
-  @IsOptional()
-  @IsString()
-  branchId?: string;
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsRecordId()
+  branchId?: string | null;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined && value !== null)
   @IsInt()
   @Min(1)
-  maxDailyBookings?: number;
+  @Max(100)
+  maxDailyBookings?: number | null;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined && value !== null)
   @IsString()
-  phone?: string;
+  @MaxLength(40)
+  phone?: string | null;
 
   @IsOptional()
   @IsBoolean()
@@ -69,7 +70,7 @@ export class UpdateStaffUserDto {
 }
 
 export class AssignSalesRepDto {
-  @IsString()
+  @IsRecordId()
   salesRepId!: string;
 }
 
@@ -81,6 +82,11 @@ export class SetStaffNotesDto {
 export class CheckInBookingDto {
   @IsIn(["QR", "Manual"])
   method!: "QR" | "Manual";
+
+  /** Required when method is "QR" — the signed token read from the customer's check-in code. Verified by QrCheckinService. */
+  @IsOptional()
+  @IsString()
+  qrToken?: string;
 }
 
 export class StartDriveDto {

@@ -5,6 +5,7 @@ import {
   REFRESH_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE_MAX_AGE_MS,
 } from "../auth/auth.constants";
+import { env } from "../common/env";
 
 // Scoped to the whole API (not just /admin) because staff-guarded routes also live
 // outside that prefix — e.g. /api/v1/analytics — and still need the access-token
@@ -14,8 +15,8 @@ const COOKIE_PATH = "/api/v1";
 function baseCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
-    // Secure requires HTTPS; only enforced once the app is actually served over it.
-    secure: process.env.NODE_ENV === "production",
+    // Secure requires HTTPS — always on in production (common/env enforces https origins there).
+    secure: env.isProduction,
     sameSite: "lax",
     path: COOKIE_PATH,
   };

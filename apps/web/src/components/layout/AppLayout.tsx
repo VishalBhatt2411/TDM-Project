@@ -1,14 +1,17 @@
 import * as React from "react";
 import { Link, Outlet } from "react-router-dom";
-import { Car, Clock, Menu, MapPin, Phone, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Car, Clock, Heart, Menu, MapPin, Phone, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { useDealershipConfig } from "@/hooks/use-dealership-config";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export function AppLayout() {
   const { isAuthenticated, logout } = useAuth();
   const { data: dealership } = useDealershipConfig();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const { t } = useTranslation();
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -55,30 +58,42 @@ export function AppLayout() {
 
           <nav className="hidden items-center gap-1 md:flex">
             <Link to="/vehicles" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
-              Explore Vehicles
+              {t("nav.exploreVehicles")}
+            </Link>
+            <Link to="/branches" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+              {t("nav.findABranch")}
             </Link>
             {isAuthenticated && (
-              <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
-                My Test Drives
-              </Link>
+              <>
+                <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                  {t("nav.myTestDrives")}
+                </Link>
+                <Link to="/wishlist" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                  {t("nav.wishlist")}
+                </Link>
+                <Link to="/profile" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                  {t("nav.profile")}
+                </Link>
+              </>
             )}
           </nav>
 
           <div className="flex items-center gap-2">
+            <LanguageSwitcher className="hidden sm:inline-flex" />
             {isAuthenticated ? (
               <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={logout}>
-                Sign out
+                {t("nav.signOut")}
               </Button>
             ) : (
               <Link to="/login" className="hidden px-3 py-2 text-sm text-muted-foreground hover:text-foreground sm:inline">
-                Sign in
+                {t("nav.signIn")}
               </Link>
             )}
             <Link to="/admin/login" className="hidden px-3 py-2 text-sm text-muted-foreground hover:text-foreground sm:inline">
-              Admin Console
+              {t("nav.adminConsole")}
             </Link>
             <Link to="/vehicles" className="hidden sm:inline-block">
-              <Button size="sm">Book a Test Drive</Button>
+              <Button size="sm">{t("nav.bookATestDrive")}</Button>
             </Link>
             <button
               type="button"
@@ -95,28 +110,40 @@ export function AppLayout() {
           <nav className="border-t px-4 py-3 md:hidden">
             <div className="flex flex-col gap-1">
               <Link to="/vehicles" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
-                Explore Vehicles
+                {t("nav.exploreVehicles")}
+              </Link>
+              <Link to="/branches" className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
+                <MapPin className="h-4 w-4" /> {t("nav.findABranch")}
               </Link>
               {isAuthenticated && (
-                <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
-                  My Test Drives
-                </Link>
+                <>
+                  <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
+                    {t("nav.myTestDrives")}
+                  </Link>
+                  <Link to="/wishlist" className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
+                    <Heart className="h-4 w-4" /> {t("nav.wishlist")}
+                  </Link>
+                  <Link to="/profile" className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
+                    <User className="h-4 w-4" /> {t("nav.profile")}
+                  </Link>
+                </>
               )}
               <Link to="/vehicles" className="mt-1" onClick={() => setMobileMenuOpen(false)}>
-                <Button size="sm" className="w-full">Book a Test Drive</Button>
+                <Button size="sm" className="w-full">{t("nav.bookATestDrive")}</Button>
               </Link>
               {isAuthenticated ? (
                 <Button variant="ghost" size="sm" className="justify-start" onClick={() => { logout(); setMobileMenuOpen(false); }}>
-                  Sign out
+                  {t("nav.signOut")}
                 </Button>
               ) : (
                 <Link to="/login" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
-                  Sign in
+                  {t("nav.signIn")}
                 </Link>
               )}
               <Link to="/admin/login" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
-                Admin Console
+                {t("nav.adminConsole")}
               </Link>
+              <LanguageSwitcher className="mt-2 px-3" />
             </div>
           </nav>
         )}

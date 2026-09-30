@@ -12,3 +12,5 @@ export * from "./repositories/customer-password-token.repository";
 export * from "./repositories/staff-user.repository";
 export * from "./repositories/staff-refresh-token.repository";
 export * from "./repositories/staff-oauth-state.repository";
+export * from "./repositories/notification-template.repository";
+export * from "./repositories/asset.repository";

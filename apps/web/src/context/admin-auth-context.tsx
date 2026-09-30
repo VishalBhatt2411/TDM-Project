@@ -1,14 +1,17 @@
 import * as React from "react";
 import { adminApiClient } from "@/lib/admin-api-client";
-
-export type StaffRole = "Admin" | "Manager" | "SalesRep";
+import type { StaffRole } from "@/api/admin";
 
 export interface StaffProfile {
   staffUserId: string;
-  role: StaffRole;
+  name: string;
+  email: string;
+  /** The Salesforce User id bookings are assigned to. */
+  salesRepId: string;
+  isCompanyAdmin: boolean;
+  /** Held in at least one dealership — the API limits each page's data to where it's held. */
   permissions: string[];
-  /** Sales_Rep__c / Salesforce User id this staff account is linked to — undefined until their first "Login with Salesforce". */
-  salesRepId?: string;
+  assignments: { id: string; role: StaffRole; dealershipId?: string; branchId?: string }[];
 }
 
 interface AdminAuthContextValue {
@@ -16,7 +19,8 @@ interface AdminAuthContextValue {
   isAuthenticated: boolean;
   /** True until the initial GET /admin/auth/me call resolves — avoids a login-page flash on reload. */
   isLoading: boolean;
-  loginWithSalesforce: () => void;
+  /** `organizationSlug` picks the company to sign in to; omitted on a company's own address, where the host identifies it. */
+  loginWithSalesforce: (organizationSlug?: string) => void;
   /** Re-checks session state with the backend. Called on mount and after the OAuth redirect lands. */
   refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
@@ -50,8 +54,9 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  const loginWithSalesforce = React.useCallback(() => {
-    window.location.href = "/api/v1/admin/auth/salesforce/login";
+  const loginWithSalesforce = React.useCallback((organizationSlug?: string) => {
+    const query = organizationSlug ? `?org=${encodeURIComponent(organizationSlug)}` : "";
+    window.location.href = `/api/v1/admin/auth/salesforce/login${query}`;
   }, []);
 
   const logout = React.useCallback(async () => {
@@ -63,7 +68,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasPermission = React.useCallback(
-    (key: string) => !!staff && (staff.role === "Admin" || staff.permissions.includes(key)),
+    (key: string) => !!staff && staff.permissions.includes(key),
     [staff],
   );
 

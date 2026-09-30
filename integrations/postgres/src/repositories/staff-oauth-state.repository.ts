@@ -1,42 +1,43 @@
 import { PrismaClient } from "@prisma/client";
 
 /**
- * Backs the "Login with Salesforce" PKCE handshake. The authorization-request step
- * (AdminAuthService.buildAuthorizationUrl) saves the code_verifier here keyed by an
- * opaque, randomly generated `state`; the callback step consumes it exactly once.
- * Keeping the verifier server-side (rather than embedded in the `state` value itself,
- * e.g. as a signed JWT claim) keeps the OAuth redirect URL short and keeps the
- * verifier out of browser history, referrer headers, and access logs.
- *
- * Also backs the onboarding wizard's "Connect Salesforce" handshake (OnboardingService)
- * — same shape/semantics, distinguished by organizationId being set.
+ * Backs both per-tenant OAuth handshakes: staff "Login with Salesforce"
+ * (AdminAuthService) and the onboarding wizard's "Connect Salesforce"
+ * (OnboardingService). The authorization-request step saves the PKCE code_verifier
+ * keyed by an opaque, randomly generated `state`; the callback consumes it exactly
+ * once. Keeping the verifier server-side keeps it out of browser history, referrer
+ * headers and access logs. `purpose` stops a state minted for one flow from being
+ * redeemed by the other's callback.
  */
+export type OAuthStatePurpose = "staff_login" | "onboarding";
+
 export interface ConsumedOAuthState {
   codeVerifier: string;
-  organizationId: string | null;
+  organizationId: string;
 }
 
 export class StaffOAuthStateRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async save(state: string, codeVerifier: string, expiresAt: Date, organizationId?: string): Promise<void> {
-    await this.prisma.staffOAuthState.create({
-      data: { state, codeVerifier, expiresAt, organizationId: organizationId ?? null },
-    });
+  async save(input: {
+    state: string;
+    codeVerifier: string;
+    expiresAt: Date;
+    organizationId: string;
+    purpose: OAuthStatePurpose;
+  }): Promise<void> {
+    await this.prisma.staffOAuthState.create({ data: input });
   }
 
   /**
-   * Single-use: the record is deleted as soon as it's read, regardless of whether
-   * it turns out to be expired, so a `state` value can never be replayed even
-   * within its validity window.
+   * Single-use: the record is deleted atomically as it's claimed, regardless of
+   * whether it turns out to be expired or for another purpose, so a `state` value can
+   * never be replayed — not even by two concurrent callbacks.
    */
-  async consume(state: string): Promise<ConsumedOAuthState | null> {
-    const record = await this.prisma.staffOAuthState.findUnique({ where: { state } });
+  async consume(state: string, purpose: OAuthStatePurpose): Promise<ConsumedOAuthState | null> {
+    const record = await this.prisma.staffOAuthState.delete({ where: { state } }).catch(() => null);
     if (!record) return null;
-
-    await this.prisma.staffOAuthState.delete({ where: { state } }).catch(() => undefined);
-    if (record.expiresAt.getTime() < Date.now()) return null;
-
+    if (record.purpose !== purpose || record.expiresAt.getTime() < Date.now()) return null;
     return { codeVerifier: record.codeVerifier, organizationId: record.organizationId };
   }
 }

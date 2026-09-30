@@ -1,8 +1,15 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { BookingRepository, CustomerRepository, VehicleRepository } from "@tdm/domain";
-import { FollowUpLogRepository } from "@tdm/postgres-adapter";
-import { BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, FOLLOW_UP_LOG_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
+import { FollowUpLogRepository, OrganizationRepository } from "@tdm/postgres-adapter";
+import {
+  BOOKING_REPOSITORY,
+  CUSTOMER_REPOSITORY,
+  FOLLOW_UP_LOG_REPOSITORY,
+  ORGANIZATION_REPOSITORY,
+  VEHICLE_REPOSITORY,
+} from "../infrastructure/tokens";
+import { runForEachTenant } from "../tenancy/tenant-context";
 import { NotificationsService } from "../notifications/notifications.service";
 
 const FOLLOW_UP_INTERVALS_DAYS = [3, 7, 14];
@@ -10,7 +17,7 @@ const FOLLOW_UP_INTERVALS_DAYS = [3, 7, 14];
 /**
  * Once a day, checks completed test drives with no resulting sales opportunity and
  * sends a follow-up nudge at 3/7/14 days post-drive. FollowUpLogRepository ensures
- * each (booking, interval) pair is only ever sent once.
+ * each (booking, interval) pair is only ever sent once. Runs per connected tenant.
  */
 @Injectable()
 export class FollowUpScheduler {
@@ -21,15 +28,23 @@ export class FollowUpScheduler {
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     @Inject(FOLLOW_UP_LOG_REPOSITORY) private readonly followUpLog: FollowUpLogRepository,
+    @Inject(ORGANIZATION_REPOSITORY) private readonly organizations: OrganizationRepository,
     private readonly notifications: NotificationsService,
   ) {}
 
   @Cron("0 10 * * *")
   async sendDueFollowUps(): Promise<void> {
     const now = new Date();
-    for (const days of FOLLOW_UP_INTERVALS_DAYS) {
-      await this.processInterval(days, now);
-    }
+    await runForEachTenant(
+      await this.organizations.listConnectedIds(),
+      async () => {
+        for (const days of FOLLOW_UP_INTERVALS_DAYS) {
+          await this.processInterval(days, now);
+        }
+      },
+      this.logger,
+      "follow_up_job_failed",
+    );
   }
 
   private async processInterval(days: number, now: Date): Promise<void> {

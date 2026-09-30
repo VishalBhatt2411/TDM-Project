@@ -28,5 +28,12 @@ export const REFRESH_TOKEN_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_MS;
 export const AUTH_SCOPE = {
   CUSTOMER: "customer",
   STAFF: "staff",
+  CHECKIN: "checkin",
 } as const;
 export type AuthScope = (typeof AUTH_SCOPE)[keyof typeof AUTH_SCOPE];
+
+// --- QR check-in token (customer-generated, staff-scanned at the booking) ---
+// Deliberately long-lived relative to a single slot: a customer may open their booking
+// and show the code any time on the day of the drive, not only in the exact 30-minute
+// window, and clock skew between issue and scan should never cause a spurious failure.
+export const CHECKIN_TOKEN_TTL_SECONDS = 12 * 60 * 60;

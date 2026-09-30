@@ -1,37 +1,18 @@
 import { PrismaClient } from "@prisma/client";
 
-/** Strongly typed staff roles — invalid role values cannot be assigned at compile time. */
-export enum StaffRole {
-  Admin = "Admin",
-  Manager = "Manager",
-  SalesRep = "SalesRep",
-}
-
-const STAFF_ROLE_VALUES: readonly string[] = Object.values(StaffRole);
-
-/** Validates a raw DB/JWT string against the known role set instead of blindly casting it. */
-export function toStaffRole(value: string): StaffRole {
-  if (STAFF_ROLE_VALUES.includes(value)) {
-    return value as StaffRole;
-  }
-  throw new Error(`Unknown staff role: "${value}"`);
-}
-
+/**
+ * A staff member's local identity — the anchor for sessions and refresh tokens. Access (roles,
+ * dealerships, branch) is never stored here: it is derived from the business-data provider's
+ * staff assignments on every authorization, so revoking an assignment takes effect immediately.
+ */
 export interface StaffUserRecord {
   id: string;
+  /** Owning tenant — every lookup outside a by-id read is scoped by it. */
+  organizationId: string;
+  /** The provider user id (a Salesforce User Id) — the id bookings are assigned to and assignments are keyed by. */
+  salesforceUserId: string;
   email: string;
   name: string;
-  /** Populated just-in-time on first successful Salesforce login — this IS the id bookings are assigned to (Booking__c.OwnerId). */
-  salesforceUserId: string | null;
-  role: StaffRole;
-  permissions: string[];
-  /** Dealership branch this rep operates out of — used for auto-assignment matching. */
-  branchId: string | null;
-  maxDailyBookings: number | null;
-  phone: string | null;
-  isActive: boolean;
-  /** Owning tenant — null for the single-tenant deployment's pre-existing staff (see Organization). */
-  organizationId: string | null;
   createdAt: Date;
 }
 
@@ -43,68 +24,31 @@ export class StaffUserRepository {
     return record ? toRecord(record) : null;
   }
 
-  async findByEmail(email: string): Promise<StaffUserRecord | null> {
-    const record = await this.prisma.staffUser.findUnique({ where: { email: email.toLowerCase() } });
+  async findBySalesforceUserId(organizationId: string, salesforceUserId: string): Promise<StaffUserRecord | null> {
+    const record = await this.prisma.staffUser.findUnique({
+      where: { organizationId_salesforceUserId: { organizationId, salesforceUserId } },
+    });
     return record ? toRecord(record) : null;
   }
 
-  /** The Salesforce User id (Booking__c.OwnerId) a rep is assigned bookings under — only populated after their first login. */
-  async findBySalesforceUserId(salesforceUserId: string): Promise<StaffUserRecord | null> {
-    const record = await this.prisma.staffUser.findUnique({ where: { salesforceUserId } });
-    return record ? toRecord(record) : null;
-  }
-
-  async findAll(): Promise<StaffUserRecord[]> {
-    const records = await this.prisma.staffUser.findMany({ orderBy: { createdAt: "asc" } });
-    return records.map(toRecord);
-  }
-
-  async create(input: {
+  /**
+   * Called on every successful sign-in: creates the local identity on first login and keeps its
+   * email/name in sync with the provider afterwards. The composite key makes concurrent first
+   * logins converge on one row.
+   */
+  async upsertFromIdentity(input: {
+    organizationId: string;
+    salesforceUserId: string;
     email: string;
     name: string;
-    role: StaffRole;
-    permissions?: string[];
-    branchId?: string;
-    maxDailyBookings?: number;
-    phone?: string;
-    organizationId?: string;
   }): Promise<StaffUserRecord> {
-    const record = await this.prisma.staffUser.create({
-      data: {
-        email: input.email.toLowerCase(),
-        name: input.name,
-        role: input.role,
-        permissions: input.permissions ?? [],
-        branchId: input.branchId ?? null,
-        maxDailyBookings: input.maxDailyBookings ?? null,
-        phone: input.phone ?? null,
-        organizationId: input.organizationId ?? null,
+    const email = input.email.toLowerCase();
+    const record = await this.prisma.staffUser.upsert({
+      where: {
+        organizationId_salesforceUserId: { organizationId: input.organizationId, salesforceUserId: input.salesforceUserId },
       },
-    });
-    return toRecord(record);
-  }
-
-  /** Recorded just-in-time on a staff user's first successful Salesforce login — matching itself is by email, not this field. */
-  async linkSalesforceUserId(id: string, salesforceUserId: string): Promise<void> {
-    await this.prisma.staffUser.update({ where: { id }, data: { salesforceUserId } });
-  }
-
-  async update(
-    id: string,
-    input: {
-      name?: string;
-      email?: string;
-      role?: StaffRole;
-      permissions?: string[];
-      branchId?: string | null;
-      maxDailyBookings?: number | null;
-      phone?: string | null;
-      isActive?: boolean;
-    },
-  ): Promise<StaffUserRecord> {
-    const record = await this.prisma.staffUser.update({
-      where: { id },
-      data: { ...input, email: input.email?.toLowerCase() },
+      create: { organizationId: input.organizationId, salesforceUserId: input.salesforceUserId, email, name: input.name },
+      update: { email, name: input.name },
     });
     return toRecord(record);
   }
@@ -112,30 +56,18 @@ export class StaffUserRepository {
 
 function toRecord(record: {
   id: string;
+  organizationId: string;
+  salesforceUserId: string;
   email: string;
   name: string;
-  salesforceUserId: string | null;
-  role: string;
-  permissions: string[];
-  branchId: string | null;
-  maxDailyBookings: number | null;
-  phone: string | null;
-  isActive: boolean;
-  organizationId: string | null;
   createdAt: Date;
 }): StaffUserRecord {
   return {
     id: record.id,
+    organizationId: record.organizationId,
+    salesforceUserId: record.salesforceUserId,
     email: record.email,
     name: record.name,
-    salesforceUserId: record.salesforceUserId,
-    role: toStaffRole(record.role),
-    permissions: record.permissions,
-    branchId: record.branchId,
-    maxDailyBookings: record.maxDailyBookings,
-    phone: record.phone,
-    isActive: record.isActive,
-    organizationId: record.organizationId,
     createdAt: record.createdAt,
   };
 }

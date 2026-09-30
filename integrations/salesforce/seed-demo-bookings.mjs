@@ -2,7 +2,8 @@
  * Adds a realistic spread of demo Booking__c (+ Drive_Feedback__c for completed
  * ones) records so the new LWC dashboard has meaningful data to visualize.
  * Non-destructive: does not touch existing bookings, reuses the org's existing
- * sample Contacts, and the catalog's existing Vehicle__c/Sales_Rep__c/Branch__c records.
+ * sample Contacts, and the catalog's existing Vehicle__c stock — each booking takes its
+ * branch, dealership and model from the vehicle so it satisfies the scoping rules.
  *
  * Usage: node seed-demo-bookings.mjs
  */
@@ -15,7 +16,7 @@ const execFileAsync = promisify(execFile);
 async function getConnection() {
   const { stdout } = await execFileAsync(
     "sf",
-    ["org", "display", "--target-org", "tdm-dev", "--json"],
+    ["org", "display", "--target-org", "tdmProjectOrg", "--json"],
     { env: { ...process.env, SF_TEMP_SHOW_SECRETS: "true" }, shell: process.platform === "win32" },
   );
   const { result } = JSON.parse(stdout);
@@ -51,14 +52,13 @@ function daysFromNow(days, hour) {
 async function main() {
   const conn = await getConnection();
 
-  const [contacts, vehicles, branches] = await Promise.all([
+  const [contacts, vehicles] = await Promise.all([
     conn.query("SELECT Id FROM Contact LIMIT 25"),
-    conn.query("SELECT Id FROM Vehicle__c"),
-    conn.query("SELECT Id FROM Branch__c"),
+    conn.query("SELECT Id, Branch__c, Dealership__c, Vehicle_Model__c FROM Vehicle__c WHERE Branch__c != null"),
   ]);
 
-  if (!contacts.records.length || !vehicles.records.length || !branches.records.length) {
-    throw new Error("Missing prerequisite data (contacts/vehicles/branches) — run seed-catalog.mjs first.");
+  if (!contacts.records.length || !vehicles.records.length) {
+    throw new Error("Missing prerequisite data (contacts/vehicles) — run seed-catalog.mjs first.");
   }
 
   const bookingRecords = [];
@@ -76,10 +76,13 @@ async function main() {
     const start = daysFromNow(dayOffset, hour);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
 
+    const vehicle = vehicles.records[i % vehicles.records.length];
     bookingRecords.push({
       Contact__c: contacts.records[i % contacts.records.length].Id,
-      Vehicle__c: vehicles.records[i % vehicles.records.length].Id,
-      Branch__c: branches.records[i % branches.records.length].Id,
+      Vehicle__c: vehicle.Id,
+      Branch__c: vehicle.Branch__c,
+      Dealership__c: vehicle.Dealership__c,
+      Vehicle_Model__c: vehicle.Vehicle_Model__c,
       // No Sales_Rep__c field anymore — bookings are assigned to real Salesforce Users
       // (OwnerId) via the app itself; these demo rows default-own to the running user.
       Drive_Type__c: DRIVE_TYPES[i % DRIVE_TYPES.length],

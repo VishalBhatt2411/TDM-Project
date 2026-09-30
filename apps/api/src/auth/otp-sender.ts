@@ -1,22 +1,23 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import { NotificationsService } from "../notifications/notifications.service";
 
 export const OTP_SENDER = Symbol("OtpSender");
 
 export interface OtpSender {
-  send(destination: { email: string; phone: string }, code: string): Promise<void>;
+  send(destination: { email: string; phone: string }, code: string, ttlMinutes: number): Promise<void>;
 }
 
 /**
- * Dev-mode OTP delivery: logs the code instead of calling a real SMS/WhatsApp/email
- * gateway. Real functioning behavior for local development — swapping in Twilio/
- * WhatsApp Business API/SES later (Phase 1 FR-57) means providing another OtpSender
- * implementation and rebinding it in AuthModule; nothing else in the app changes.
+ * Delivers the OTP by email through the same NotificationsService/EmailSender pipeline as
+ * every other transactional message. The code itself is never logged. Adding SMS/WhatsApp
+ * delivery (FR-57) means providing another OtpSender implementation and rebinding
+ * OTP_SENDER in AuthModule; nothing else in the app changes.
  */
 @Injectable()
-export class ConsoleOtpSender implements OtpSender {
-  private readonly logger = new Logger(ConsoleOtpSender.name);
+export class EmailOtpSender implements OtpSender {
+  constructor(private readonly notifications: NotificationsService) {}
 
-  async send(destination: { email: string; phone: string }, code: string): Promise<void> {
-    this.logger.log(`OTP for ${destination.email} / ${destination.phone}: ${code}`);
+  async send(destination: { email: string; phone: string }, code: string, ttlMinutes: number): Promise<void> {
+    await this.notifications.sendOtpCode(destination.email, code, ttlMinutes);
   }
 }

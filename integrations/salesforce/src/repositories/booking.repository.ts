@@ -1,10 +1,24 @@
 import { Booking, BookingListFilter, BookingRepository, BookingStatus, ComplianceRecord, DriveFeedback, UNASSIGNED_ID } from "@tdm/domain";
-import { SalesforceConnectionProvider } from "../connection";
-import { bookingRecordToDomain, bookingToRecord, complianceToRecord, feedbackRecordToDomain, feedbackToRecord } from "../mappers";
-import { BOOKING_FIELDS, DRIVE_FEEDBACK_FIELDS, escapeSoql, withConnection } from "../soql";
+import { SalesforceConnectionSource } from "../connection-source";
+import {
+  bookingRecordToDomain,
+  bookingToRecord,
+  complianceRecordToDomain,
+  complianceToRecord,
+  feedbackRecordToDomain,
+  feedbackToRecord,
+} from "../mappers";
+import {
+  BOOKING_FIELDS,
+  COMPLIANCE_RECORD_FIELDS,
+  dealershipCondition,
+  DRIVE_FEEDBACK_FIELDS,
+  escapeSoql,
+  withConnection,
+} from "../soql";
 
 export class SalesforceBookingRepository implements BookingRepository {
-  constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
 
   async findById(id: string): Promise<Booking | null> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
@@ -34,6 +48,8 @@ export class SalesforceBookingRepository implements BookingRepository {
       if (filter.status) clauses.push(`Status__c = '${escapeSoql(filter.status)}'`);
       if (filter.branchId) clauses.push(`Branch__c = '${escapeSoql(filter.branchId)}'`);
       if (filter.salesRepId) clauses.push(`OwnerId = '${escapeSoql(filter.salesRepId)}'`);
+      const dealership = dealershipCondition("Dealership__c", filter.dealershipIds);
+      if (dealership) clauses.push(dealership);
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
 
       const page = safeInt(filter.page, 1);
@@ -122,10 +138,32 @@ export class SalesforceBookingRepository implements BookingRepository {
 
   async saveCompliance(record: ComplianceRecord): Promise<void> {
     await withConnection(this.connectionProvider, async (conn) => {
-      const created = await conn.sobject("Compliance_Record__c").create(complianceToRecord(record));
+      const props = record.toProps();
+      const fields = complianceToRecord(record);
+      const existing = await conn.query(
+        `SELECT Id FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(props.bookingId)}' LIMIT 1`,
+      );
+      if (existing.records[0]) {
+        const updated = await conn.sobject("Compliance_Record__c").update({ Id: (existing.records[0] as any).Id, ...fields });
+        if (!(updated as any).success) {
+          throw new Error(`Failed to update Compliance_Record__c for booking ${props.bookingId}: ${JSON.stringify((updated as any).errors)}`);
+        }
+        return;
+      }
+      const created = await conn.sobject("Compliance_Record__c").create(fields);
       if (!(created as any).success) {
         throw new Error(`Failed to create Compliance_Record__c: ${JSON.stringify((created as any).errors)}`);
       }
+    });
+  }
+
+  async findComplianceByBooking(bookingId: string): Promise<ComplianceRecord | null> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const result = await conn.query(
+        `SELECT ${COMPLIANCE_RECORD_FIELDS} FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(bookingId)}' LIMIT 1`,
+      );
+      const record = result.records[0];
+      return record ? complianceRecordToDomain(record) : null;
     });
   }
 

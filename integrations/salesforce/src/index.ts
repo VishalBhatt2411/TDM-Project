@@ -1,4 +1,6 @@
-export * from "./connection";
+export * from "./connection-source";
+export * from "./tenant-connection-provider";
+export * from "./email-sender";
 export * from "./identity-provider";
 export * from "./metadata-deploy";
 export * from "./repositories/customer.repository";
@@ -7,3 +9,5 @@ export * from "./repositories/booking.repository";
 export * from "./repositories/inventory.repository";
 export * from "./repositories/opportunity.repository";
 export * from "./repositories/analytics.repository";
+export * from "./repositories/dealership.repository";
+export * from "./repositories/staff.repository";

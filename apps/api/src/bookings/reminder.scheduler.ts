@@ -1,8 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { BookingRepository, CustomerRepository } from "@tdm/domain";
-import { ReminderLogRepository, ReminderType } from "@tdm/postgres-adapter";
-import { BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, REMINDER_LOG_REPOSITORY } from "../infrastructure/tokens";
+import { OrganizationRepository, ReminderLogRepository, ReminderType } from "@tdm/postgres-adapter";
+import { BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, ORGANIZATION_REPOSITORY, REMINDER_LOG_REPOSITORY } from "../infrastructure/tokens";
+import { runForEachTenant } from "../tenancy/tenant-context";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 
@@ -10,6 +11,8 @@ import { BookingEmailContextService } from "../notifications/booking-email-conte
  * Sends 24h / 2h / day-of test-drive reminders. Runs every 15 minutes and scans a
  * window around each threshold; ReminderLogRepository guarantees each booking gets
  * at most one reminder per type even though the window is scanned repeatedly.
+ * Each connected tenant is processed in its own context; one org's failure never
+ * blocks another's reminders.
  */
 @Injectable()
 export class ReminderScheduler {
@@ -19,6 +22,7 @@ export class ReminderScheduler {
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(REMINDER_LOG_REPOSITORY) private readonly reminderLog: ReminderLogRepository,
+    @Inject(ORGANIZATION_REPOSITORY) private readonly organizations: OrganizationRepository,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
   ) {}
@@ -26,9 +30,16 @@ export class ReminderScheduler {
   @Cron("*/15 * * * *")
   async sendDueReminders(): Promise<void> {
     const now = new Date();
-    await this.processWindow("24h", addHours(now, 23), addHours(now, 25));
-    await this.processWindow("2h", addHours(now, 1.5), addHours(now, 2.5));
-    await this.processWindow("day_of", startOfDay(now), endOfDay(now));
+    await runForEachTenant(
+      await this.organizations.listConnectedIds(),
+      async () => {
+        await this.processWindow("24h", addHours(now, 23), addHours(now, 25));
+        await this.processWindow("2h", addHours(now, 1.5), addHours(now, 2.5));
+        await this.processWindow("day_of", startOfDay(now), endOfDay(now));
+      },
+      this.logger,
+      "reminder_job_failed",
+    );
   }
 
   private async processWindow(type: ReminderType, start: Date, end: Date): Promise<void> {

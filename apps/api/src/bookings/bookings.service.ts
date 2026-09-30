@@ -5,6 +5,7 @@ import {
   BookingConflictChecker,
   BookingConflictError,
   BookingRepository,
+  BranchRepository,
   CustomerRepository,
   DriveFeedback,
   PersonName,
@@ -19,6 +20,7 @@ import { BookingDto } from "@tdm/types";
 import { AuthService } from "../auth/auth.service";
 import {
   BOOKING_REPOSITORY,
+  BRANCH_REPOSITORY,
   CUSTOMER_REPOSITORY,
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
@@ -26,6 +28,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 import { BookingMutationService } from "./booking-mutation.service";
+import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
 
 export function bookingToDto(booking: Booking): BookingDto {
@@ -35,6 +38,7 @@ export function bookingToDto(booking: Booking): BookingDto {
     customerId: props.customerId,
     vehicleId: props.vehicleId,
     branchId: props.branchId,
+    dealershipId: props.dealershipId,
     salesRepId: props.salesRepId,
     driveType: props.driveType,
     slot: { start: props.slot.start.toISOString(), end: props.slot.end.toISOString() },
@@ -62,6 +66,7 @@ export class BookingsService {
 
   constructor(
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
+    @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(SALES_OPPORTUNITY_REPOSITORY) private readonly opportunities: SalesOpportunityRepository,
@@ -69,6 +74,7 @@ export class BookingsService {
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
     private readonly mutations: BookingMutationService,
+    private readonly qrCheckin: QrCheckinService,
   ) {}
 
   /** Authenticated booking creation — for a customer who already has an account/session. */
@@ -157,6 +163,14 @@ export class BookingsService {
     return bookingToDto(booking);
   }
 
+  async getCheckInToken(customerId: string, bookingId: string): Promise<CheckInToken> {
+    const booking = await this.requireOwnedBooking(customerId, bookingId);
+    if (booking.status !== "Confirmed") {
+      throw new ForbiddenException("A check-in code is only available for a confirmed booking.");
+    }
+    return this.qrCheckin.issueToken(booking.id);
+  }
+
   async cancel(customerId: string, bookingId: string, dto: CancelBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
     const cancelled = await this.mutations.cancelBooking(booking, dto.reason, customerId);
@@ -206,6 +220,9 @@ export class BookingsService {
 
   private async createBookingInternal(customerId: string, dto: CreateBookingDto): Promise<Booking> {
     const slot = TimeSlot.create(dto.slot.start, dto.slot.end);
+    // The dealership is derived from the branch, never taken from the request.
+    const branch = await this.branches.findById(dto.branchId);
+    if (!branch || !branch.isActive) throw new NotFoundException("Branch not found.");
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
     let joinWaitlist = false;
@@ -221,7 +238,8 @@ export class BookingsService {
     let booking = Booking.request({
       customerId,
       vehicleId: dto.vehicleId,
-      branchId: dto.branchId,
+      dealershipId: branch.dealershipId,
+      branchId: branch.id,
       driveType: dto.driveType,
       slot,
       homeAddress: dto.homeAddress,

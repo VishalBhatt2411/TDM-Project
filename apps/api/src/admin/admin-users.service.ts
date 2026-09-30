@@ -1,120 +1,142 @@
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { AuditLogRepository } from "@tdm/domain";
-import { StaffRole, StaffUserRepository } from "@tdm/postgres-adapter";
-import { AUDIT_LOG_REPOSITORY, STAFF_USER_REPOSITORY } from "../infrastructure/tokens";
-import { NotificationsService } from "../notifications/notifications.service";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  AuditLogRepository,
+  BranchRepository,
+  StaffAssignment,
+  StaffAssignmentRepository,
+  StaffDirectory,
+  StaffRole,
+} from "@tdm/domain";
+import { AUDIT_LOG_REPOSITORY, BRANCH_REPOSITORY, STAFF_ASSIGNMENT_REPOSITORY, STAFF_DIRECTORY } from "../infrastructure/tokens";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
-import { CreateStaffUserDto, UpdateStaffUserDto } from "./dto";
+import { PERMISSIONS } from "./permissions";
+import type { StaffAccess } from "./staff-access";
+import { StaffAccessService } from "./staff-access.service";
+import { CreateStaffAssignmentDto, UpdateStaffAssignmentDto } from "./dto";
 
+/**
+ * Grants and edits staff assignments. The actor may only touch assignments at dealerships
+ * where they hold MANAGE_USERS, and only a Company Admin may grant or modify the Company
+ * Admin role — otherwise MANAGE_USERS would be a privilege-escalation path to every dealership.
+ */
 @Injectable()
 export class AdminUsersService {
   constructor(
-    @Inject(STAFF_USER_REPOSITORY) private readonly staffUsers: StaffUserRepository,
+    @Inject(STAFF_ASSIGNMENT_REPOSITORY) private readonly assignments: StaffAssignmentRepository,
+    @Inject(STAFF_DIRECTORY) private readonly directory: StaffDirectory,
+    @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
-    private readonly notifications: NotificationsService,
+    private readonly staffAccess: StaffAccessService,
   ) {}
 
-  async list() {
-    const users = await this.staffUsers.findAll();
-    return users.map(toPublicDto);
+  async list(access: StaffAccess) {
+    const scope = access.scopeFor(PERMISSIONS.MANAGE_USERS) ?? { dealershipIds: [] };
+    const assignments = await this.assignments.findAll({ ...scope, includeInactive: true });
+    return assignments.map(toPublicDto);
   }
 
-  async create(dto: CreateStaffUserDto, actor: AuthenticatedStaff) {
-    // A Manager holding "manage_users" (a grantable permission) must not be able to
-    // create a fellow Admin — only an actual Admin can mint another Admin. Without
-    // this check, "manage_users" would be an indirect full-privilege-escalation path.
-    if (dto.role === StaffRole.Admin && actor.role !== StaffRole.Admin) {
-      throw new ForbiddenException("Only an Admin can create another Admin account.");
-    }
-
-    const existing = await this.staffUsers.findByEmail(dto.email);
-    if (existing) {
-      throw new ConflictException("A staff user with this email already exists.");
-    }
-
-    const staff = await this.staffUsers.create({
-      email: dto.email,
-      name: dto.name,
-      role: dto.role,
-      permissions: dto.permissions ?? [],
-      branchId: dto.branchId,
-      maxDailyBookings: dto.maxDailyBookings,
-      phone: dto.phone,
-    });
-
-    const webOrigin = process.env.ADMIN_WEB_ORIGIN ?? process.env.WEB_ORIGIN ?? "http://localhost:5173";
-    await this.notifications.sendStaffAccessGranted(staff.email, staff.name, staff.role, `${webOrigin}/admin/login`);
-    await this.auditLog.append({
-      actorId: actor.staffUserId,
-      action: "STAFF_USER_CREATED",
-      entityType: "StaffUser",
-      entityId: staff.id,
-      metadata: { email: staff.email, role: staff.role },
-    });
-
-    return toPublicDto(staff);
+  searchDirectory(query?: string) {
+    return this.directory.search(query);
   }
 
-  async update(id: string, dto: UpdateStaffUserDto, actor: AuthenticatedStaff) {
-    const existing = await this.staffUsers.findById(id);
-    if (!existing) {
-      throw new NotFoundException("Staff user not found.");
+  async create(dto: CreateStaffAssignmentDto, actor: AuthenticatedStaff, access: StaffAccess) {
+    this.assertMayGrant(access, dto.role, dto.dealershipId);
+    const user = await this.directory.findById(dto.userId);
+    if (!user?.isActive) {
+      throw new BadRequestException("Unknown or inactive Salesforce user.");
     }
+    await this.assertBranchInDealership(dto.branchId, dto.dealershipId);
 
-    // Same privilege-escalation guard as create(): a non-Admin (even one with
-    // "manage_users") can neither promote someone to Admin nor modify an existing
-    // Admin's role/permissions/active status — only an Admin can touch Admin accounts.
-    const targetIsOrWouldBeAdmin = existing.role === StaffRole.Admin || dto.role === StaffRole.Admin;
-    if (targetIsOrWouldBeAdmin && actor.role !== StaffRole.Admin) {
-      throw new ForbiddenException("Only an Admin can modify an Admin account or grant the Admin role.");
-    }
-
-    if (dto.email && dto.email.toLowerCase() !== existing.email) {
-      const conflicting = await this.staffUsers.findByEmail(dto.email);
-      if (conflicting && conflicting.id !== id) {
-        throw new ConflictException("A staff user with this email already exists.");
-      }
-    }
-
-    const updated = await this.staffUsers.update(id, dto);
-
+    const saved = await this.assignments.save(
+      StaffAssignment.create({
+        userId: user.id,
+        role: dto.role,
+        dealershipId: dto.dealershipId,
+        branchId: dto.branchId,
+        maxDailyBookings: dto.maxDailyBookings,
+        phone: dto.phone,
+      }),
+    );
+    this.staffAccess.invalidate(actor.organizationId, saved.userId);
     await this.auditLog.append({
       actorId: actor.staffUserId,
-      action: "STAFF_USER_UPDATED",
-      entityType: "StaffUser",
+      action: "STAFF_ASSIGNMENT_CREATED",
+      entityType: "StaffAssignment",
+      entityId: saved.id,
+      metadata: { userId: saved.userId, role: saved.role, dealershipId: saved.dealershipId ?? null },
+    });
+    return toPublicDto(StaffAssignment.restore({ ...saved.toProps(), userName: user.name, userEmail: user.email }));
+  }
+
+  async update(id: string, dto: UpdateStaffAssignmentDto, actor: AuthenticatedStaff, access: StaffAccess) {
+    const existing = await this.assignments.findById(id);
+    // An assignment outside the actor's scope is indistinguishable from a nonexistent one.
+    if (!existing || !this.mayManage(access, existing.role, existing.dealershipId)) {
+      throw new NotFoundException("Staff assignment not found.");
+    }
+
+    const patch = {
+      ...(dto.role !== undefined && { role: dto.role }),
+      ...(dto.dealershipId !== undefined && { dealershipId: dto.dealershipId ?? undefined }),
+      ...(dto.branchId !== undefined && { branchId: dto.branchId ?? undefined }),
+      ...(dto.maxDailyBookings !== undefined && { maxDailyBookings: dto.maxDailyBookings ?? undefined }),
+      ...(dto.phone !== undefined && { phone: dto.phone ?? undefined }),
+      ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+    };
+    existing.update(patch);
+    this.assertMayGrant(access, existing.role, existing.dealershipId);
+    if (dto.branchId !== undefined || dto.dealershipId !== undefined) {
+      await this.assertBranchInDealership(existing.branchId, existing.dealershipId);
+    }
+
+    const saved = await this.assignments.save(existing);
+    this.staffAccess.invalidate(actor.organizationId, saved.userId);
+    await this.auditLog.append({
+      actorId: actor.staffUserId,
+      action: "STAFF_ASSIGNMENT_UPDATED",
+      entityType: "StaffAssignment",
       entityId: id,
-      metadata: { ...dto },
+      metadata: { userId: saved.userId, ...dto },
     });
+    return toPublicDto(saved);
+  }
 
-    return toPublicDto(updated);
+  private mayManage(access: StaffAccess, role: StaffRole, dealershipId: string | undefined): boolean {
+    if (role === "Company_Admin" || !dealershipId) return access.isCompanyAdmin;
+    return access.canIn(PERMISSIONS.MANAGE_USERS, dealershipId);
+  }
+
+  private assertMayGrant(access: StaffAccess, role: StaffRole, dealershipId: string | undefined): void {
+    if (role === "Company_Admin" && !access.isCompanyAdmin) {
+      throw new ForbiddenException("Only a Company Admin can grant or modify the Company Admin role.");
+    }
+    if (role !== "Company_Admin" && dealershipId && !access.canIn(PERMISSIONS.MANAGE_USERS, dealershipId)) {
+      throw new ForbiddenException("You can only manage staff at your own dealership.");
+    }
+  }
+
+  /** A Sales Rep's branch must belong to the assignment's dealership, or they'd be auto-assigned another dealership's drives. */
+  private async assertBranchInDealership(branchId: string | undefined, dealershipId: string | undefined): Promise<void> {
+    if (!branchId) return;
+    const branch = await this.branches.findById(branchId);
+    if (!branch || branch.dealershipId !== dealershipId) {
+      throw new BadRequestException("The branch must belong to the assignment's dealership.");
+    }
   }
 }
 
-function toPublicDto(staff: {
-  id: string;
-  email: string;
-  name: string;
-  salesforceUserId: string | null;
-  role: StaffRole;
-  permissions: string[];
-  branchId: string | null;
-  maxDailyBookings: number | null;
-  phone: string | null;
-  isActive: boolean;
-  createdAt: Date;
-}) {
+function toPublicDto(assignment: StaffAssignment) {
+  const props = assignment.toProps();
   return {
-    id: staff.id,
-    email: staff.email,
-    name: staff.name,
-    role: staff.role,
-    permissions: staff.permissions,
-    // A rep is only assignable bookings once they've logged in via Salesforce at least once.
-    hasLoggedInWithSalesforce: !!staff.salesforceUserId,
-    branchId: staff.branchId ?? undefined,
-    maxDailyBookings: staff.maxDailyBookings ?? undefined,
-    phone: staff.phone ?? undefined,
-    isActive: staff.isActive,
-    createdAt: staff.createdAt.toISOString(),
+    id: props.id,
+    userId: props.userId,
+    userName: props.userName,
+    userEmail: props.userEmail,
+    role: props.role,
+    dealershipId: props.dealershipId,
+    branchId: props.branchId,
+    isActive: props.isActive,
+    maxDailyBookings: props.maxDailyBookings,
+    phone: props.phone,
   };
 }

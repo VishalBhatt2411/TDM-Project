@@ -3,7 +3,11 @@ private class TDMDashboardControllerTest {
 
     @TestSetup
     static void setup() {
-        Branch__c branch = new Branch__c(Name = 'Test Branch', City__c = 'Indore', State__c = 'MP', Country__c = 'India', Is_Active__c = true);
+        Dealership__c dealership = new Dealership__c(Name = 'Test Dealer', Url_Slug__c = 'tdm-dashboard-test');
+        insert dealership;
+
+        // Vehicle and booking inherit the branch's dealership (TdmDealershipDefaults).
+        Branch__c branch = new Branch__c(Name = 'Test Branch', City__c = 'Indore', State__c = 'MP', Country__c = 'India', Is_Active__c = true, Dealership__c = dealership.Id);
         insert branch;
 
         Vehicle__c vehicle = new Vehicle__c(
@@ -39,12 +43,13 @@ private class TDMDashboardControllerTest {
     }
 
     /**
-     * A rep exactly as production provisions one: Standard Platform User profile plus the
-     * TDM_Sales_Rep permission set. That permission set is what grants Booking__c read
-     * (required even to be made a record's owner) while withholding View All Records.
+     * A rep exactly as production provisions one: Standard User profile (a full Salesforce
+     * license — staff work customer queries as Cases, which a Platform license can't edit)
+     * plus the TDM_Sales_Rep permission set. That permission set is what grants Booking__c
+     * read (required even to be made a record's owner) while withholding View All Records.
      */
     private static User createRep(String aliasPrefix) {
-        Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard Platform User' LIMIT 1];
+        Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
         User rep = new User(
             FirstName = 'Test', LastName = aliasPrefix + ' Rep',
             Email = aliasPrefix + '.rep@tdmtest.example',

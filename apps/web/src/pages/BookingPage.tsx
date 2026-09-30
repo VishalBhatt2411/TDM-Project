@@ -1,8 +1,8 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
-import { getVehicle, getVehicleVariants } from "@/api/vehicles";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { getVehicle, getVehicleAvailability, getVehicleVariants } from "@/api/vehicles";
 import { listBranches } from "@/api/branches";
 import { createBooking, createPublicBooking, isBookingConflictError } from "@/api/bookings";
 import { useAuth } from "@/context/auth-context";
@@ -10,13 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { DriveType, PurchaseTimeline } from "@tdm/types";
+import { STANDARD_TIME_SLOTS, type DriveType, type PurchaseTimeline } from "@tdm/types";
 
-export const TIME_SLOTS = [
-  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
-];
+export const TIME_SLOTS = STANDARD_TIME_SLOTS;
 
 const PURCHASE_TIMELINE_OPTIONS: { value: PurchaseTimeline; label: string }[] = [
   { value: "Immediate", label: "Immediately" },
@@ -83,8 +79,25 @@ export function BookingPage() {
   });
 
   const driveType = watch("driveType");
+  const branchId = watch("branchId");
   const isExistingCustomer = watch("isExistingCustomer");
   const pickupRequired = watch("pickupRequired");
+  const preferredDate = watch("preferredDate");
+
+  const { data: availability } = useQuery({
+    queryKey: ["vehicle-availability", vehicleId, preferredDate],
+    queryFn: () => getVehicleAvailability(vehicleId!, preferredDate),
+    enabled: !!vehicleId && !!preferredDate,
+  });
+  const bookedTimes = React.useMemo(() => {
+    if (!availability) return null;
+    const available = new Set(
+      availability.availableSlots.map((slot) =>
+        new Date(slot.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }),
+      ),
+    );
+    return new Set(TIME_SLOTS.filter((t) => !available.has(t)));
+  }, [availability]);
 
   // A logged-in customer's name/email/phone are already known server-side — this only
   // pre-fills them for a fallback guest submission if `profile` hasn't resolved yet by
@@ -273,6 +286,15 @@ export function BookingPage() {
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+                {(() => {
+                  const selectedBranch = branches.find((b) => b.id === branchId);
+                  return selectedBranch ? (
+                    <p className="text-xs text-muted-foreground">
+                      {selectedBranch.address.line1}, {selectedBranch.address.city} ·{" "}
+                      <Link to="/branches" className="text-primary underline">View on map</Link>
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="mt-3 flex gap-2">
@@ -309,9 +331,16 @@ export function BookingPage() {
                   <Label htmlFor="preferredTimeSlot">Preferred Time Slot</Label>
                   <select id="preferredTimeSlot" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...register("preferredTimeSlot", { required: true })}>
                     {TIME_SLOTS.map((slot) => (
-                      <option key={slot} value={slot}>{slot}</option>
+                      <option key={slot} value={slot} disabled={bookedTimes?.has(slot)}>
+                        {slot}{bookedTimes?.has(slot) ? " (already booked)" : ""}
+                      </option>
                     ))}
                   </select>
+                  {bookedTimes && bookedTimes.size > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Some slots on this date are already booked for this vehicle — pick another time or we'll offer alternatives if there's a conflict.
+                    </p>
+                  )}
                 </div>
               </div>
 

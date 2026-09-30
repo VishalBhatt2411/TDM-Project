@@ -1,10 +1,13 @@
 import { randomBytes, createHash } from "node:crypto";
 import jsforce, { Connection } from "jsforce";
+import { SALESFORCE_API_VERSION } from "./tenant-connection-provider";
 
 export interface SalesforceIdentity {
   salesforceUserId: string;
   email: string;
   displayName: string;
+  /** Salesforce org id (`identity.organization_id`) — used to bind staff bootstrap to the connected tenant. */
+  salesforceOrgId: string;
 }
 
 export interface SalesforceConnectionResult {
@@ -29,7 +32,7 @@ function base64UrlEscape(base64: string): string {
 
 /**
  * Verifies a staff member's identity via Salesforce's OAuth2 Authorization Code
- * flow ("Login with Salesforce") — distinct from SalesforceConnectionProvider,
+ * flow ("Login with Salesforce") — distinct from TenantSalesforceConnectionProvider,
  * which authenticates the app's own integration user for business-data access.
  * This class never touches or stores a Salesforce password; Salesforce's own
  * hosted login page collects it, and this only exchanges the resulting code.
@@ -92,7 +95,7 @@ export class SalesforceIdentityProvider {
   async connectWithRefreshToken(refreshToken: string): Promise<Connection> {
     const oauth2 = new jsforce.OAuth2(this.oauth2Config());
     const token = await oauth2.refreshToken(refreshToken);
-    return new jsforce.Connection({ accessToken: token.access_token, instanceUrl: token.instance_url });
+    return new jsforce.Connection({ accessToken: token.access_token, instanceUrl: token.instance_url, version: SALESFORCE_API_VERSION });
   }
 
   private async exchangeCode(
@@ -109,6 +112,7 @@ export class SalesforceIdentityProvider {
         salesforceUserId: rawIdentity.user_id,
         email: rawIdentity.email,
         displayName: rawIdentity.display_name,
+        salesforceOrgId: rawIdentity.organization_id,
       },
       salesforceOrgId: rawIdentity.organization_id,
       conn,

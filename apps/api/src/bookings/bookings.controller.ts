@@ -33,6 +33,13 @@ export class BookingsController {
     return this.bookingsService.getById(user.customerId, id);
   }
 
+  /** A short-lived signed token, rendered client-side as a QR code, for the customer to show at check-in. */
+  @Get(":id/check-in-token")
+  @UseGuards(JwtAuthGuard)
+  getCheckInToken(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.bookingsService.getCheckInToken(user.customerId, id);
+  }
+
   @Post(":id/cancel")
   @UseGuards(JwtAuthGuard)
   cancel(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() dto: CancelBookingDto) {

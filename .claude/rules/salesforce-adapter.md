@@ -16,4 +16,4 @@ Metadata deploys:
 
 OAuth:
 - Staff "Login with Salesforce" (`SalesforceIdentityProvider.exchangeCodeForIdentity`) and the onboarding wizard's connection handshake (`exchangeCodeForConnection`) are separate concerns — identity verification vs. persisting a reusable business-data connection. Don't merge them; a login shouldn't require `refresh_token` scope, and a connection handshake needs it.
-- Never call the CLI-backed `SalesforceConnectionProvider` (`connection.ts`, dev-mode only, shells out to `sf org display`) from any new code path meant to work for a real client — it has no client-configured `sf` session to read from.
+- Every app code path gets its Salesforce connection from `TenantSalesforceConnectionProvider`, keyed by the current `TenantContext`. The old CLI-backed `SalesforceConnectionProvider` (`sf org display`) was removed — never reintroduce a shared or CLI-derived connection; `sf` CLI use is limited to standalone dev seed scripts.

@@ -1,8 +1,5 @@
-import { IsOptional, IsString, IsUrl, Matches, MaxLength, MinLength } from "class-validator";
-
-// Lowercase alphanumeric segments separated by single hyphens — reserved as this
-// tenant's URL-safe identifier (e.g. future login routing: tdm.app/<slug>/admin/login).
-const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+import { IsNotIn, IsOptional, IsString, IsUrl, Matches, MaxLength, MinLength } from "class-validator";
+import { ORGANIZATION_SLUG_MAX_LENGTH, ORGANIZATION_SLUG_PATTERN, RESERVED_SUBDOMAIN_LABELS } from "../tenancy/organization-slug";
 
 export class CreateOrganizationDto {
   @IsString()
@@ -12,8 +9,9 @@ export class CreateOrganizationDto {
 
   @IsString()
   @MinLength(3)
-  @MaxLength(63)
-  @Matches(SLUG_PATTERN, { message: "slug must be lowercase letters, numbers, and single hyphens only" })
+  @MaxLength(ORGANIZATION_SLUG_MAX_LENGTH)
+  @Matches(ORGANIZATION_SLUG_PATTERN, { message: "slug must be lowercase letters, numbers, and single hyphens only" })
+  @IsNotIn(RESERVED_SUBDOMAIN_LABELS, { message: "slug is reserved by the platform — choose another" })
   slug!: string;
 }
 

@@ -1,5 +1,14 @@
 import type { Address, TimeSlot } from "./common";
 
+/** Canonical dealership drive-slot template (30-minute slots, closed 13:00-14:00 for lunch) — the single source of truth shared by the booking UI and the availability endpoint so they can never drift apart. */
+export const STANDARD_TIME_SLOTS: string[] = [
+  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "14:00", "14:30", "15:00", "15:30",
+  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
+];
+
+export const SLOT_DURATION_MINUTES = 30;
+
 export type DriveType = "Dealership" | "Home";
 
 export type BookingStatus =
@@ -23,6 +32,7 @@ export interface BookingDto {
   customerId: string;
   vehicleId: string;
   branchId: string;
+  dealershipId: string;
   salesRepId?: string;
   driveType: DriveType;
   slot: TimeSlot;
@@ -109,14 +119,38 @@ export interface HandoffBookingRequest {
   salesRepId: string;
 }
 
-export interface ComplianceSubmission {
-  otpVerified: boolean;
+/** Pre-drive compliance submission — license photo and signature are sent as base64 image data; the server stores them and returns URLs in ComplianceStatusDto. */
+export interface SubmitComplianceRequest {
   licenseNumber: string;
+  licenseImageBase64: string;
+  licenseImageContentType: string;
+  licenseExpiryDate?: string;
+  consentAccepted: boolean;
+  signatureImageBase64: string;
+  signatureImageContentType: string;
+}
+
+/** Advisory-only AI read of an uploaded license photo — see FR-52. Never sets licenseVerified on its own; a staff member must confirm. */
+export interface LicenseAiAssessment {
+  extractedName?: string;
+  extractedLicenseNumber?: string;
+  extractedExpiryDate?: string;
+  flags: string[];
+  notes?: string;
+  assessedAt: string;
+}
+
+export interface ComplianceStatusDto {
+  bookingId: string;
+  otpVerified: boolean;
+  licenseNumber?: string;
+  licenseVerified: boolean;
   licenseImageUrl?: string;
   licenseExpiryDate?: string;
   consentAccepted: boolean;
-  consentDocumentUrl?: string;
   signatureImageUrl?: string;
+  signedAt?: string;
+  isComplete: boolean;
 }
 
 export type InterestLevel = "Low" | "Medium" | "High";

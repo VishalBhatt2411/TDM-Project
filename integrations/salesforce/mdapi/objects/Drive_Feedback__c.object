@@ -8,7 +8,8 @@
         <displayFormat>FB-{00000}</displayFormat>
     </nameField>
     <deploymentStatus>Deployed</deploymentStatus>
-    <sharingModel>ReadWrite</sharingModel>
+    <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
     <enableActivities>false</enableActivities>
     <enableHistory>true</enableHistory>
     <enableReports>true</enableReports>
@@ -130,4 +131,8 @@
         <defaultValue>false</defaultValue>
         <description>Distinguishes a customer-submitted post-drive survey from a rep-captured drive debrief.</description>
     </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
 </CustomObject>

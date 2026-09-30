@@ -1,54 +1,66 @@
 import { adminApiClient } from "@/lib/admin-api-client";
-import type { BookingDto, BookingStatus, Paginated } from "@tdm/types";
+import type { BookingDto, BookingStatus, ComplianceStatusDto, LicenseAiAssessment, Paginated, VehicleDto } from "@tdm/types";
 
-export interface StaffUserDto {
+export type StaffRole = "Company_Admin" | "Dealer_Admin" | "Manager" | "Sales_Rep";
+
+/** A Salesforce user holding a role — Company Admins span every dealership, every other role is tied to one. */
+export interface StaffAssignmentDto {
   id: string;
-  email: string;
-  name: string;
-  role: "Admin" | "Manager" | "SalesRep";
-  permissions: string[];
-  /** Bookings are assigned to their real Salesforce login — only true once they've signed in via "Login with Salesforce" at least once. */
-  hasLoggedInWithSalesforce: boolean;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  role: StaffRole;
+  dealershipId?: string;
   branchId?: string;
-  maxDailyBookings?: number;
-  phone?: string;
   isActive: boolean;
-  createdAt: string;
+  maxDailyBookings?: number;
+  phone?: string;
 }
 
-export interface CreateStaffUserRequest {
-  email: string;
+export interface StaffDirectoryUserDto {
+  id: string;
   name: string;
-  role: "Admin" | "Manager" | "SalesRep";
-  permissions?: string[];
+  email: string;
+  isActive: boolean;
+}
+
+export interface CreateStaffAssignmentRequest {
+  userId: string;
+  role: StaffRole;
+  dealershipId?: string;
   branchId?: string;
   maxDailyBookings?: number;
   phone?: string;
 }
 
-export interface UpdateStaffUserRequest {
-  name?: string;
-  email?: string;
-  role?: "Admin" | "Manager" | "SalesRep";
-  permissions?: string[];
-  branchId?: string;
-  maxDailyBookings?: number;
-  phone?: string;
+/** `null` clears an optional field; an omitted field is left unchanged. */
+export interface UpdateStaffAssignmentRequest {
+  role?: StaffRole;
+  dealershipId?: string | null;
+  branchId?: string | null;
+  maxDailyBookings?: number | null;
+  phone?: string | null;
   isActive?: boolean;
 }
 
-export async function listStaffUsers(): Promise<StaffUserDto[]> {
-  const { data } = await adminApiClient.get<StaffUserDto[]>("/admin/users");
+export async function listStaffAssignments(): Promise<StaffAssignmentDto[]> {
+  const { data } = await adminApiClient.get<StaffAssignmentDto[]>("/admin/users");
   return data;
 }
 
-export async function createStaffUser(input: CreateStaffUserRequest): Promise<StaffUserDto> {
-  const { data } = await adminApiClient.post<StaffUserDto>("/admin/users", input);
+/** Active Salesforce users who can be granted access. */
+export async function searchStaffDirectory(q?: string): Promise<StaffDirectoryUserDto[]> {
+  const { data } = await adminApiClient.get<StaffDirectoryUserDto[]>("/admin/users/directory", { params: { q: q || undefined } });
   return data;
 }
 
-export async function updateStaffUser(id: string, input: UpdateStaffUserRequest): Promise<StaffUserDto> {
-  const { data } = await adminApiClient.patch<StaffUserDto>(`/admin/users/${id}`, input);
+export async function createStaffAssignment(input: CreateStaffAssignmentRequest): Promise<StaffAssignmentDto> {
+  const { data } = await adminApiClient.post<StaffAssignmentDto>("/admin/users", input);
+  return data;
+}
+
+export async function updateStaffAssignment(id: string, input: UpdateStaffAssignmentRequest): Promise<StaffAssignmentDto> {
+  const { data } = await adminApiClient.patch<StaffAssignmentDto>(`/admin/users/${id}`, input);
   return data;
 }
 
@@ -70,7 +82,7 @@ export interface RepBookingListQuery {
   pageSize?: number;
 }
 
-/** A rep's own assigned bookings — requires the staff account to be linked to a Sales Rep record. */
+/** Bookings currently assigned to the signed-in staff member. */
 export async function listMyAssignedBookings(query: RepBookingListQuery): Promise<Paginated<BookingDto>> {
   const { data } = await adminApiClient.get<Paginated<BookingDto>>("/admin/bookings/mine", { params: query });
   return data;
@@ -87,8 +99,8 @@ export async function handoffBooking(bookingId: string, salesRepId: string): Pro
   return data;
 }
 
-export async function checkInBookingAsStaff(bookingId: string, method: "QR" | "Manual"): Promise<BookingDto> {
-  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/check-in`, { method });
+export async function checkInBookingAsStaff(bookingId: string, method: "QR" | "Manual", qrToken?: string): Promise<BookingDto> {
+  const { data } = await adminApiClient.patch<BookingDto>(`/admin/bookings/${bookingId}/check-in`, { method, qrToken });
   return data;
 }
 
@@ -126,10 +138,17 @@ export interface SalesRepLookupDto {
   id: string;
   name: string;
   email: string;
+  dealershipId?: string;
   branchId?: string;
 }
 
 export interface BranchLookupDto {
+  id: string;
+  name: string;
+  dealershipId: string;
+}
+
+export interface DealershipLookupDto {
   id: string;
   name: string;
 }
@@ -141,6 +160,12 @@ export async function listSalesRepsLookup(): Promise<SalesRepLookupDto[]> {
 
 export async function listBranchesLookup(): Promise<BranchLookupDto[]> {
   const { data } = await adminApiClient.get<BranchLookupDto[]>("/admin/lookups/branches");
+  return data;
+}
+
+/** Active dealerships the signed-in staff member holds an assignment at (all of them for a Company Admin). */
+export async function listDealershipsLookup(): Promise<DealershipLookupDto[]> {
+  const { data } = await adminApiClient.get<DealershipLookupDto[]>("/admin/lookups/dealerships");
   return data;
 }
 
@@ -158,7 +183,253 @@ export interface DashboardSummaryDto {
   averageSatisfactionRating: number | null;
 }
 
-export async function getAdminDashboardSummary(): Promise<DashboardSummaryDto> {
-  const { data } = await adminApiClient.get<DashboardSummaryDto>("/analytics/dashboard");
+export async function getAdminDashboardSummary(branchId?: string): Promise<DashboardSummaryDto> {
+  const { data } = await adminApiClient.get<DashboardSummaryDto>("/analytics/dashboard", { params: { branchId } });
+  return data;
+}
+
+export interface FunnelStageCountsDto {
+  requested: number;
+  confirmed: number;
+  completed: number;
+  opportunitiesCreated: number;
+}
+
+export interface FunnelInsightDto {
+  conversionRate: number;
+  dropOffStage: "requested-to-confirmed" | "confirmed-to-completed" | "completed-to-opportunity" | "none";
+  summary: string;
+}
+
+export async function getFunnelInsight(branchId?: string): Promise<{ counts: FunnelStageCountsDto; insight: FunnelInsightDto }> {
+  const { data } = await adminApiClient.get<{ counts: FunnelStageCountsDto; insight: FunnelInsightDto }>("/analytics/funnel", {
+    params: { branchId },
+  });
+  return data;
+}
+
+export interface CustomerSegmentCountsDto {
+  converted: number;
+  dormant: number;
+  repeatVisitors: number;
+  activeShoppers: number;
+  newProspects: number;
+}
+
+export async function getCustomerSegments(branchId?: string): Promise<CustomerSegmentCountsDto> {
+  const { data } = await adminApiClient.get<CustomerSegmentCountsDto>("/analytics/customer-segments", { params: { branchId } });
+  return data;
+}
+
+export interface FeatureFlagDto {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+}
+
+export async function listFeatureFlags(branchId?: string): Promise<FeatureFlagDto[]> {
+  const { data } = await adminApiClient.get<FeatureFlagDto[]>("/admin/feature-flags", { params: { branchId } });
+  return data;
+}
+
+export async function setFeatureFlag(key: string, enabled: boolean, branchId?: string): Promise<void> {
+  await adminApiClient.put(`/admin/feature-flags/${key}`, { enabled, branchId });
+}
+
+export interface AuditLogEntryDto {
+  id: string;
+  actorId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface AuditLogQuery {
+  entityType?: string;
+  actorId?: string;
+  limit?: number;
+}
+
+export async function queryAuditLog(query: AuditLogQuery): Promise<AuditLogEntryDto[]> {
+  const { data } = await adminApiClient.get<AuditLogEntryDto[]>("/admin/audit-log", { params: query });
+  return data;
+}
+
+export interface AdminBranchDto {
+  id: string;
+  dealershipId: string;
+  name: string;
+  address: { line1: string; city: string; state: string; postalCode: string; country: string };
+  geo?: { latitude: number; longitude: number };
+  phone?: string;
+  email?: string;
+  operatingHours?: string;
+  managerName?: string;
+  isActive: boolean;
+}
+
+export interface BranchInput {
+  name: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  /** Omitted leaves the stored pin unchanged on update; null clears it. */
+  geo?: { latitude: number; longitude: number } | null;
+  phone?: string;
+  email?: string;
+  operatingHours?: string;
+  managerName?: string;
+}
+
+export async function listAdminBranches(): Promise<AdminBranchDto[]> {
+  const { data } = await adminApiClient.get<AdminBranchDto[]>("/admin/branches");
+  return data;
+}
+
+/** A branch's dealership is fixed at creation, so it is only ever sent here. */
+export async function createBranch(input: BranchInput & { dealershipId: string }): Promise<AdminBranchDto> {
+  const { data } = await adminApiClient.post<AdminBranchDto>("/admin/branches", input);
+  return data;
+}
+
+export async function updateBranch(id: string, input: BranchInput): Promise<AdminBranchDto> {
+  const { data } = await adminApiClient.patch<AdminBranchDto>(`/admin/branches/${id}`, input);
+  return data;
+}
+
+export async function setBranchActive(id: string, active: boolean): Promise<AdminBranchDto> {
+  const { data } = await adminApiClient.patch<AdminBranchDto>(`/admin/branches/${id}/${active ? "activate" : "deactivate"}`);
+  return data;
+}
+
+export interface AdminVehicleInput {
+  make: string;
+  model: string;
+  trim?: string;
+  year: number;
+  vin: string;
+  bodyType: string;
+  fuelType: string;
+  transmission: string;
+  price: number;
+  priceMax?: number;
+  odometer?: number;
+  status?: string;
+  branchId: string;
+  isFeatured?: boolean;
+  isBestSeller?: boolean;
+  isNewLaunch?: boolean;
+  availabilityStatus?: string;
+  seatingCapacity?: number;
+  mileageKmpl?: number;
+  primaryImageUrl?: string;
+  description?: string;
+}
+
+export async function listAdminVehicles(): Promise<VehicleDto[]> {
+  const { data } = await adminApiClient.get<VehicleDto[]>("/admin/vehicles");
+  return data;
+}
+
+export async function createVehicle(input: AdminVehicleInput): Promise<VehicleDto> {
+  const { data } = await adminApiClient.post<VehicleDto>("/admin/vehicles", input);
+  return data;
+}
+
+export async function updateVehicle(id: string, input: AdminVehicleInput): Promise<VehicleDto> {
+  // PATCH is a partial update: an omitted key is left unchanged server-side, so a field
+  // the user emptied must be sent as an explicit null to be cleared.
+  const body = {
+    ...input,
+    priceMax: input.priceMax ?? null,
+    seatingCapacity: input.seatingCapacity ?? null,
+    mileageKmpl: input.mileageKmpl ?? null,
+  };
+  const { data } = await adminApiClient.patch<VehicleDto>(`/admin/vehicles/${id}`, body);
+  return data;
+}
+
+export async function deleteVehicle(id: string): Promise<void> {
+  await adminApiClient.delete(`/admin/vehicles/${id}`);
+}
+
+export type AllocationStatus = "Requested" | "In_Transit" | "Completed" | "Cancelled";
+
+export interface VehicleAllocationDto {
+  id: string;
+  vehicleId: string;
+  fromBranchId?: string;
+  toBranchId: string;
+  transferDate?: string;
+  status: AllocationStatus;
+}
+
+export async function listVehicleAllocations(status?: AllocationStatus): Promise<VehicleAllocationDto[]> {
+  const { data } = await adminApiClient.get<VehicleAllocationDto[]>("/admin/vehicle-allocations", { params: { status } });
+  return data;
+}
+
+export async function requestVehicleAllocation(input: { vehicleId: string; fromBranchId?: string; toBranchId: string }): Promise<VehicleAllocationDto> {
+  const { data } = await adminApiClient.post<VehicleAllocationDto>("/admin/vehicle-allocations", input);
+  return data;
+}
+
+export async function advanceVehicleAllocation(id: string, action: "transit" | "complete" | "cancel"): Promise<VehicleAllocationDto> {
+  const { data } = await adminApiClient.patch<VehicleAllocationDto>(`/admin/vehicle-allocations/${id}/${action}`);
+  return data;
+}
+
+export interface SystemHealthDto {
+  status: "ok" | "degraded" | "down";
+  checkedAt: string;
+  components: { name: string; status: "ok" | "degraded" | "down"; latencyMs?: number; message?: string }[];
+}
+
+export async function getSystemHealth(): Promise<SystemHealthDto> {
+  const { data } = await adminApiClient.get<SystemHealthDto>("/admin/system-health");
+  return data;
+}
+
+export interface NotificationTemplateDto {
+  key: string;
+  label: string;
+  defaultSubject: string;
+  subject?: string;
+  note?: string;
+  isCustomized: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export async function listNotificationTemplates(): Promise<NotificationTemplateDto[]> {
+  const { data } = await adminApiClient.get<NotificationTemplateDto[]>("/admin/notification-templates");
+  return data;
+}
+
+export async function updateNotificationTemplate(key: string, input: { subject?: string; note?: string }): Promise<void> {
+  await adminApiClient.put(`/admin/notification-templates/${key}`, input);
+}
+
+export async function revertNotificationTemplate(key: string): Promise<void> {
+  await adminApiClient.delete(`/admin/notification-templates/${key}`);
+}
+
+export async function getAdminComplianceStatus(bookingId: string): Promise<ComplianceStatusDto> {
+  const { data } = await adminApiClient.get<ComplianceStatusDto>(`/admin/bookings/${bookingId}/compliance`);
+  return data;
+}
+
+export async function verifyLicenseAi(bookingId: string): Promise<LicenseAiAssessment> {
+  const { data } = await adminApiClient.post<LicenseAiAssessment>(`/admin/bookings/${bookingId}/compliance/verify-license`);
+  return data;
+}
+
+export async function confirmLicense(bookingId: string): Promise<ComplianceStatusDto> {
+  const { data } = await adminApiClient.patch<ComplianceStatusDto>(`/admin/bookings/${bookingId}/compliance/confirm-license`);
   return data;
 }

@@ -15,6 +15,7 @@ export class BranchesController {
         id: props.id,
         name: props.name,
         address: props.address,
+        geo: props.geo,
         phone: props.phone,
         operatingHours: props.operatingHours,
         managerName: props.managerName,

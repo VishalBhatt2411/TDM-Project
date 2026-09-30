@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Matches, Min } from "class-validator";
 
 const BODY_TYPES = ["Sedan", "SUV", "Hatchback", "Coupe", "Convertible", "Truck", "Van", "Wagon"];
 const FUEL_TYPES = ["Petrol", "Diesel", "Electric", "Hybrid", "Plugin_Hybrid", "CNG"];
@@ -49,4 +49,9 @@ export class VehicleSearchQueryDto {
   @IsInt()
   @Min(1)
   pageSize?: number;
+}
+
+export class VehicleAvailabilityQueryDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "date must be in YYYY-MM-DD format." })
+  date!: string;
 }

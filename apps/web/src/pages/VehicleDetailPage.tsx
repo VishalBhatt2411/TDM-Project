@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { CircleDot, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
+import { CircleDot, Heart, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
 import { getRelatedVehicles, getVehicle, getVehicleVariants } from "@/api/vehicles";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants, Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AccordionItem } from "@/components/ui/accordion";
@@ -10,6 +10,8 @@ import { VehicleImageGallery } from "@/components/VehicleImageGallery";
 import { ColorSelector } from "@/components/ColorSelector";
 import { VehicleCard } from "@/components/VehicleCard";
 import { EmiCalculator } from "@/components/EmiCalculator";
+import { useAuth } from "@/context/auth-context";
+import { useWishlist } from "@/hooks/use-wishlist";
 import { cn } from "@/lib/utils";
 
 function formatInr(amount: number): string {
@@ -57,6 +59,8 @@ export function VehicleDetailPage() {
     queryFn: () => getRelatedVehicles(id!),
     enabled: !!id,
   });
+  const { isAuthenticated } = useAuth();
+  const wishlist = useWishlist();
 
   if (isLoading) {
     return (
@@ -223,6 +227,18 @@ export function VehicleDetailPage() {
             <Link to={`/book/${vehicle.id}`} className={cn(buttonVariants({ variant: "default", size: "lg" }), "mt-3 w-full")}>
               Book a Test Drive
             </Link>
+            {isAuthenticated && (
+              <Button
+                variant="outline"
+                size="lg"
+                className="mt-2 w-full"
+                onClick={() => wishlist.toggle(vehicle.id)}
+                disabled={wishlist.isPending}
+              >
+                <Heart className={cn("h-4 w-4", wishlist.wishlistedIds.has(vehicle.id) && "fill-destructive text-destructive")} />
+                {wishlist.wishlistedIds.has(vehicle.id) ? "Saved to Wishlist" : "Save to Wishlist"}
+              </Button>
+            )}
             <p className="mt-3 text-center text-xs text-muted-foreground">Free · No account needed to get started</p>
           </div>
         </div>

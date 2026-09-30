@@ -1,10 +1,10 @@
-import { VehicleAllocation, VehicleAllocationRepository, WishlistItem, WishlistRepository } from "@tdm/domain";
-import { SalesforceConnectionProvider } from "../connection";
+import { UNASSIGNED_ID, VehicleAllocation, VehicleAllocationRepository, WishlistItem, WishlistRepository } from "@tdm/domain";
+import { SalesforceConnectionSource } from "../connection-source";
 import { allocationRecordToDomain, allocationToRecord, wishlistRecordToDomain } from "../mappers";
-import { withConnection } from "../soql";
+import { escapeSoql, withConnection } from "../soql";
 
 export class SalesforceWishlistRepository implements WishlistRepository {
-  constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
 
   async findByCustomer(customerId: string): Promise<WishlistItem[]> {
     return withConnection(this.connectionProvider, async (conn) => {
@@ -40,31 +40,47 @@ export class SalesforceWishlistRepository implements WishlistRepository {
   }
 }
 
-export class SalesforceVehicleAllocationRepository implements VehicleAllocationRepository {
-  constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
+const ALLOCATION_FIELDS = "Id, Vehicle__c, From_Branch__c, To_Branch__c, Transfer_Date__c, Status__c";
 
-  async save(allocation: VehicleAllocation): Promise<void> {
-    await withConnection(this.connectionProvider, async (conn) => {
+export class SalesforceVehicleAllocationRepository implements VehicleAllocationRepository {
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
+
+  async save(allocation: VehicleAllocation): Promise<VehicleAllocation> {
+    return withConnection(this.connectionProvider, async (conn) => {
       const props = allocation.toProps();
       const record = allocationToRecord(allocation);
-      const existing = await conn
-        .query(`SELECT Id FROM Vehicle_Allocation__c WHERE Id = '${props.id}' LIMIT 1`)
-        .catch(() => ({ records: [] as any[], done: true, totalSize: 0 }));
-      if (existing.records[0]) {
-        await conn.sobject("Vehicle_Allocation__c").update({ Id: props.id, ...record });
-      } else {
-        await conn.sobject("Vehicle_Allocation__c").create(record);
+      if (props.id === UNASSIGNED_ID) {
+        const created = await conn.sobject("Vehicle_Allocation__c").create(record);
+        if (!(created as any).success) {
+          throw new Error(`Failed to create Vehicle_Allocation__c: ${JSON.stringify((created as any).errors)}`);
+        }
+        return VehicleAllocation.restore({ ...props, id: (created as any).id });
       }
+      const updated = await conn.sobject("Vehicle_Allocation__c").update({ Id: props.id, ...record });
+      if (!(updated as any).success) {
+        throw new Error(`Failed to update Vehicle_Allocation__c ${props.id}: ${JSON.stringify((updated as any).errors)}`);
+      }
+      return allocation;
     });
   }
 
   async findById(id: string): Promise<VehicleAllocation | null> {
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT Id, Vehicle__c, From_Branch__c, To_Branch__c, Transfer_Date__c, Status__c FROM Vehicle_Allocation__c WHERE Id = '${id}' LIMIT 1`,
+        `SELECT ${ALLOCATION_FIELDS} FROM Vehicle_Allocation__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`,
       );
       const record = result.records[0];
       return record ? allocationRecordToDomain(record) : null;
+    });
+  }
+
+  async findAll(filter?: { status?: VehicleAllocation["status"] }): Promise<VehicleAllocation[]> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const where = filter?.status ? `WHERE Status__c = '${escapeSoql(filter.status)}'` : "";
+      const result = await conn.query(
+        `SELECT ${ALLOCATION_FIELDS} FROM Vehicle_Allocation__c ${where} ORDER BY CreatedDate DESC LIMIT 200`,
+      );
+      return result.records.map(allocationRecordToDomain);
     });
   }
 }

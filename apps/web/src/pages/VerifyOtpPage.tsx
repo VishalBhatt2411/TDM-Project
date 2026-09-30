@@ -41,11 +41,8 @@ export function VerifyOtpPage() {
     <div className="flex min-h-[80vh] items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Verify your phone &amp; email</CardTitle>
-          <CardDescription>
-            We sent a 6-digit code. In this dev environment it's printed in the API server logs (
-            <code className="rounded bg-muted px-1">ConsoleOtpSender</code>).
-          </CardDescription>
+          <CardTitle>Verify your account</CardTitle>
+          <CardDescription>We emailed you a 6-digit code. It expires in 10 minutes.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4 text-left">

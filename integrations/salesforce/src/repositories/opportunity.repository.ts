@@ -1,5 +1,5 @@
 import { SalesOpportunity, SalesOpportunityRepository } from "@tdm/domain";
-import { SalesforceConnectionProvider } from "../connection";
+import { SalesforceConnectionSource } from "../connection-source";
 import { opportunityRecordToDomain } from "../mappers";
 import { withConnection } from "../soql";
 
@@ -17,7 +17,7 @@ import { withConnection } from "../soql";
  * Contact's Account, rather than letting conversion mint a duplicate Contact/Account.
  */
 export class SalesforceSalesOpportunityRepository implements SalesOpportunityRepository {
-  constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
 
   async save(opportunity: SalesOpportunity): Promise<SalesOpportunity> {
     return withConnection(this.connectionProvider, async (conn) => {

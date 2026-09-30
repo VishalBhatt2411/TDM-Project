@@ -77,4 +77,13 @@
         <precision>3</precision>
         <scale>0</scale>
     </fields>
+    <fields>
+        <fullName>Vehicle_Model__c</fullName>
+        <label>Vehicle Model</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle_Model__c</referenceTo>
+        <relationshipName>Variants</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+        <description>Catalog model this variant belongs to.</description>
+    </fields>
 </CustomObject>

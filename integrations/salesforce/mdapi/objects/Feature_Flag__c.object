@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Per-scope feature toggle for the TDM platform. Resolution: branch value, else dealership value,
+  else company value, else off.
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>TDM Feature Flag</label>
+    <pluralLabel>TDM Feature Flags</pluralLabel>
+    <nameField>
+        <label>Flag Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>FF-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>Read</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Key__c</fullName>
+        <label>Key</label>
+        <type>Text</type>
+        <length>80</length>
+        <required>true</required>
+        <description>Flag key known to the TDM platform (e.g. qr_check_in).</description>
+    </fields>
+    <fields>
+        <fullName>Enabled__c</fullName>
+        <label>Enabled</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Dealership__c</fullName>
+        <label>Dealership</label>
+        <type>Lookup</type>
+        <referenceTo>Dealership__c</referenceTo>
+        <relationshipName>Feature_Flags</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>Blank = company-wide default.</description>
+    </fields>
+    <fields>
+        <fullName>Branch__c</fullName>
+        <label>Branch</label>
+        <type>Lookup</type>
+        <referenceTo>Branch__c</referenceTo>
+        <relationshipName>Feature_Flags</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>Blank = applies to every branch of the dealership.</description>
+    </fields>
+    <fields>
+        <fullName>Scope_Key__c</fullName>
+        <label>Scope Key</label>
+        <type>Text</type>
+        <length>120</length>
+        <unique>true</unique>
+        <caseSensitive>true</caseSensitive>
+        <externalId>true</externalId>
+        <description>Maintained by TdmScopeKeys (Key:Dealership|COMPANY:Branch|ALL). One value per flag per scope. Do not edit.</description>
+    </fields>
+    <validationRules>
+        <fullName>Key_Format</fullName>
+        <active>true</active>
+        <description>Flag keys match the platform's allowlist format.</description>
+        <errorConditionFormula>NOT(REGEX(Key__c, "[a-z][a-z0-9_]*"))</errorConditionFormula>
+        <errorDisplayField>Key__c</errorDisplayField>
+        <errorMessage>Use lowercase letters, digits and underscores (e.g. qr_check_in).</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Branch_Requires_Dealership</fullName>
+        <active>true</active>
+        <description>A branch-level flag is always inside a dealership scope.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Branch__c)), ISBLANK(Dealership__c))</errorConditionFormula>
+        <errorDisplayField>Dealership__c</errorDisplayField>
+        <errorMessage>Select the dealership that owns this branch.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Branch_Belongs_To_Dealership</fullName>
+        <active>true</active>
+        <description>Keeps a feature flag's branch inside its own dealership, so dealership-scoped access can never leak across dealers.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Branch__c)), Branch__r.Dealership__c &lt;&gt; Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Branch__c</errorDisplayField>
+        <errorMessage>The selected branch belongs to a different dealership.</errorMessage>
+    </validationRules>
+</CustomObject>

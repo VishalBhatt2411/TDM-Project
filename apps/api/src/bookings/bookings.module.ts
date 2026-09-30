@@ -6,11 +6,12 @@ import { BookingsService } from "./bookings.service";
 import { BookingMutationService } from "./booking-mutation.service";
 import { ReminderScheduler } from "./reminder.scheduler";
 import { FollowUpScheduler } from "./followup.scheduler";
+import { QrCheckinService } from "./qr-checkin.service";
 
 @Module({
   imports: [AuthModule, NotificationsModule],
   controllers: [BookingsController],
-  providers: [BookingsService, BookingMutationService, ReminderScheduler, FollowUpScheduler],
-  exports: [BookingMutationService],
+  providers: [BookingsService, BookingMutationService, ReminderScheduler, FollowUpScheduler, QrCheckinService],
+  exports: [BookingMutationService, QrCheckinService],
 })
 export class BookingsModule {}

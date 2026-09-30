@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sparse override of a TDM transactional email template, company-wide or per dealership.
+  Resolution: dealership override, else company override, else the platform default.
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>TDM Notification Template</label>
+    <pluralLabel>TDM Notification Templates</pluralLabel>
+    <nameField>
+        <label>Template Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>NT-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>Read</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Key__c</fullName>
+        <label>Template Key</label>
+        <type>Text</type>
+        <length>80</length>
+        <required>true</required>
+        <description>Transactional email template key known to the TDM platform (e.g. bookingConfirmation).</description>
+    </fields>
+    <fields>
+        <fullName>Subject__c</fullName>
+        <label>Subject</label>
+        <type>Text</type>
+        <length>255</length>
+        <description>Overrides the default subject; supports the platform's {placeholders}. Blank keeps the default.</description>
+    </fields>
+    <fields>
+        <fullName>Note__c</fullName>
+        <label>Note</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>6</visibleLines>
+        <description>Extra paragraph added to the email body. Plain text.</description>
+    </fields>
+    <fields>
+        <fullName>Dealership__c</fullName>
+        <label>Dealership</label>
+        <type>Lookup</type>
+        <referenceTo>Dealership__c</referenceTo>
+        <relationshipName>Notification_Templates</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>Blank = company-wide override.</description>
+    </fields>
+    <fields>
+        <fullName>Scope_Key__c</fullName>
+        <label>Scope Key</label>
+        <type>Text</type>
+        <length>100</length>
+        <unique>true</unique>
+        <caseSensitive>true</caseSensitive>
+        <externalId>true</externalId>
+        <description>Maintained by TdmScopeKeys (Key:Dealership|COMPANY). One override per template per scope. Do not edit.</description>
+    </fields>
+    <validationRules>
+        <fullName>Key_Format</fullName>
+        <active>true</active>
+        <description>Template keys are camelCase identifiers.</description>
+        <errorConditionFormula>NOT(REGEX(Key__c, "[a-zA-Z][a-zA-Z0-9]*"))</errorConditionFormula>
+        <errorDisplayField>Key__c</errorDisplayField>
+        <errorMessage>Use the template key exactly as listed in the TDM Admin Console.</errorMessage>
+    </validationRules>
+</CustomObject>

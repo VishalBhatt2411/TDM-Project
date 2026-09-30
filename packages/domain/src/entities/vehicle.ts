@@ -1,4 +1,5 @@
 import { Money } from "../value-objects";
+import { UNASSIGNED_ID } from "./booking";
 
 export type BodyType =
   | "Sedan"
@@ -50,6 +51,8 @@ export interface VehicleProps {
   priceMax?: Money;
   odometer: number;
   status: VehicleStatus;
+  /** Always the dealership of branchId — callers set both together (see Vehicle.moveToBranch). */
+  dealershipId: string;
   branchId: string;
   isFeatured: boolean;
   isBestSeller: boolean;
@@ -80,11 +83,19 @@ export class Vehicle {
     return new Vehicle(props);
   }
 
+  /** A new vehicle has no identity until the repository persists it and assigns one. */
+  static create(props: Omit<VehicleProps, "id">): Vehicle {
+    return new Vehicle({ ...props, id: UNASSIGNED_ID });
+  }
+
   get id() {
     return this.props.id;
   }
   get branchId() {
     return this.props.branchId;
+  }
+  get dealershipId() {
+    return this.props.dealershipId;
   }
   get status() {
     return this.props.status;
@@ -106,6 +117,16 @@ export class Vehicle {
 
   markAvailable(): void {
     this.props.status = "Available";
+  }
+
+  updateDetails(patch: Partial<Omit<VehicleProps, "id" | "branchId" | "dealershipId">>): void {
+    this.props = { ...this.props, ...patch };
+  }
+
+  /** Branch and dealership only ever change together, so a vehicle can't end up at another dealership's branch. */
+  moveToBranch(branchId: string, dealershipId: string): void {
+    this.props.branchId = branchId;
+    this.props.dealershipId = dealershipId;
   }
 
   toProps(): VehicleProps {

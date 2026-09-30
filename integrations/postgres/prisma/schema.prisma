@@ -138,29 +138,22 @@ model CustomerPasswordToken {
 // do once logged in (role/permissions), matched by email at login time.
 // salesforceUserId is populated just-in-time on first successful login, for
 // auditability — matching itself is by email, not this field.
-// organizationId is nullable during the multi-tenant rollout: existing staff
-// (the single-tenant deployment) have none, while accounts auto-provisioned by
-// the onboarding wizard (see OnboardingService) are always linked to their org.
+// Every staff account belongs to exactly one tenant; email is unique per tenant only
+// (the same person may legitimately be staff at two client companies).
 model StaffUser {
+  // Local identity only — roles and dealership access live in the business-data provider's
+  // staff assignments and are re-read at authorization time (see StaffAccessService).
   id                String        @id @default(uuid())
-  email             String        @unique
+  salesforceUserId  String
+  email             String
   name              String
-  salesforceUserId  String?       @unique
-  role              String // "Admin" | "Manager" | "SalesRep"
-  permissions       String[] // additive permission keys beyond role defaults
-  // Dealership profile fields for a "SalesRep" role user — bookings are assigned to
-  // their real Salesforce User (salesforceUserId), so this is metadata only, used for
-  // auto-assignment (branch matching / daily load) and their own contact info.
-  branchId          String?
-  maxDailyBookings  Int?
-  phone             String?
-  isActive          Boolean       @default(true)
-  organizationId    String?
-  organization      Organization? @relation(fields: [organizationId], references: [id])
+  organizationId    String
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  @@index([organizationId])
+  // Salesforce emails aren't unique within an org, so identity is keyed by the User id.
+  @@unique([organizationId, salesforceUserId])
 }
 
 model StaffRefreshToken {
@@ -180,13 +173,15 @@ model StaffRefreshToken {
 // the PKCE code_verifier itself never leaves the server, keeping the redirect URL
 // short and the verifier out of browser history/referrer headers. Single-use:
 // consumed (deleted) by AdminAuthService on callback, whether or not it succeeds.
-// Reused as-is by OnboardingService for the tenant "Connect Salesforce" handshake —
-// same shape/single-use semantics — distinguished by organizationId being set.
+// Reused by OnboardingService for the tenant "Connect Salesforce" handshake — same
+// single-use semantics, distinguished by `purpose` so a state minted for one flow can
+// never be redeemed by the other's callback.
 model StaffOAuthState {
-  state          String        @id
+  state          String       @id
   codeVerifier   String
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  purpose        String // "staff_login" | "onboarding"
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   expiresAt      DateTime
   createdAt      DateTime      @default(now())
 
@@ -199,8 +194,8 @@ model StaffOAuthState {
 model Organization {
   id                   String    @id @default(uuid())
   name                 String
-  // URL-safe identifier reserved for this org (e.g. future login routing) — validated
-  // lowercase-alphanumeric-with-hyphens at creation time (OnboardingService).
+  // URL-safe company identifier (Admin Console login, and its TenantSubdomain label) —
+  // validated lowercase-alphanumeric-with-hyphens at creation time (OnboardingService).
   slug                 String    @unique
   sfConsumerKey        String?
   sfConsumerSecretEnc  String? // AES-256-GCM, "iv:authTag:cipher" hex (see crypto.ts)
@@ -219,4 +214,63 @@ model Organization {
 
   staffUsers  StaffUser[]
   oauthStates StaffOAuthState[]
+  hosts       TenantHost[]
+  subdomains  TenantSubdomain[]
+}
+
+// Routes a company's or dealer's own custom domain to its tenant. Platform subdomains
+// ("<label>.<TENANT_BASE_DOMAIN>") resolve through TenantSubdomain instead.
+// Must live outside Salesforce: it decides *which* Salesforce org to talk to at all.
+model TenantHost {
+  hostname       String       @id // lowercase, no port
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Salesforce Dealership__c Id the domain serves; null = registered for the whole company.
+  dealershipId   String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
+// Platform subdomain labels ("<label>.<TENANT_BASE_DOMAIN>"). Company slugs and dealer
+// Url_Slug__c values share this one global namespace, so a label can never resolve to two
+// tenants; dealer rows are synced from Salesforce Dealership__c (first registration wins).
+model TenantSubdomain {
+  label          String       @id // lowercase, validated against ORGANIZATION_SLUG_PATTERN
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Salesforce Dealership__c Id; null = the company's own label (its Organization.slug).
+  dealershipId   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+// Staff-editable overrides for the hardcoded transactional email templates in
+// apps/api/src/notifications/email-templates.ts (see NOTIFICATION_TEMPLATE_KEYS
+// for the fixed set of keys). Sparse by design — a row only exists once an admin
+// has customized that template; both fields are individually optional so a
+// missing one falls back to the hardcoded default subject / no extra note.
+model NotificationTemplateOverride {
+  key       String   @id
+  subject   String?
+  note      String?
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+// In-house storage for pre-drive compliance images (license photo, canvas-drawn
+// signature) — no external blob/CDN dependency. Served back only to staff via
+// GET /assets/:id (StaffAuthGuard); the URL stored on ComplianceRecord.licenseImageUrl
+// / signatureImageUrl points at that route.
+model UploadedAsset {
+  id          String   @id @default(uuid())
+  contentType String
+  data        Bytes
+  purpose     String // "license_photo" | "signature"
+  bookingId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
 }

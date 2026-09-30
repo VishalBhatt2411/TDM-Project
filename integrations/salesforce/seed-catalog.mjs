@@ -1,8 +1,10 @@
 /**
- * Seeds the tdm-dev org with a realistic (illustrative, non-authoritative) Toyota
- * India lineup: branches, sales reps, vehicles + variants. Pricing/specs are
- * approximate demo data, not scraped from toyota.com — safe to re-run (idempotent
- * per VIN prefix check) but intended as a one-time / occasional reset script.
+ * Seeds the tdmProjectOrg org with a realistic (illustrative, non-authoritative) Toyota
+ * India setup: dealerships (each with its own URL slug) and their branches, the
+ * company-level Vehicle_Model__c catalog with variants, per-dealership Vehicle__c stock,
+ * and a Company_Admin Staff_Assignment__c for the CLI user. Pricing/specs are approximate
+ * demo data, not scraped from toyota.com. Refuses to run twice unless --reset is passed
+ * (which deletes all TDM business records first).
  *
  * Usage: node seed-catalog.mjs [--reset]
  */
@@ -17,24 +19,99 @@ const RESET = process.argv.includes("--reset");
 async function getConnection() {
   const { stdout } = await execFileAsync(
     "sf",
-    ["org", "display", "--target-org", "tdm-dev", "--json"],
+    ["org", "display", "--target-org", "tdmProjectOrg", "--json"],
     { env: { ...process.env, SF_TEMP_SHOW_SECRETS: "true" }, shell: process.platform === "win32" },
   );
   const { result } = JSON.parse(stdout);
   return new jsforce.Connection({ accessToken: result.accessToken, instanceUrl: result.instanceUrl });
 }
 
-const BRANCHES = [
+// Dealer slugs share the platform subdomain namespace with company slugs, so they must not
+// equal the tenant's own slug ("toyota") — they're what the dealer URL resolves by.
+const DEALERSHIPS = [
+  {
+    record: {
+      Name: "Toyota Indore", Url_Slug__c: "toyota-indore", Is_Active__c: true, Tagline__c: "Indore's home of Toyota",
+      Logo_Text__c: "Toyota Indore", Primary_Color_Hex__c: "#EB0A1E", Phone__c: "+917314000000", Email__c: "hello@toyotaindore.example",
+      Address__c: "AB Road, Indore, Madhya Pradesh", Operating_Hours__c: "Mon-Sat 9:00 AM - 8:00 PM, Sun 10:00 AM - 6:00 PM",
+    },
+    stockModels: null, // every model
+    branches: [
   { Name: "Toyota Indore - AB Road", City__c: "Indore", State__c: "Madhya Pradesh", Country__c: "India", Address__c: "AB Road, Near LIG Square", Postal_Code__c: "452008", Phone__c: "+917314000001", Email__c: "abroad@toyotaindore.example", Operating_Hours__c: "Mon-Sat 9:00 AM - 8:00 PM, Sun 10:00 AM - 6:00 PM", Manager_Name__c: "Rohit Sharma", Is_Active__c: true, Latitude__c: 22.6867, Longitude__c: 75.8627 },
   { Name: "Toyota Indore - Vijay Nagar", City__c: "Indore", State__c: "Madhya Pradesh", Country__c: "India", Address__c: "Vijay Nagar Square", Postal_Code__c: "452010", Phone__c: "+917314000002", Email__c: "vijaynagar@toyotaindore.example", Operating_Hours__c: "Mon-Sat 9:00 AM - 8:00 PM, Sun 10:00 AM - 6:00 PM", Manager_Name__c: "Priya Verma", Is_Active__c: true, Latitude__c: 22.7529, Longitude__c: 75.8937 },
+    ],
+  },
+  {
+    record: {
+      Name: "Toyota Bhopal", Url_Slug__c: "toyota-bhopal", Is_Active__c: true, Tagline__c: "Toyota in the City of Lakes",
+      Logo_Text__c: "Toyota Bhopal", Primary_Color_Hex__c: "#EB0A1E", Phone__c: "+917554000000", Email__c: "hello@toyotabhopal.example",
+      Address__c: "Hoshangabad Road, Bhopal, Madhya Pradesh", Operating_Hours__c: "Mon-Sat 9:30 AM - 7:30 PM",
+    },
+    stockModels: ["Glanza", "Urban Cruiser Taisor", "Innova Hycross"],
+    branches: [
+      { Name: "Toyota Bhopal - Hoshangabad Road", City__c: "Bhopal", State__c: "Madhya Pradesh", Country__c: "India", Address__c: "Hoshangabad Road, Near Misrod", Postal_Code__c: "462026", Phone__c: "+917554000001", Email__c: "misrod@toyotabhopal.example", Operating_Hours__c: "Mon-Sat 9:30 AM - 7:30 PM", Manager_Name__c: "Anjali Mehta", Is_Active__c: true, Latitude__c: 23.1793, Longitude__c: 77.4583 },
+    ],
+  },
 ];
 
-const SALES_REPS = [
-  { Name: "Amit Kulkarni", Email__c: "amit.kulkarni@toyotaindore.example", Phone__c: "+919000000001", Is_Active__c: true, Max_Daily_Bookings__c: 8 },
-  { Name: "Sneha Joshi", Email__c: "sneha.joshi@toyotaindore.example", Phone__c: "+919000000002", Is_Active__c: true, Max_Daily_Bookings__c: 8 },
-  { Name: "Rahul Deshmukh", Email__c: "rahul.deshmukh@toyotaindore.example", Phone__c: "+919000000003", Is_Active__c: true, Max_Daily_Bookings__c: 6 },
-  { Name: "Neha Agarwal", Email__c: "neha.agarwal@toyotaindore.example", Phone__c: "+919000000004", Is_Active__c: true, Max_Daily_Bookings__c: 6 },
+/** Deleted child-first so no lookup/master-detail blocks a parent's delete. */
+const RESET_ORDER = [
+  "Drive_Feedback__c", "Compliance_Record__c", "Booking__c", "Staff_Assignment__c", "Vehicle_Variant__c",
+  "Vehicle__c", "Vehicle_Model__c", "Branch__c", "Dealership__c",
 ];
+
+function asList(result) {
+  return Array.isArray(result) ? result : [result];
+}
+
+function assertAllCreated(label, results) {
+  const failed = results.filter((r) => !r.success);
+  if (failed.length) throw new Error(`${label}: ${failed.length} insert(s) failed: ${JSON.stringify(failed[0].errors)}`);
+}
+
+/** Company-level model record — specs/images live here once; stock units reference it. */
+function modelRecord(v) {
+  return {
+    Name: v.model,
+    Model_Code__c: `${v.make}-${v.model}`.toUpperCase().replace(/[^A-Z0-9]+/g, "-"),
+    Make__c: v.make,
+    Model__c: v.model,
+    Model_Year__c: v.year,
+    Body_Type__c: v.bodyType,
+    Fuel_Type__c: v.fuelType,
+    Transmission__c: v.transmission,
+    Price__c: v.price,
+    Price_Max__c: v.priceMax,
+    Is_Active__c: true,
+    ...sharedSpecFields(v),
+  };
+}
+
+/** Spec/marketing fields carried by both the model and (until the adapter reads models) each stock unit. */
+function sharedSpecFields(v) {
+  const gallery = galleryUrlsFor(v.model);
+  return {
+    Is_Featured__c: v.isFeatured,
+    Is_Best_Seller__c: v.isBestSeller,
+    Is_New_Launch__c: v.isNewLaunch,
+    Availability_Status__c: v.availability,
+    Seating_Capacity__c: v.seating,
+    Mileage_Kmpl__c: v.mileage,
+    Safety_Rating__c: v.safetyStars,
+    Description__c: v.description,
+    Engine_Options_Json__c: JSON.stringify(v.engineOptions),
+    Safety_Features_Json__c: JSON.stringify(v.safetyFeatures),
+    Infotainment_Features_Json__c: JSON.stringify(v.infotainment),
+    Exterior_Highlights_Json__c: JSON.stringify(v.exterior),
+    Interior_Highlights_Json__c: JSON.stringify(v.interior),
+    Colors_Json__c: JSON.stringify(v.colors),
+    Faqs_Json__c: JSON.stringify(v.faqs),
+    Primary_Image_Url__c: gallery[0] ?? null,
+    Gallery_Urls__c: JSON.stringify(gallery),
+    Accessories_Json__c: JSON.stringify([]),
+    Spec_Sheet_Json__c: JSON.stringify({}),
+  };
+}
 
 // All pricing (INR) and specs below are illustrative/approximate demo data for
 // development purposes — not live or authoritative Toyota pricing.
@@ -257,88 +334,91 @@ async function main() {
   const conn = await getConnection();
 
   if (RESET) {
-    console.log("Resetting existing catalog data...");
-    for (const obj of ["Booking__c", "Vehicle_Variant__c", "Vehicle__c", "Sales_Rep__c", "Branch__c"]) {
+    console.log("Resetting existing TDM data...");
+    for (const obj of RESET_ORDER) {
       const existing = await conn.query(`SELECT Id FROM ${obj}`);
       if (existing.records.length) {
-        await conn.sobject(obj).destroy(existing.records.map((r) => r.Id));
+        await conn.sobject(obj).destroy(existing.records.map((r) => r.Id), { allowRecursive: true });
         console.log(`  Deleted ${existing.records.length} ${obj} records.`);
       }
     }
+  } else {
+    const existing = await conn.query("SELECT COUNT() FROM Dealership__c");
+    if (existing.totalSize > 0) {
+      throw new Error("Org already has Dealership__c records — re-run with --reset to wipe and reseed.");
+    }
   }
 
-  console.log("Creating branches...");
-  const branchResults = await conn.sobject("Branch__c").create(BRANCHES);
-  const branches = Array.isArray(branchResults) ? branchResults : [branchResults];
-  const primaryBranchId = branches[0].id;
-  console.log(`  Created ${branches.length} branches.`);
+  console.log("Creating vehicle models...");
+  const modelResults = asList(await conn.sobject("Vehicle_Model__c").create(VEHICLES.map(modelRecord)));
+  assertAllCreated("Vehicle_Model__c", modelResults);
+  const modelIdByName = new Map(VEHICLES.map((v, i) => [v.model, modelResults[i].id]));
+  console.log(`  Created ${modelResults.length} models.`);
 
-  console.log("Creating sales reps...");
-  const repRecords = SALES_REPS.map((rep, i) => ({ ...rep, Branch__c: branches[i % branches.length].id }));
-  const repResults = await conn.sobject("Sales_Rep__c").create(repRecords);
-  console.log(`  Created ${(Array.isArray(repResults) ? repResults : [repResults]).length} sales reps.`);
-
-  console.log("Creating vehicles + variants...");
   let vehicleCount = 0;
   let variantCount = 0;
-  for (const v of VEHICLES) {
-    const vin = `MBJ${v.model.replace(/\s+/g, "").toUpperCase().slice(0, 6)}${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    const vehicleResult = await conn.sobject("Vehicle__c").create({
-      Make__c: v.make,
-      Model__c: v.model,
-      Trim__c: v.trim || null,
-      Year__c: v.year,
-      VIN__c: vin.slice(0, 32),
-      Body_Type__c: v.bodyType,
-      Fuel_Type__c: v.fuelType,
-      Transmission__c: v.transmission,
-      Price__c: v.price,
-      Price_Max__c: v.priceMax,
-      Odometer__c: 0,
-      Status__c: "Available",
-      Branch__c: primaryBranchId,
-      Is_Featured__c: v.isFeatured,
-      Is_Best_Seller__c: v.isBestSeller,
-      Is_New_Launch__c: v.isNewLaunch,
-      Availability_Status__c: v.availability,
-      Seating_Capacity__c: v.seating,
-      Mileage_Kmpl__c: v.mileage,
-      Safety_Rating__c: v.safetyStars,
-      Description__c: v.description,
-      Engine_Options_Json__c: JSON.stringify(v.engineOptions),
-      Safety_Features_Json__c: JSON.stringify(v.safetyFeatures),
-      Infotainment_Features_Json__c: JSON.stringify(v.infotainment),
-      Exterior_Highlights_Json__c: JSON.stringify(v.exterior),
-      Interior_Highlights_Json__c: JSON.stringify(v.interior),
-      Colors_Json__c: JSON.stringify(v.colors),
-      Faqs_Json__c: JSON.stringify(v.faqs),
-      Primary_Image_Url__c: galleryUrlsFor(v.model)[0] ?? null,
-      Gallery_Urls__c: JSON.stringify(galleryUrlsFor(v.model)),
-      Accessories_Json__c: JSON.stringify([]),
-      Spec_Sheet_Json__c: JSON.stringify({}),
-    });
-    if (!vehicleResult.success) {
-      console.error(`Failed to create ${v.model}:`, vehicleResult.errors);
-      continue;
-    }
-    vehicleCount++;
+  for (const dealership of DEALERSHIPS) {
+    const dealershipResult = await conn.sobject("Dealership__c").create(dealership.record);
+    assertAllCreated(`Dealership__c ${dealership.record.Name}`, [dealershipResult]);
+    const dealershipId = dealershipResult.id;
 
-    const variantRecords = v.variants.map((variant, idx) => ({
-      Name: variant.name,
-      Vehicle__c: vehicleResult.id,
-      Price__c: variant.price,
-      Engine__c: variant.engine,
-      Fuel_Type__c: variant.fuelType,
-      Transmission__c: variant.transmission,
-      Is_Default__c: variant.isDefault,
-      Display_Order__c: idx + 1,
-    }));
-    const variantResults = await conn.sobject("Vehicle_Variant__c").create(variantRecords);
-    variantCount += (Array.isArray(variantResults) ? variantResults : [variantResults]).length;
-    console.log(`  ${v.model}: created with ${variantRecords.length} variants.`);
+    const branchResults = asList(
+      await conn.sobject("Branch__c").create(dealership.branches.map((b) => ({ ...b, Dealership__c: dealershipId }))),
+    );
+    assertAllCreated(`Branch__c for ${dealership.record.Name}`, branchResults);
+    console.log(`${dealership.record.Name} (${dealership.record.Url_Slug__c}): ${branchResults.length} branch(es).`);
+
+    const stock = VEHICLES.filter((v) => !dealership.stockModels || dealership.stockModels.includes(v.model));
+    for (const [i, v] of stock.entries()) {
+      const vin = `MBJ${v.model.replace(/\s+/g, "").toUpperCase().slice(0, 6)}${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const vehicleResult = await conn.sobject("Vehicle__c").create({
+        Make__c: v.make,
+        Model__c: v.model,
+        Trim__c: v.trim || null,
+        Year__c: v.year,
+        VIN__c: vin.slice(0, 32),
+        Body_Type__c: v.bodyType,
+        Fuel_Type__c: v.fuelType,
+        Transmission__c: v.transmission,
+        Price__c: v.price,
+        Price_Max__c: v.priceMax,
+        Odometer__c: 0,
+        Status__c: "Available",
+        Dealership__c: dealershipId,
+        Branch__c: branchResults[i % branchResults.length].id,
+        Vehicle_Model__c: modelIdByName.get(v.model),
+        ...sharedSpecFields(v),
+      });
+      if (!vehicleResult.success) {
+        console.error(`  Failed to create ${v.model}:`, vehicleResult.errors);
+        continue;
+      }
+      vehicleCount++;
+
+      const variantRecords = v.variants.map((variant, idx) => ({
+        Name: variant.name,
+        Vehicle__c: vehicleResult.id,
+        Price__c: variant.price,
+        Engine__c: variant.engine,
+        Fuel_Type__c: variant.fuelType,
+        Transmission__c: variant.transmission,
+        Is_Default__c: variant.isDefault,
+        Display_Order__c: idx + 1,
+      }));
+      const variantResults = asList(await conn.sobject("Vehicle_Variant__c").create(variantRecords));
+      assertAllCreated(`Vehicle_Variant__c for ${v.model}`, variantResults);
+      variantCount += variantResults.length;
+    }
+    console.log(`  ${stock.length} stock vehicle(s).`);
   }
 
-  console.log(`\nDone. Created ${vehicleCount} vehicles and ${variantCount} variants across ${branches.length} branches.`);
+  // The CLI user is the org admin who authorizes the tenant connection — make them the company admin.
+  const identity = await conn.identity();
+  const assignment = await conn.sobject("Staff_Assignment__c").create({ User__c: identity.user_id, Role__c: "Company_Admin", Is_Active__c: true });
+  assertAllCreated("Staff_Assignment__c", [assignment]);
+  console.log(`Assigned ${identity.username} as Company_Admin.`);
+
+  console.log(`\nDone. ${modelResults.length} models, ${vehicleCount} stock vehicles, ${variantCount} variants across ${DEALERSHIPS.length} dealerships.`);
 }
 
 main().catch((err) => {

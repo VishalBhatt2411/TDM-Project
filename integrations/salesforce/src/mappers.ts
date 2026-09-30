@@ -3,6 +3,7 @@ import {
   Booking,
   ComplianceRecord,
   Customer,
+  Dealership,
   DriveFeedback,
   Email,
   EngineOption,
@@ -10,6 +11,8 @@ import {
   PersonName,
   PhoneNumber,
   SalesOpportunity,
+  SalesRepresentative,
+  StaffAssignment,
   TimeSlot,
   Vehicle,
   VehicleAllocation,
@@ -84,6 +87,7 @@ export function vehicleRecordToDomain(record: any): Vehicle {
     priceMax: record.Price_Max__c != null ? Money.create(record.Price_Max__c, "INR") : undefined,
     odometer: record.Odometer__c ?? 0,
     status: record.Status__c,
+    dealershipId: record.Dealership__c,
     branchId: record.Branch__c,
     isFeatured: !!record.Is_Featured__c,
     isBestSeller: !!record.Is_Best_Seller__c,
@@ -113,6 +117,48 @@ export function vehicleToUpdateRecord(vehicle: Vehicle): Record<string, unknown>
   return { Status__c: props.status, Odometer__c: props.odometer };
 }
 
+/** Full field set for an admin create/update of a vehicle listing — everything an operator can edit. */
+export function vehicleToFullRecord(vehicle: Vehicle): Record<string, unknown> {
+  const props = vehicle.toProps();
+  return {
+    Make__c: props.make,
+    Model__c: props.model,
+    Trim__c: props.trim ?? null,
+    Year__c: props.year,
+    VIN__c: props.vin,
+    Body_Type__c: props.bodyType,
+    Fuel_Type__c: props.fuelType,
+    Transmission__c: props.transmission,
+    Color__c: props.color ?? null,
+    Price__c: props.price.amount,
+    Price_Max__c: props.priceMax?.amount ?? null,
+    Odometer__c: props.odometer,
+    Status__c: props.status,
+    Dealership__c: props.dealershipId,
+    Branch__c: props.branchId,
+    Is_Featured__c: props.isFeatured,
+    Is_Best_Seller__c: props.isBestSeller,
+    Is_New_Launch__c: props.isNewLaunch,
+    Availability_Status__c: props.availabilityStatus,
+    Seating_Capacity__c: props.seatingCapacity ?? null,
+    Mileage_Kmpl__c: props.mileageKmpl ?? null,
+    Safety_Rating__c: props.safetyRatingStars ?? null,
+    Primary_Image_Url__c: props.primaryImageUrl ?? null,
+    Gallery_Urls__c: JSON.stringify(props.galleryUrls),
+    Video_Url__c: props.videoUrl ?? null,
+    Spec_Sheet_Json__c: JSON.stringify(props.specSheet),
+    Accessories_Json__c: JSON.stringify(props.accessories),
+    Description__c: props.description ?? null,
+    Engine_Options_Json__c: JSON.stringify(props.engineOptions),
+    Safety_Features_Json__c: JSON.stringify(props.safetyFeatures),
+    Infotainment_Features_Json__c: JSON.stringify(props.infotainmentFeatures),
+    Exterior_Highlights_Json__c: JSON.stringify(props.exteriorHighlights),
+    Interior_Highlights_Json__c: JSON.stringify(props.interiorHighlights),
+    Colors_Json__c: JSON.stringify(props.colors),
+    Faqs_Json__c: JSON.stringify(props.faqs),
+  };
+}
+
 export function variantRecordToDomain(record: any): VehicleVariant {
   return VehicleVariant.restore({
     id: record.Id,
@@ -130,6 +176,7 @@ export function variantRecordToDomain(record: any): VehicleVariant {
 export function branchRecordToDomain(record: any): Branch {
   return Branch.restore({
     id: record.Id,
+    dealershipId: record.Dealership__c,
     name: record.Name,
     address: {
       line1: record.Address__c ?? "",
@@ -150,6 +197,46 @@ export function branchRecordToDomain(record: any): Branch {
   });
 }
 
+export function dealershipRecordToDomain(record: any): Dealership {
+  return Dealership.restore({
+    id: record.Id,
+    name: record.Name,
+    urlSlug: record.Url_Slug__c,
+    customDomain: record.Custom_Domain__c ?? undefined,
+    isActive: !!record.Is_Active__c,
+    branding: {
+      tagline: record.Tagline__c ?? undefined,
+      logoText: record.Logo_Text__c ?? undefined,
+      logoUrl: record.Logo_Url__c ?? undefined,
+      primaryColorHex: record.Primary_Color_Hex__c ?? undefined,
+      phone: record.Phone__c ?? undefined,
+      email: record.Email__c ?? undefined,
+      address: record.Address__c ?? undefined,
+      operatingHours: record.Operating_Hours__c ?? undefined,
+    },
+  });
+}
+
+export function branchToRecord(branch: Branch): Record<string, unknown> {
+  const props = branch.toProps();
+  return {
+    Name: props.name,
+    Dealership__c: props.dealershipId,
+    Address__c: props.address.line1,
+    City__c: props.address.city,
+    State__c: props.address.state,
+    Postal_Code__c: props.address.postalCode,
+    Country__c: props.address.country,
+    Latitude__c: props.geo?.latitude ?? null,
+    Longitude__c: props.geo?.longitude ?? null,
+    Phone__c: props.phone ?? null,
+    Email__c: props.email ?? null,
+    Operating_Hours__c: props.operatingHours ?? null,
+    Manager_Name__c: props.managerName ?? null,
+    Is_Active__c: props.isActive,
+  };
+}
+
 /**
  * A Booking__c's OwnerId is mandatory in Salesforce (unlike the old Sales_Rep__c lookup,
  * which could be blank) — a booking that hasn't been assigned to a rep yet is simply
@@ -161,6 +248,7 @@ export function bookingRecordToDomain(record: any, integrationUserId: string): B
     id: record.Id,
     customerId: record.Contact__r?.Portal_User_Id__c ?? record.Contact__c,
     vehicleId: record.Vehicle__c,
+    dealershipId: record.Dealership__c,
     branchId: record.Branch__c,
     salesRepId: record.OwnerId && record.OwnerId !== integrationUserId ? record.OwnerId : undefined,
     driveType: record.Drive_Type__c,
@@ -206,6 +294,7 @@ export function bookingToRecord(booking: Booking): Record<string, unknown> {
   return {
     Contact__c: props.customerId,
     Vehicle__c: props.vehicleId,
+    Dealership__c: props.dealershipId,
     Branch__c: props.branchId,
     // Omitted (not set to null — OwnerId can never be blank in Salesforce) when nobody's
     // assigned yet: on insert it defaults to the integration user; on update it's simply
@@ -235,6 +324,64 @@ export function bookingToRecord(booking: Booking): Record<string, unknown> {
     Additional_Notes__c: props.additionalNotes ?? null,
     Staff_Notes__c: props.staffNotes ?? null,
   };
+}
+
+export function staffAssignmentRecordToDomain(record: any): StaffAssignment {
+  return StaffAssignment.restore({
+    id: record.Id,
+    userId: record.User__c,
+    userName: record.User__r?.Name ?? undefined,
+    userEmail: record.User__r?.Email ?? undefined,
+    role: record.Role__c,
+    dealershipId: record.Dealership__c ?? undefined,
+    branchId: record.Branch__c ?? undefined,
+    isActive: !!record.Is_Active__c,
+    maxDailyBookings: record.Max_Daily_Bookings__c ?? undefined,
+    phone: record.Phone__c ?? undefined,
+  });
+}
+
+export function staffAssignmentToRecord(assignment: StaffAssignment): Record<string, unknown> {
+  const props = assignment.toProps();
+  return {
+    User__c: props.userId,
+    Role__c: props.role,
+    Dealership__c: props.dealershipId ?? null,
+    Branch__c: props.branchId ?? null,
+    Is_Active__c: props.isActive,
+    Max_Daily_Bookings__c: props.maxDailyBookings ?? null,
+    Phone__c: props.phone ?? null,
+  };
+}
+
+/** A Sales Rep assignment read as a rep: the id is the User's, since that is what a booking is assigned to. */
+export function staffAssignmentRecordToSalesRep(record: any): SalesRepresentative {
+  return SalesRepresentative.restore({
+    id: record.User__c,
+    name: record.User__r?.Name ?? "",
+    email: record.User__r?.Email ?? "",
+    phone: record.Phone__c ?? undefined,
+    dealershipId: record.Dealership__c ?? undefined,
+    branchId: record.Branch__c ?? undefined,
+    isActive: !!record.Is_Active__c,
+    maxDailyBookings: record.Max_Daily_Bookings__c ?? undefined,
+  });
+}
+
+export function complianceRecordToDomain(record: any): ComplianceRecord {
+  return ComplianceRecord.create({
+    id: record.Id,
+    bookingId: record.Booking__c,
+    otpVerified: !!record.Otp_Verified__c,
+    licenseNumber: record.License_Number__c ?? undefined,
+    licenseVerified: !!record.License_Verified__c,
+    licenseImageUrl: record.License_Image_Url__c ?? undefined,
+    licenseExpiryDate: record.License_Expiry_Date__c ? new Date(record.License_Expiry_Date__c) : undefined,
+    consentAccepted: !!record.Consent_Accepted__c,
+    consentDocumentUrl: record.Consent_Document_Url__c ?? undefined,
+    signatureImageUrl: record.Signature_Image_Url__c ?? undefined,
+    signedAt: record.Signed_At__c ? new Date(record.Signed_At__c) : undefined,
+  });
 }
 
 export function complianceToRecord(compliance: ComplianceRecord): Record<string, unknown> {

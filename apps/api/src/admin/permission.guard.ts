@@ -1,45 +1,48 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Request } from "express";
-import { StaffRole, StaffUserRepository } from "@tdm/postgres-adapter";
-import { STAFF_USER_REPOSITORY } from "../infrastructure/tokens";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
 import { PERMISSION_KEY } from "./require-permission.decorator";
 import type { PermissionKey } from "./permissions";
+import type { StaffAccess } from "./staff-access";
+import { StaffAccessService } from "./staff-access.service";
 
 /**
- * Runs after StaffAuthGuard. "Admin" role implicitly has every permission — this
- * is a deliberate, hardcoded rule (not "Admin has permissions=[...all]" in the DB)
- * so an Admin can never be accidentally locked out by a stale/empty permissions array.
+ * Runs after StaffAuthGuard. Resolves the staff member's access from their active staff
+ * assignments on every request — never from the JWT, which carries identity only — and
+ * exposes it as `request.staffAccess` (see CurrentStaffAccess) so handlers can scope their
+ * queries. A staff member with no active assignment is refused even on routes that need no
+ * specific permission, so removing someone's last assignment locks them out.
  *
- * Every other role's permissions are read fresh from the database on every check —
- * never trusted from the JWT (which deliberately omits them, see AdminAuthService)
- * — so granting or revoking a permission takes effect on the staff member's very
- * next request instead of waiting for their access token to expire.
+ * `@RequirePermission` only establishes that the permission is held *somewhere*; handlers
+ * must still limit their work to `scopeFor(permission)`.
  */
 @Injectable()
 export class PermissionGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @Inject(STAFF_USER_REPOSITORY) private readonly staffUsers: StaffUserRepository,
+    private readonly staffAccess: StaffAccessService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.get<PermissionKey | undefined>(PERMISSION_KEY, context.getHandler());
-    if (!required) return true;
-
-    const request = context.switchToHttp().getRequest<Request & { staff?: AuthenticatedStaff }>();
+    const request = context.switchToHttp().getRequest<Request & { staff?: AuthenticatedStaff; staffAccess?: StaffAccess }>();
     const staff = request.staff;
     if (!staff) {
       throw new ForbiddenException("Staff context missing — StaffAuthGuard must run first.");
     }
-    if (staff.role === StaffRole.Admin) return true;
-
-    const current = await this.staffUsers.findById(staff.staffUserId);
-    if (!current || !current.isActive) {
-      throw new ForbiddenException("Staff account is no longer active.");
+    const access = await this.staffAccess.resolve(staff);
+    if (!access) {
+      throw new ForbiddenException("Your staff access has been removed.");
     }
-    if (current.permissions.includes(required)) return true;
+    request.staffAccess = access;
+
+    // Method-level @RequirePermission overrides a class-level one; a class-level one alone
+    // must still apply to every handler, so both targets are consulted.
+    const required = this.reflector.getAllAndOverride<PermissionKey | undefined>(PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!required || access.can(required)) return true;
 
     throw new ForbiddenException(`Missing required permission: ${required}`);
   }

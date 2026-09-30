@@ -48,3 +48,24 @@ export class NotFoundError extends DomainError {
     super(`${entity} with id ${id} was not found.`, "NOT_FOUND");
   }
 }
+
+/** The user already holds a staff assignment at that dealership — edit it instead of adding another. */
+export class StaffAssignmentConflictError extends DomainError {
+  constructor(message = "This user already has an assignment at that dealership.") {
+    super(message, "STAFF_ASSIGNMENT_CONFLICT");
+  }
+}
+
+/** A unit of work reached the data provider without a resolved tenant — fail closed rather than guess one. */
+export class TenantContextMissingError extends DomainError {
+  constructor() {
+    super("This request could not be associated with an organization.", "TENANT_CONTEXT_MISSING");
+  }
+}
+
+/** The tenant exists but has no usable data-provider connection (never connected, or credentials revoked). */
+export class TenantNotConnectedError extends DomainError {
+  constructor(readonly organizationId: string) {
+    super("This organization's data connection is not available. An administrator must reconnect it.", "TENANT_NOT_CONNECTED");
+  }
+}

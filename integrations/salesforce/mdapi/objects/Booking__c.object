@@ -22,6 +22,7 @@
       Private correctly on first deploy.
     -->
     <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
     <enableActivities>true</enableActivities>
     <enableHistory>true</enableHistory>
     <enableReports>true</enableReports>
@@ -244,4 +245,50 @@
         <length>4000</length>
         <visibleLines>6</visibleLines>
     </fields>
+    <fields>
+        <fullName>Dealership__c</fullName>
+        <label>Dealership</label>
+        <type>Lookup</type>
+        <referenceTo>Dealership__c</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>Dealership the drive is booked with; drives dealership-scoped access.</description>
+    </fields>
+    <fields>
+        <fullName>Vehicle_Model__c</fullName>
+        <label>Vehicle Model</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle_Model__c</referenceTo>
+        <relationshipName>Bookings</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+        <description>Model the customer asked to drive (the stock unit is Vehicle__c).</description>
+    </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
+    <validationRules>
+        <fullName>Branch_Belongs_To_Dealership</fullName>
+        <active>true</active>
+        <description>Keeps a booking's branch inside its own dealership, so dealership-scoped access can never leak across dealers.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Branch__c)), NOT(ISBLANK(Dealership__c)), Branch__r.Dealership__c &lt;&gt; Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Branch__c</errorDisplayField>
+        <errorMessage>The selected branch belongs to a different dealership.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Dealership_Required</fullName>
+        <active>true</active>
+        <description>Every booking belongs to a dealership: dealership-scoped sharing (TdmRecordSharing) has nothing to grant on a record without one.</description>
+        <errorConditionFormula>ISBLANK(Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Dealership__c</errorDisplayField>
+        <errorMessage>Select the dealership this record belongs to.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Vehicle_Belongs_To_Dealership</fullName>
+        <active>true</active>
+        <description>Keeps a booking on a vehicle of its own dealership, so one dealer can never book (or see through a booking) another dealer's stock.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Vehicle__c)), NOT(ISBLANK(Dealership__c)), Vehicle__r.Dealership__c &lt;&gt; Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Vehicle__c</errorDisplayField>
+        <errorMessage>The selected vehicle belongs to a different dealership.</errorMessage>
+    </validationRules>
 </CustomObject>

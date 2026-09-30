@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Company-level catalog entry: what a model is (make, specs, media, FAQs, variants). Physical
+  stock units at a dealership are Vehicle__c records that look up a model. Public read-only;
+  the company admin edits the catalog via TDM_Full_Access.
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Vehicle Model</label>
+    <pluralLabel>Vehicle Models</pluralLabel>
+    <nameField>
+        <label>Model Name</label>
+        <type>Text</type>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>Read</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Model_Code__c</fullName>
+        <label>Model Code</label>
+        <type>Text</type>
+        <length>40</length>
+        <required>true</required>
+        <unique>true</unique>
+        <caseSensitive>false</caseSensitive>
+        <externalId>true</externalId>
+        <description>Stable company-wide identifier for this model (e.g. CRETA-2026), used for imports and integrations.</description>
+    </fields>
+    <fields>
+        <fullName>Make__c</fullName>
+        <label>Make</label>
+        <type>Text</type>
+        <length>60</length>
+        <required>true</required>
+    </fields>
+    <fields>
+        <fullName>Model__c</fullName>
+        <label>Model</label>
+        <type>Text</type>
+        <length>60</length>
+        <required>true</required>
+    </fields>
+    <fields>
+        <fullName>Body_Type__c</fullName>
+        <label>Body Type</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Sedan</fullName><default>false</default></value>
+                <value><fullName>SUV</fullName><default>false</default></value>
+                <value><fullName>Hatchback</fullName><default>false</default></value>
+                <value><fullName>Coupe</fullName><default>false</default></value>
+                <value><fullName>Convertible</fullName><default>false</default></value>
+                <value><fullName>Truck</fullName><default>false</default></value>
+                <value><fullName>Van</fullName><default>false</default></value>
+                <value><fullName>Wagon</fullName><default>false</default></value>
+                <value><fullName>MPV</fullName><default>false</default></value>
+                <value><fullName>Pickup</fullName><default>false</default></value>
+                <value><fullName>Luxury</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Fuel_Type__c</fullName>
+        <label>Fuel Type</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Petrol</fullName><default>false</default></value>
+                <value><fullName>Diesel</fullName><default>false</default></value>
+                <value><fullName>Electric</fullName><default>false</default></value>
+                <value><fullName>Hybrid</fullName><default>false</default></value>
+                <value><fullName>Plugin_Hybrid</fullName><default>false</default></value>
+                <value><fullName>CNG</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Transmission__c</fullName>
+        <label>Transmission</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Manual</fullName><default>false</default></value>
+                <value><fullName>Automatic</fullName><default>false</default></value>
+                <value><fullName>CVT</fullName><default>false</default></value>
+                <value><fullName>DCT</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Price__c</fullName>
+        <label>Price</label>
+        <type>Currency</type>
+        <precision>16</precision>
+        <scale>2</scale>
+    </fields>
+    <fields>
+        <fullName>Price_Max__c</fullName>
+        <label>Price (Top Variant)</label>
+        <type>Currency</type>
+        <precision>16</precision>
+        <scale>2</scale>
+        <description>Price of the top-spec variant, so Price__c can represent the starting (base variant) price and this represents the range ceiling.</description>
+    </fields>
+    <fields>
+        <fullName>Is_Featured__c</fullName>
+        <label>Is Featured</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Primary_Image_Url__c</fullName>
+        <label>Primary Image URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>Gallery_Urls__c</fullName>
+        <label>Gallery URLs (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Video_Url__c</fullName>
+        <label>Video URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>Spec_Sheet_Json__c</fullName>
+        <label>Spec Sheet (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>10</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Accessories_Json__c</fullName>
+        <label>Accessories (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Description__c</fullName>
+        <label>Description</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Seating_Capacity__c</fullName>
+        <label>Seating Capacity</label>
+        <type>Number</type>
+        <precision>2</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Mileage_Kmpl__c</fullName>
+        <label>Mileage (km/l)</label>
+        <type>Number</type>
+        <precision>4</precision>
+        <scale>1</scale>
+    </fields>
+    <fields>
+        <fullName>Safety_Rating__c</fullName>
+        <label>Safety Rating (Stars)</label>
+        <type>Number</type>
+        <precision>1</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Availability_Status__c</fullName>
+        <label>Availability Status</label>
+        <type>Picklist</type>
+        <valueSet>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>In_Stock</fullName><default>true</default></value>
+                <value><fullName>Limited_Stock</fullName><default>false</default></value>
+                <value><fullName>On_Request</fullName><default>false</default></value>
+                <value><fullName>Coming_Soon</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+    </fields>
+    <fields>
+        <fullName>Is_Best_Seller__c</fullName>
+        <label>Is Best Seller</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Is_New_Launch__c</fullName>
+        <label>Is New Launch</label>
+        <type>Checkbox</type>
+        <defaultValue>false</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Engine_Options_Json__c</fullName>
+        <label>Engine Options (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Safety_Features_Json__c</fullName>
+        <label>Safety Features (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Infotainment_Features_Json__c</fullName>
+        <label>Infotainment Features (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Exterior_Highlights_Json__c</fullName>
+        <label>Exterior Highlights (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Interior_Highlights_Json__c</fullName>
+        <label>Interior Highlights (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Colors_Json__c</fullName>
+        <label>Available Colors (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Faqs_Json__c</fullName>
+        <label>FAQs (JSON)</label>
+        <type>LongTextArea</type>
+        <length>32000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Model_Year__c</fullName>
+        <label>Model Year</label>
+        <type>Number</type>
+        <precision>4</precision>
+        <scale>0</scale>
+    </fields>
+    <fields>
+        <fullName>Is_Active__c</fullName>
+        <label>Is Active</label>
+        <type>Checkbox</type>
+        <defaultValue>true</defaultValue>
+        <description>Inactive models are hidden from customers; existing stock and bookings keep their link.</description>
+    </fields>
+    <validationRules>
+        <fullName>Model_Year_Range</fullName>
+        <active>true</active>
+        <description>Guards against typo'd model years.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Model_Year__c)), OR(Model_Year__c &lt; 1900, Model_Year__c &gt; YEAR(TODAY()) + 2))</errorConditionFormula>
+        <errorDisplayField>Model_Year__c</errorDisplayField>
+        <errorMessage>Enter a model year between 1900 and two years from now.</errorMessage>
+    </validationRules>
+</CustomObject>

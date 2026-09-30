@@ -22,6 +22,8 @@ export interface BookingProps {
   id: string;
   customerId: string;
   vehicleId: string;
+  /** The dealership of branchId — derived server-side from the branch, never taken from the customer. */
+  dealershipId: string;
   branchId: string;
   salesRepId?: string;
   driveType: DriveType;
@@ -64,6 +66,7 @@ export class Booking {
     id?: string;
     customerId: string;
     vehicleId: string;
+    dealershipId: string;
     branchId: string;
     driveType: DriveType;
     slot: TimeSlot;
@@ -84,6 +87,7 @@ export class Booking {
       id: input.id ?? UNASSIGNED_ID,
       customerId: input.customerId,
       vehicleId: input.vehicleId,
+      dealershipId: input.dealershipId,
       branchId: input.branchId,
       driveType: input.driveType,
       slot: input.slot,
@@ -118,6 +122,9 @@ export class Booking {
   }
   get branchId() {
     return this.props.branchId;
+  }
+  get dealershipId() {
+    return this.props.dealershipId;
   }
   get customerId() {
     return this.props.customerId;
@@ -265,6 +272,11 @@ export class ComplianceRecord {
 
   get isComplete(): boolean {
     return this.props.otpVerified && this.props.licenseVerified && this.props.consentAccepted;
+  }
+
+  /** A staff member's final sign-off after reviewing the AI-assisted license read — see FR-52. The AI extraction/flags are advisory only and never set this on their own. */
+  confirmLicense(): void {
+    this.props.licenseVerified = true;
   }
 
   toProps(): ComplianceRecordProps {

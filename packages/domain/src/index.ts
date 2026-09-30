@@ -3,6 +3,8 @@ export * from "./value-objects";
 export * from "./entities/customer";
 export * from "./entities/vehicle";
 export * from "./entities/branch";
+export * from "./entities/dealership";
+export * from "./entities/staff-assignment";
 export * from "./entities/booking";
 export * from "./entities/inventory";
 export * from "./entities/sales-opportunity";

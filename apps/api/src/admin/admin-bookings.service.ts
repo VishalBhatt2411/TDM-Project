@@ -1,13 +1,15 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { AuditLogRepository, Booking, BookingRepository, BookingStatus, SalesRepRepository } from "@tdm/domain";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { AuditLogRepository, Booking, BookingRepository, BookingStatus, SalesRepRepository, SalesRepresentative } from "@tdm/domain";
 import { BookingDto } from "@tdm/types";
-import { StaffRole, StaffUserRepository } from "@tdm/postgres-adapter";
-import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, SALES_REP_REPOSITORY, STAFF_USER_REPOSITORY } from "../infrastructure/tokens";
+import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, SALES_REP_REPOSITORY } from "../infrastructure/tokens";
 import { bookingToDto } from "../bookings/bookings.service";
 import { BookingMutationService } from "../bookings/booking-mutation.service";
+import { QrCheckinService } from "../bookings/qr-checkin.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
+import { BookingAccessPolicy } from "./booking-access.policy";
 import { PERMISSIONS } from "./permissions";
+import type { StaffAccess } from "./staff-access";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
 import { AssignSalesRepDto, CheckInBookingDto, CompleteDriveDto, SetStaffNotesDto, StartDriveDto } from "./dto";
 import { CancelBookingDto, RescheduleBookingDto } from "../bookings/dto";
@@ -23,15 +25,17 @@ export class AdminBookingsService {
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
-    @Inject(STAFF_USER_REPOSITORY) private readonly staffUsers: StaffUserRepository,
+    private readonly access: BookingAccessPolicy,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
     private readonly mutations: BookingMutationService,
+    private readonly qrCheckin: QrCheckinService,
   ) {}
 
-  /** Platform-wide listing — Admin or a Manager/staff holding MANAGE_BOOKINGS only. */
-  async list(filters: { status?: BookingStatus; branchId?: string; page?: number; pageSize?: number }) {
-    const { items, total } = await this.bookings.findAll(filters);
+  /** Every booking at the dealerships where the actor holds MANAGE_BOOKINGS. */
+  async list(filters: { status?: BookingStatus; branchId?: string; page?: number; pageSize?: number }, access: StaffAccess) {
+    const scope = access.scopeFor(PERMISSIONS.MANAGE_BOOKINGS) ?? { dealershipIds: [] };
+    const { items, total } = await this.bookings.findAll({ ...filters, ...scope });
     return {
       items: items.map(adminBookingToDto),
       total,
@@ -41,11 +45,8 @@ export class AdminBookingsService {
   }
 
   /** A rep's self-service view — every booking currently assigned to them, any status. */
-  async listMine(staff: AuthenticatedStaff, filters: { status?: BookingStatus; page?: number; pageSize?: number }) {
-    if (!staff.salesRepId) {
-      throw new BadRequestException("Your staff account isn't linked to a Sales Rep record — ask an Admin to link one.");
-    }
-    const { items, total } = await this.bookings.findAll({ ...filters, salesRepId: staff.salesRepId });
+  async listMine(access: StaffAccess, filters: { status?: BookingStatus; page?: number; pageSize?: number }) {
+    const { items, total } = await this.bookings.findAll({ ...filters, salesRepId: access.salesforceUserId });
     return {
       items: items.map(adminBookingToDto),
       total,
@@ -56,7 +57,7 @@ export class AdminBookingsService {
 
   async getById(bookingId: string, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
     return adminBookingToDto(booking);
   }
 
@@ -64,12 +65,16 @@ export class AdminBookingsService {
    * Reassigns which Sales_Rep__c is handling a booking. This writes straight through
    * to Salesforce (Booking__c.Sales_Rep__c) via the same BookingRepository the customer
    * flows use — the admin console has no separate/shadow copy of this data. Restricted
-   * to Admin/Manager (MANAGE_BOOKINGS) — a rep hands off via handoff() instead, which is
-   * scoped to bookings already assigned to them.
+   * to staff holding MANAGE_BOOKINGS at the booking's dealership — a rep hands off via
+   * handoff() instead, which is scoped to bookings already assigned to them.
    */
-  async assignSalesRep(bookingId: string, dto: AssignSalesRepDto, actorId: string) {
+  async assignSalesRep(bookingId: string, dto: AssignSalesRepDto, actorId: string, access: StaffAccess) {
     const booking = await this.requireBooking(bookingId);
-    const rep = await this.requireActiveRep(dto.salesRepId);
+    // Another dealership's booking is indistinguishable from a nonexistent one.
+    if (!access.canIn(PERMISSIONS.MANAGE_BOOKINGS, booking.dealershipId)) {
+      throw new NotFoundException(`Booking ${bookingId} was not found.`);
+    }
+    const rep = await this.requireActiveRep(dto.salesRepId, booking.dealershipId);
 
     booking.assignRep(rep.id);
     const saved = await this.bookings.save(booking);
@@ -91,8 +96,8 @@ export class AdminBookingsService {
   /** A rep handing their own booking off to a colleague — Admin/Manager may also use it on any booking. */
   async handoff(bookingId: string, dto: AssignSalesRepDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
-    const rep = await this.requireActiveRep(dto.salesRepId);
+    await this.access.assertCanActOn(staff, booking);
+    const rep = await this.requireActiveRep(dto.salesRepId, booking.dealershipId);
 
     booking.assignRep(rep.id);
     const saved = await this.bookings.save(booking);
@@ -113,7 +118,14 @@ export class AdminBookingsService {
 
   async checkIn(bookingId: string, dto: CheckInBookingDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
+
+    if (dto.method === "QR") {
+      if (!dto.qrToken) {
+        throw new BadRequestException("A QR token is required for a QR check-in.");
+      }
+      this.qrCheckin.verifyToken(dto.qrToken, bookingId);
+    }
 
     booking.checkIn(dto.method);
     const saved = await this.bookings.save(booking);
@@ -123,7 +135,16 @@ export class AdminBookingsService {
 
   async start(bookingId: string, dto: StartDriveDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
+
+    // FR-52/54/55: a vehicle never leaves the lot without a staff-verified license and a
+    // signed consent on file for this booking.
+    const compliance = await this.bookings.findComplianceByBooking(bookingId);
+    if (!compliance?.isComplete) {
+      throw new BadRequestException(
+        "Pre-drive compliance is incomplete — the customer's license must be verified by staff and consent signed before the drive can start.",
+      );
+    }
 
     booking.start(dto.odometerStart);
     const saved = await this.bookings.save(booking);
@@ -133,7 +154,7 @@ export class AdminBookingsService {
 
   async complete(bookingId: string, dto: CompleteDriveDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
 
     booking.complete(dto.odometerEnd);
     const saved = await this.bookings.save(booking);
@@ -143,7 +164,7 @@ export class AdminBookingsService {
 
   async markNoShow(bookingId: string, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
 
     booking.markNoShow();
     const saved = await this.bookings.save(booking);
@@ -153,7 +174,7 @@ export class AdminBookingsService {
 
   async setNotes(bookingId: string, dto: SetStaffNotesDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
 
     booking.setStaffNotes(dto.notes);
     const saved = await this.bookings.save(booking);
@@ -163,7 +184,7 @@ export class AdminBookingsService {
 
   async cancel(bookingId: string, dto: CancelBookingDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
 
     const cancelled = await this.mutations.cancelBooking(booking, dto.reason, staff.staffUserId);
     return adminBookingToDto(cancelled);
@@ -171,7 +192,7 @@ export class AdminBookingsService {
 
   async reschedule(bookingId: string, dto: RescheduleBookingDto, staff: AuthenticatedStaff) {
     const booking = await this.requireBooking(bookingId);
-    await this.assertCanActOn(staff, booking);
+    await this.access.assertCanActOn(staff, booking);
 
     const saved = await this.mutations.rescheduleBooking(booking, dto.slot, staff.staffUserId);
     return adminBookingToDto(saved);
@@ -183,29 +204,12 @@ export class AdminBookingsService {
     return booking;
   }
 
-  private async requireActiveRep(salesRepId: string) {
-    const rep = await this.salesReps.findById(salesRepId);
-    if (!rep) throw new NotFoundException(`Sales representative ${salesRepId} was not found.`);
-    if (!rep.isActive) throw new BadRequestException(`Sales representative ${salesRepId} is not active.`);
+  /** A booking can only go to a rep holding an active Sales Rep assignment at the booking's own dealership. */
+  private async requireActiveRep(salesRepId: string, dealershipId: string): Promise<SalesRepresentative> {
+    const reps = await this.salesReps.findAllActive({ dealershipIds: [dealershipId] });
+    const rep = reps.find((r) => r.id === salesRepId);
+    if (!rep) throw new BadRequestException("That sales representative isn't active at this booking's dealership.");
     return rep;
-  }
-
-  /**
-   * Admin, or a Manager/staff holding MANAGE_BOOKINGS, can act on any booking; a rep
-   * only on bookings currently assigned to them. Permissions are never trusted from
-   * the JWT (it intentionally omits them — see AdminAuthService) — read fresh from
-   * the database here, the same way PermissionGuard does for decorator-gated routes,
-   * so a revoked MANAGE_BOOKINGS grant takes effect immediately, not just on the
-   * routes that happen to carry @RequirePermission.
-   */
-  private async assertCanActOn(staff: AuthenticatedStaff, booking: Booking): Promise<void> {
-    if (staff.role === StaffRole.Admin) return;
-    if (staff.salesRepId && booking.salesRepId === staff.salesRepId) return;
-
-    const current = await this.staffUsers.findById(staff.staffUserId);
-    if (current?.isActive && current.permissions.includes(PERMISSIONS.MANAGE_BOOKINGS)) return;
-
-    throw new ForbiddenException("You can only act on test drives assigned to you.");
   }
 
   private async logAction(staff: AuthenticatedStaff, action: string, bookingId: string, metadata: Record<string, unknown>) {

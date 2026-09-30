@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Calendar, Car, ShieldCheck, Sparkles } from "lucide-react";
 import { getFeaturedVehicles } from "@/api/vehicles";
 import { VehicleCard } from "@/components/VehicleCard";
@@ -38,6 +39,7 @@ function VehicleSection({ title, icon, kind }: { title: string; icon: ReactNode;
 
 export function HomePage() {
   const { data: dealership } = useDealershipConfig();
+  const { t } = useTranslation();
 
   return (
     <div>
@@ -51,20 +53,20 @@ export function HomePage() {
               <Sparkles className="h-4 w-4" /> {dealership?.name ?? "Toyota Indore"}
             </p>
             <h1 className="max-w-2xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-              Experience the drive before you decide.
+              {t("home.heroTitle")}
             </h1>
             <p className="mt-4 max-w-xl text-lg text-white/85">
-              Book a free test drive at your nearest showroom or right from your doorstep — no waiting, no hassle.
+              {t("home.heroSubtitle")}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/vehicles">
                 <Button size="lg" variant="default" className="bg-white text-slate-900 hover:bg-white/90">
-                  Book a Test Drive
+                  {t("home.bookATestDrive")}
                 </Button>
               </Link>
               <Link to="/vehicles">
                 <Button size="lg" variant="outline" className="border-white/40 bg-transparent text-white hover:bg-white/10">
-                  Explore the Lineup
+                  {t("home.exploreLineup")}
                 </Button>
               </Link>
             </div>
@@ -77,37 +79,37 @@ export function HomePage() {
           <div className="flex items-start gap-3">
             <Car className="mt-0.5 h-5 w-5 text-primary" />
             <div>
-              <p className="font-semibold">Showroom or Home</p>
-              <p className="text-sm text-muted-foreground">Choose to drive at our showroom or have us bring the car to you.</p>
+              <p className="font-semibold">{t("home.feature1Title")}</p>
+              <p className="text-sm text-muted-foreground">{t("home.feature1Body")}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
             <Calendar className="mt-0.5 h-5 w-5 text-primary" />
             <div>
-              <p className="font-semibold">Book in Under a Minute</p>
-              <p className="text-sm text-muted-foreground">No account needed upfront — just pick a slot and go.</p>
+              <p className="font-semibold">{t("home.feature2Title")}</p>
+              <p className="text-sm text-muted-foreground">{t("home.feature2Body")}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-primary" />
             <div>
-              <p className="font-semibold">Trusted Toyota Quality</p>
-              <p className="text-sm text-muted-foreground">Every vehicle in our lineup, backed by Toyota's reliability.</p>
+              <p className="font-semibold">{t("home.feature3Title")}</p>
+              <p className="text-sm text-muted-foreground">{t("home.feature3Body")}</p>
             </div>
           </div>
         </div>
       </section>
 
-      <VehicleSection title="Featured Vehicles" icon={<Sparkles className="h-5 w-5 text-primary" />} kind="featured" />
-      <VehicleSection title="Best Sellers" icon={<Car className="h-5 w-5 text-primary" />} kind="bestSeller" />
-      <VehicleSection title="New Launches" icon={<Calendar className="h-5 w-5 text-primary" />} kind="newLaunch" />
+      <VehicleSection title={t("home.featuredVehicles")} icon={<Sparkles className="h-5 w-5 text-primary" />} kind="featured" />
+      <VehicleSection title={t("home.bestSellers")} icon={<Car className="h-5 w-5 text-primary" />} kind="bestSeller" />
+      <VehicleSection title={t("home.newLaunches")} icon={<Calendar className="h-5 w-5 text-primary" />} kind="newLaunch" />
 
       <section className="mx-auto max-w-6xl px-4 py-12 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight">Ready to feel it for yourself?</h2>
-        <p className="mt-2 text-muted-foreground">Browse the full lineup and book your test drive today.</p>
+        <h2 className="text-2xl font-semibold tracking-tight">{t("home.ctaTitle")}</h2>
+        <p className="mt-2 text-muted-foreground">{t("home.ctaSubtitle")}</p>
         <Link to="/vehicles">
           <Button size="lg" className="mt-6">
-            Explore All Vehicles
+            {t("home.exploreAllVehicles")}
           </Button>
         </Link>
       </section>

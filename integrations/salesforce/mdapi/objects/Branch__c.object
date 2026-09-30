@@ -7,7 +7,8 @@
         <type>Text</type>
     </nameField>
     <deploymentStatus>Deployed</deploymentStatus>
-    <sharingModel>ReadWrite</sharingModel>
+    <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
     <enableActivities>true</enableActivities>
     <enableHistory>true</enableHistory>
     <enableReports>true</enableReports>
@@ -85,4 +86,25 @@
         <type>Checkbox</type>
         <defaultValue>true</defaultValue>
     </fields>
+    <fields>
+        <fullName>Dealership__c</fullName>
+        <label>Dealership</label>
+        <type>Lookup</type>
+        <referenceTo>Dealership__c</referenceTo>
+        <relationshipName>Branches</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>The dealership this branch belongs to.</description>
+    </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
+    <validationRules>
+        <fullName>Dealership_Required</fullName>
+        <active>true</active>
+        <description>Every branch belongs to a dealership: dealership-scoped sharing (TdmRecordSharing) has nothing to grant on a record without one.</description>
+        <errorConditionFormula>ISBLANK(Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Dealership__c</errorDisplayField>
+        <errorMessage>Select the dealership this record belongs to.</errorMessage>
+    </validationRules>
 </CustomObject>

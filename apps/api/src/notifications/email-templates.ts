@@ -20,7 +20,16 @@ function safeHex(value: string | null | undefined, fallback: string): string {
   return value && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value) ? value : fallback;
 }
 
-function layout(dealership: DealershipConfig, title: string, bodyHtml: string, accentHex = safeHex(dealership.primaryColorHex, "#EB0A1E")): string {
+function layout(
+  dealership: DealershipConfig,
+  title: string,
+  bodyHtml: string,
+  accentHex = safeHex(dealership.primaryColorHex, "#EB0A1E"),
+  note?: string,
+): string {
+  const noteHtml = note
+    ? `<div style="margin:0 0 16px;padding:12px 16px;background:#fffbeb;border-left:3px solid ${accentHex};border-radius:4px;color:#374151;font-size:14px;">${escapeHtml(note)}</div>`
+    : "";
   return `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">
@@ -36,6 +45,7 @@ function layout(dealership: DealershipConfig, title: string, bodyHtml: string, a
         <tr>
           <td style="padding:32px;">
             <h1 style="font-size:20px;color:#111827;margin:0 0 16px;">${escapeHtml(title)}</h1>
+            ${noteHtml}
             ${bodyHtml}
           </td>
         </tr>
@@ -64,6 +74,12 @@ function infoRow(label: string, value: string): string {
   </tr>`;
 }
 
+/** Staff-editable customization for a notification template — see NotificationTemplateRepository. Both fields are optional; a missing one falls back to the hardcoded default subject / no extra note. */
+export interface TemplateOverride {
+  subject?: string;
+  note?: string;
+}
+
 export interface BookingEmailContext {
   customerName: string;
   vehicleLabel: string;
@@ -76,7 +92,7 @@ export interface BookingEmailContext {
   salesRepName?: string;
 }
 
-export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: BookingEmailContext): { subject: string; html: string } {
+export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
@@ -92,10 +108,13 @@ export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: Book
     <p style="color:#374151;font-size:15px;">Please bring a valid driving license to your appointment.</p>
     <p style="color:#374151;font-size:14px;">Need to change plans? You can reschedule or cancel anytime from your account — just log in and visit "My Bookings".</p>
   `;
-  return { subject: `Test Drive Confirmed — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "Your Test Drive is Confirmed", body, accent) };
+  return {
+    subject: override?.subject ?? `Test Drive Confirmed — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    html: layout(dealership, "Your Test Drive is Confirmed", body, accent, override?.note),
+  };
 }
 
-export function accountAccessEmail(dealership: DealershipConfig, customerName: string, magicLinkUrl: string): { subject: string; html: string } {
+export function accountAccessEmail(dealership: DealershipConfig, customerName: string, magicLinkUrl: string, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
@@ -103,10 +122,13 @@ export function accountAccessEmail(dealership: DealershipConfig, customerName: s
     <p style="margin:24px 0;">${button(magicLinkUrl, "Access My Bookings", accent)}</p>
     <p style="color:#6b7280;font-size:13px;">This secure link signs you in directly — no password needed. It expires in 48 hours; you can always request a new one from the login page.</p>
   `;
-  return { subject: `Access your ${dealership.name} account`, html: layout(dealership, "Your Account is Ready", body, accent) };
+  return {
+    subject: override?.subject ?? `Access your ${dealership.name} account`,
+    html: layout(dealership, "Your Account is Ready", body, accent, override?.note),
+  };
 }
 
-export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, position: number): { subject: string; html: string } {
+export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, position: number, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
@@ -120,10 +142,13 @@ export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailC
     </table>
     <p style="color:#374151;font-size:15px;">We'll email you the moment a slot opens up and your booking is confirmed.</p>
   `;
-  return { subject: `You're on the Waitlist — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "Added to the Waitlist", body, accent) };
+  return {
+    subject: override?.subject ?? `You're on the Waitlist — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    html: layout(dealership, "Added to the Waitlist", body, accent, override?.note),
+  };
 }
 
-export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: BookingEmailContext): { subject: string; html: string } {
+export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
@@ -138,10 +163,13 @@ export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: Booking
     </table>
     <p style="color:#374151;font-size:15px;">Please bring a valid driving license to your appointment.</p>
   `;
-  return { subject: `You're Confirmed! — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "Waitlist Slot Confirmed", body, accent) };
+  return {
+    subject: override?.subject ?? `You're Confirmed! — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    html: layout(dealership, "Waitlist Slot Confirmed", body, accent, override?.note),
+  };
 }
 
-export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, reason: string): { subject: string; html: string } {
+export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, reason: string, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
@@ -154,10 +182,13 @@ export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmai
     </table>
     <p style="color:#374151;font-size:15px;">Changed your mind? You're welcome to book a new test drive anytime.</p>
   `;
-  return { subject: `Test Drive Cancelled — ${ctx.bookingReference}`, html: layout(dealership, "Booking Cancelled", body, accent) };
+  return {
+    subject: override?.subject ?? `Test Drive Cancelled — ${ctx.bookingReference}`,
+    html: layout(dealership, "Booking Cancelled", body, accent, override?.note),
+  };
 }
 
-export function rescheduleEmail(dealership: DealershipConfig, ctx: BookingEmailContext, previousStart: Date): { subject: string; html: string } {
+export function rescheduleEmail(dealership: DealershipConfig, ctx: BookingEmailContext, previousStart: Date, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
@@ -170,13 +201,17 @@ export function rescheduleEmail(dealership: DealershipConfig, ctx: BookingEmailC
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
   `;
-  return { subject: `Test Drive Rescheduled — ${ctx.bookingReference}`, html: layout(dealership, "Booking Rescheduled", body, accent) };
+  return {
+    subject: override?.subject ?? `Test Drive Rescheduled — ${ctx.bookingReference}`,
+    html: layout(dealership, "Booking Rescheduled", body, accent, override?.note),
+  };
 }
 
 export function reminderEmail(
   dealership: DealershipConfig,
   ctx: BookingEmailContext,
   kind: "24h" | "2h" | "day_of",
+  override?: TemplateOverride,
 ): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const leadText = kind === "24h" ? "tomorrow" : kind === "2h" ? "in about 2 hours" : "today";
@@ -190,7 +225,10 @@ export function reminderEmail(
     </table>
     <p style="color:#374151;font-size:15px;">Please bring a valid driving license. We look forward to seeing you!</p>
   `;
-  return { subject: `Reminder: Your Test Drive is ${leadText}`, html: layout(dealership, "Test Drive Reminder", body, accent) };
+  return {
+    subject: override?.subject ?? `Reminder: Your Test Drive is ${leadText}`,
+    html: layout(dealership, "Test Drive Reminder", body, accent, override?.note),
+  };
 }
 
 export function followUpEmail(
@@ -198,6 +236,7 @@ export function followUpEmail(
   customerName: string,
   vehicleLabel: string,
   daysSince: number,
+  override?: TemplateOverride,
 ): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
@@ -206,25 +245,9 @@ export function followUpEmail(
     <p style="color:#374151;font-size:15px;">If you have any questions, or would like to discuss pricing, financing, or an exchange offer, your sales representative would be happy to help.</p>
     <p style="color:#374151;font-size:15px;">We're here whenever you're ready to take the next step.</p>
   `;
-  return { subject: `Still thinking about the ${vehicleLabel}?`, html: layout(dealership, "We'd Love to Hear From You", body, accent) };
-}
-
-export function staffAccessGrantedEmail(
-  dealership: DealershipConfig,
-  staffName: string,
-  role: string,
-  loginUrl: string,
-): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
-  const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(staffName)},</p>
-    <p style="color:#374151;font-size:15px;">You've been granted access to the ${escapeHtml(dealership.name)} Admin Console with the role of <strong>${escapeHtml(role)}</strong>.</p>
-    <p style="margin:24px 0;">${button(loginUrl, "Log In with Salesforce", accent)}</p>
-    <p style="color:#6b7280;font-size:13px;">Sign in using your existing Salesforce account — no separate password to set up.</p>
-  `;
   return {
-    subject: `Your ${dealership.name} Admin Console access is ready`,
-    html: layout(dealership, "Admin Console Access Granted", body, accent),
+    subject: override?.subject ?? `Still thinking about the ${vehicleLabel}?`,
+    html: layout(dealership, "We'd Love to Hear From You", body, accent, override?.note),
   };
 }
 
@@ -233,6 +256,7 @@ export function passwordSetupEmail(
   customerName: string,
   setupUrl: string,
   isNewAccount: boolean,
+  override?: TemplateOverride,
 ): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const intro = isNewAccount
@@ -245,8 +269,26 @@ export function passwordSetupEmail(
     <p style="color:#6b7280;font-size:13px;">This link expires in 1 hour. If you didn't expect this email, you can safely ignore it.</p>
   `;
   return {
-    subject: isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`,
-    html: layout(dealership, isNewAccount ? "Your Account is Ready" : "Password Reset Requested", body, accent),
+    subject: override?.subject ?? (isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`),
+    html: layout(dealership, isNewAccount ? "Your Account is Ready" : "Password Reset Requested", body, accent, override?.note),
+  };
+}
+
+export function otpCodeEmail(
+  dealership: DealershipConfig,
+  code: string,
+  ttlMinutes: number,
+  override?: TemplateOverride,
+): { subject: string; html: string } {
+  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+  const body = `
+    <p style="color:#374151;font-size:15px;">Use this code to verify your ${escapeHtml(dealership.name)} account:</p>
+    <p style="margin:24px 0;font-size:32px;font-weight:bold;letter-spacing:8px;color:#111827;">${escapeHtml(code)}</p>
+    <p style="color:#6b7280;font-size:13px;">This code expires in ${ttlMinutes} minutes. Never share it with anyone — ${escapeHtml(dealership.name)} staff will never ask for it.</p>
+  `;
+  return {
+    subject: override?.subject ?? `Your ${dealership.name} verification code`,
+    html: layout(dealership, "Your Verification Code", body, accent, override?.note),
   };
 }
 
@@ -254,6 +296,7 @@ export function salesRepAssignedEmail(
   dealership: DealershipConfig,
   repName: string,
   ctx: BookingEmailContext,
+  override?: TemplateOverride,
 ): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
@@ -269,15 +312,39 @@ export function salesRepAssignedEmail(
     </table>
     <p style="color:#374151;font-size:15px;">Log in to the Admin Console to view or act on this booking.</p>
   `;
-  return { subject: `New Test Drive Assigned — ${ctx.vehicleLabel} (${ctx.bookingReference})`, html: layout(dealership, "You've Been Assigned a Test Drive", body, accent) };
+  return {
+    subject: override?.subject ?? `New Test Drive Assigned — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    html: layout(dealership, "You've Been Assigned a Test Drive", body, accent, override?.note),
+  };
 }
 
-export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string): { subject: string; html: string } {
+export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string, override?: TemplateOverride): { subject: string; html: string } {
   const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
     <p style="color:#374151;font-size:15px;">Thank you for test driving the ${escapeHtml(vehicleLabel)} with us! We'd love your feedback — it takes less than 2 minutes.</p>
     <p style="margin:24px 0;">${button(surveyUrl, "Share Your Feedback", accent)}</p>
   `;
-  return { subject: `How was your ${vehicleLabel} test drive?`, html: layout(dealership, "Tell Us About Your Experience", body, accent) };
+  return {
+    subject: override?.subject ?? `How was your ${vehicleLabel} test drive?`,
+    html: layout(dealership, "Tell Us About Your Experience", body, accent, override?.note),
+  };
 }
+
+/** The fixed set of notification templates an admin can customize (subject line + an optional highlighted note) — see NotificationTemplateRepository. */
+export const NOTIFICATION_TEMPLATE_KEYS = [
+  { key: "bookingConfirmation", label: "Booking Confirmation", defaultSubject: "Test Drive Confirmed — {vehicle} ({reference})" },
+  { key: "accountAccess", label: "Account Access", defaultSubject: "Access your {dealership} account" },
+  { key: "waitlisted", label: "Waitlisted", defaultSubject: "You're on the Waitlist — {vehicle} ({reference})" },
+  { key: "waitlistPromoted", label: "Waitlist Promoted", defaultSubject: "You're Confirmed! — {vehicle} ({reference})" },
+  { key: "cancellation", label: "Booking Cancelled", defaultSubject: "Test Drive Cancelled — {reference}" },
+  { key: "reschedule", label: "Booking Rescheduled", defaultSubject: "Test Drive Rescheduled — {reference}" },
+  { key: "reminder", label: "Booking Reminder", defaultSubject: "Reminder: Your Test Drive is {when}" },
+  { key: "followUp", label: "Post-Drive Follow-up", defaultSubject: "Still thinking about the {vehicle}?" },
+  { key: "passwordSetup", label: "Password Setup / Reset", defaultSubject: "Your {dealership} account is ready / Reset your password" },
+  { key: "salesRepAssigned", label: "Sales Rep Assigned", defaultSubject: "New Test Drive Assigned — {vehicle} ({reference})" },
+  { key: "surveyRequest", label: "Survey Request", defaultSubject: "How was your {vehicle} test drive?" },
+  { key: "otpCode", label: "Verification Code (OTP)", defaultSubject: "Your {dealership} verification code" },
+] as const;
+
+export type NotificationTemplateKey = (typeof NOTIFICATION_TEMPLATE_KEYS)[number]["key"];

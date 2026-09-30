@@ -1,10 +1,11 @@
-import type { Address } from "@tdm/types";
+import type { Address, GeoCoordinates } from "@tdm/types";
 import { apiClient } from "@/lib/api-client";
 
 export interface BranchDto {
   id: string;
   name: string;
   address: Address;
+  geo?: GeoCoordinates;
   phone?: string;
   operatingHours?: string;
   managerName?: string;

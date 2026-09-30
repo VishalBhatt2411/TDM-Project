@@ -1,3 +1,5 @@
+import { UNASSIGNED_ID } from "./booking";
+
 export interface WishlistItemProps {
   id: string;
   customerId: string;
@@ -31,16 +33,32 @@ export interface VehicleAllocationProps {
 export class VehicleAllocation {
   private constructor(private props: VehicleAllocationProps) {}
 
-  static request(input: { id: string; vehicleId: string; fromBranchId?: string; toBranchId: string }): VehicleAllocation {
-    return new VehicleAllocation({ ...input, status: "Requested" });
+  /** A new transfer request has no identity until the repository persists it and assigns one. */
+  static request(input: { vehicleId: string; fromBranchId?: string; toBranchId: string; transferDate?: Date }): VehicleAllocation {
+    return new VehicleAllocation({ ...input, id: UNASSIGNED_ID, status: "Requested" });
   }
 
   static restore(props: VehicleAllocationProps): VehicleAllocation {
     return new VehicleAllocation(props);
   }
 
+  get id() {
+    return this.props.id;
+  }
+  get status() {
+    return this.props.status;
+  }
+
+  markInTransit(): void {
+    this.props.status = "In_Transit";
+  }
+
   complete(): void {
     this.props.status = "Completed";
+  }
+
+  cancel(): void {
+    this.props.status = "Cancelled";
   }
 
   toProps(): VehicleAllocationProps {

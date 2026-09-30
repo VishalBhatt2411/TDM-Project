@@ -13,11 +13,19 @@
         <members>Contact</members>
         <members>Lead</members>
         <members>Opportunity</members>
+        <members>Case</members>
+        <members>Dealership__c</members>
+        <members>Vehicle_Model__c</members>
+        <members>Staff_Assignment__c</members>
+        <members>Feature_Flag__c</members>
+        <members>Notification_Template__c</members>
         <name>CustomObject</name>
     </types>
     <types>
         <members>TDM_Full_Access</members>
         <members>TDM_Sales_Rep</members>
+        <members>TDM_Dealer_Admin</members>
+        <members>TDM_Manager</members>
         <name>PermissionSet</name>
     </types>
     <types>
@@ -27,7 +35,29 @@
         <members>BookingEmailRestResourceTest</members>
         <members>TDMDashboardController</members>
         <members>TDMDashboardControllerTest</members>
+        <members>TdmScopeKeys</members>
+        <members>TdmScopeKeysTest</members>
+        <members>TdmDealerGroups</members>
+        <members>TdmRecordSharing</members>
+        <members>TdmSharingRecalcBatch</members>
+        <members>TdmDealerSetupJob</members>
+        <members>TdmStaffAccessSync</members>
+        <members>TdmDealershipDefaults</members>
+        <members>TdmDealerSharingTest</members>
         <name>ApexClass</name>
+    </types>
+    <types>
+        <members>StaffAssignmentTrigger</members>
+        <members>FeatureFlagTrigger</members>
+        <members>NotificationTemplateTrigger</members>
+        <members>DealershipTrigger</members>
+        <members>BranchTrigger</members>
+        <members>VehicleTrigger</members>
+        <members>BookingTrigger</members>
+        <members>ComplianceRecordTrigger</members>
+        <members>DriveFeedbackTrigger</members>
+        <members>VehicleAllocationTrigger</members>
+        <name>ApexTrigger</name>
     </types>
     <types>
         <members>tdmKpiTile</members>
@@ -44,6 +74,9 @@
         <members>Vehicle__c</members>
         <members>Sales_Rep__c</members>
         <members>Branch__c</members>
+        <members>Dealership__c</members>
+        <members>Vehicle_Model__c</members>
+        <members>Staff_Assignment__c</members>
         <name>CustomTab</name>
     </types>
     <types>

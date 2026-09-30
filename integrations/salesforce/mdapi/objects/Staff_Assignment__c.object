@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Grants a Salesforce User a TDM role: Company Admin (no dealership) or Dealer Admin / Manager /
+  Sales Rep at one dealership (and branch). Replaces the retired Sales_Rep__c object. At most one
+  assignment per user per dealership (User_Dealership_Key__c, maintained by TdmScopeKeys).
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Staff Assignment</label>
+    <pluralLabel>Staff Assignments</pluralLabel>
+    <nameField>
+        <label>Assignment Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>SA-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>User__c</fullName>
+        <label>User</label>
+        <type>Lookup</type>
+        <referenceTo>User</referenceTo>
+        <relationshipName>TDM_Staff_Assignments</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+        <description>The Salesforce User this assignment grants TDM access to. Required (enforced by validation rule).</description>
+    </fields>
+    <fields>
+        <fullName>Dealership__c</fullName>
+        <label>Dealership</label>
+        <type>Lookup</type>
+        <referenceTo>Dealership__c</referenceTo>
+        <relationshipName>Staff_Assignments</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>Blank only for Company Admins, who administer every dealership.</description>
+    </fields>
+    <fields>
+        <fullName>Branch__c</fullName>
+        <label>Branch</label>
+        <type>Lookup</type>
+        <referenceTo>Branch__c</referenceTo>
+        <relationshipName>Staff_Assignments</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+    </fields>
+    <fields>
+        <fullName>Role__c</fullName>
+        <label>Role</label>
+        <type>Picklist</type>
+        <required>true</required>
+        <valueSet>
+            <restricted>true</restricted>
+            <valueSetDefinition>
+                <sorted>false</sorted>
+                <value><fullName>Company_Admin</fullName><default>false</default></value>
+                <value><fullName>Dealer_Admin</fullName><default>false</default></value>
+                <value><fullName>Manager</fullName><default>false</default></value>
+                <value><fullName>Sales_Rep</fullName><default>false</default></value>
+            </valueSetDefinition>
+        </valueSet>
+        <description>TDM application role. Salesforce object access is granted separately by the matching TDM permission set.</description>
+    </fields>
+    <fields>
+        <fullName>Is_Active__c</fullName>
+        <label>Is Active</label>
+        <type>Checkbox</type>
+        <defaultValue>true</defaultValue>
+    </fields>
+    <fields>
+        <fullName>Max_Daily_Bookings__c</fullName>
+        <label>Max Daily Bookings</label>
+        <type>Number</type>
+        <precision>3</precision>
+        <scale>0</scale>
+        <description>Cap on test drives auto-assigned to a sales rep per day; blank means the platform default.</description>
+    </fields>
+    <fields>
+        <fullName>Phone__c</fullName>
+        <label>Phone</label>
+        <type>Phone</type>
+    </fields>
+    <fields>
+        <fullName>User_Dealership_Key__c</fullName>
+        <label>User/Dealership Key</label>
+        <type>Text</type>
+        <length>40</length>
+        <unique>true</unique>
+        <caseSensitive>true</caseSensitive>
+        <externalId>true</externalId>
+        <description>Maintained by TdmScopeKeys (User Id:Dealership Id, or User Id:COMPANY). Enforces one assignment per user per dealership. Do not edit.</description>
+    </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
+    <validationRules>
+        <fullName>User_Required</fullName>
+        <active>true</active>
+        <description>Every assignment belongs to exactly one user.</description>
+        <errorConditionFormula>ISBLANK(User__c)</errorConditionFormula>
+        <errorDisplayField>User__c</errorDisplayField>
+        <errorMessage>Select the Salesforce user this assignment is for.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Company_Admin_Has_No_Dealership</fullName>
+        <active>true</active>
+        <description>Company-level role is never dealership-scoped.</description>
+        <errorConditionFormula>AND(ISPICKVAL(Role__c, 'Company_Admin'), NOT(ISBLANK(Dealership__c)))</errorConditionFormula>
+        <errorDisplayField>Dealership__c</errorDisplayField>
+        <errorMessage>Company Admins cover every dealership — leave Dealership blank.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Dealer_Role_Requires_Dealership</fullName>
+        <active>true</active>
+        <description>Every non-company role is scoped to one dealership.</description>
+        <errorConditionFormula>AND(NOT(ISPICKVAL(Role__c, 'Company_Admin')), ISBLANK(Dealership__c))</errorConditionFormula>
+        <errorDisplayField>Dealership__c</errorDisplayField>
+        <errorMessage>Select the dealership this person works for.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Sales_Rep_Requires_Branch</fullName>
+        <active>true</active>
+        <description>Bookings are auto-assigned to reps per branch.</description>
+        <errorConditionFormula>AND(ISPICKVAL(Role__c, 'Sales_Rep'), ISBLANK(Branch__c))</errorConditionFormula>
+        <errorDisplayField>Branch__c</errorDisplayField>
+        <errorMessage>Sales reps must be assigned to a branch.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Branch_Belongs_To_Dealership</fullName>
+        <active>true</active>
+        <description>Keeps a staff assignment's branch inside its own dealership, so dealership-scoped access can never leak across dealers.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Branch__c)), Branch__r.Dealership__c &lt;&gt; Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Branch__c</errorDisplayField>
+        <errorMessage>The selected branch belongs to a different dealership.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Max_Daily_Bookings_Positive</fullName>
+        <active>true</active>
+        <description>A zero/negative cap would silently exclude the rep from assignment.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Max_Daily_Bookings__c)), Max_Daily_Bookings__c &lt; 1)</errorConditionFormula>
+        <errorDisplayField>Max_Daily_Bookings__c</errorDisplayField>
+        <errorMessage>Enter at least 1, or leave blank for the default.</errorMessage>
+    </validationRules>
+</CustomObject>

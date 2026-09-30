@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
 import { AUTH_SCOPE } from "../auth/auth.constants";
+import { TenantContext } from "../tenancy/tenant-context";
 
 export interface AuthenticatedUser {
   customerId: string;
@@ -11,6 +12,7 @@ export interface AuthenticatedUser {
  * Guards customer-facing endpoints. Requires `scope: "customer"` in the JWT payload
  * so a staff (admin console) token — a structurally valid JWT signed with the same
  * secret — can never be used here. See StaffAuthGuard for the mirror-image check.
+ * The token's `org` must match the dealer host's tenant (TenantContext.bindSession).
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -23,15 +25,17 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing bearer token.");
     }
     const token = header.slice("Bearer ".length);
+    let payload: { sub: string; scope?: string; org?: string };
     try {
-      const payload = this.jwtService.verify<{ sub: string; scope?: string }>(token);
-      if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
-        throw new UnauthorizedException("This token is not valid for customer endpoints.");
-      }
-      request.user = { customerId: payload.sub };
-      return true;
+      payload = this.jwtService.verify(token);
     } catch {
       throw new UnauthorizedException("Invalid or expired token.");
     }
+    if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
+      throw new UnauthorizedException("This token is not valid for customer endpoints.");
+    }
+    TenantContext.bindSession(payload.org);
+    request.user = { customerId: payload.sub };
+    return true;
   }
 }

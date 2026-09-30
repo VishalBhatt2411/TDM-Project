@@ -1,10 +1,19 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { Vehicle, VehicleRepository, VehicleVariant, VehicleVariantRepository } from "@tdm/domain";
-import { EmiEstimateRequest, EmiEstimateResponse, Paginated, VehicleDto, VehicleVariantDto } from "@tdm/types";
-import { VEHICLE_REPOSITORY, VEHICLE_VARIANT_REPOSITORY } from "../infrastructure/tokens";
+import { BookingRepository, TimeSlot, Vehicle, VehicleRepository, VehicleVariant, VehicleVariantRepository } from "@tdm/domain";
+import {
+  EmiEstimateRequest,
+  EmiEstimateResponse,
+  Paginated,
+  SLOT_DURATION_MINUTES,
+  STANDARD_TIME_SLOTS,
+  VehicleAvailabilityResponse,
+  VehicleDto,
+  VehicleVariantDto,
+} from "@tdm/types";
+import { BOOKING_REPOSITORY, VEHICLE_REPOSITORY, VEHICLE_VARIANT_REPOSITORY } from "../infrastructure/tokens";
 import { VehicleSearchQueryDto } from "./dto";
 
-function toDto(vehicle: Vehicle): VehicleDto {
+export function vehicleToDto(vehicle: Vehicle): VehicleDto {
   const props = vehicle.toProps();
   return {
     id: props.id,
@@ -65,12 +74,13 @@ export class VehiclesService {
   constructor(
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     @Inject(VEHICLE_VARIANT_REPOSITORY) private readonly variants: VehicleVariantRepository,
+    @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
   ) {}
 
   async search(query: VehicleSearchQueryDto): Promise<Paginated<VehicleDto>> {
     const { items, total } = await this.vehicles.search(query);
     return {
-      items: items.map(toDto),
+      items: items.map(vehicleToDto),
       total,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 20,
@@ -82,27 +92,51 @@ export class VehiclesService {
     if (!vehicle) {
       throw new NotFoundException(`Vehicle ${id} was not found.`);
     }
-    return toDto(vehicle);
+    return vehicleToDto(vehicle);
   }
 
   async compare(ids: string[]): Promise<VehicleDto[]> {
     const vehicles = await Promise.all(ids.map((id) => this.vehicles.findById(id)));
-    return vehicles.filter((v): v is Vehicle => v !== null).map(toDto);
+    return vehicles.filter((v): v is Vehicle => v !== null).map(vehicleToDto);
   }
 
   async getFeatured(kind: "featured" | "bestSeller" | "newLaunch", limit?: number): Promise<VehicleDto[]> {
     const vehicles = await this.vehicles.findFeatured(kind, limit);
-    return vehicles.map(toDto);
+    return vehicles.map(vehicleToDto);
   }
 
   async getRelated(id: string, limit?: number): Promise<VehicleDto[]> {
     const vehicles = await this.vehicles.findRelated(id, limit);
-    return vehicles.map(toDto);
+    return vehicles.map(vehicleToDto);
   }
 
   async getVariants(vehicleId: string): Promise<VehicleVariantDto[]> {
     const variants = await this.variants.findByVehicle(vehicleId);
     return variants.map(variantToDto);
+  }
+
+  /** Free/busy for the canonical daily slot template (see STANDARD_TIME_SLOTS) on a given date — a slot is unavailable if it overlaps a Confirmed/InProgress booking for this vehicle. Branch is accepted for API-contract parity with the booking flow (a vehicle belongs to one branch) but isn't filtered on since conflicts are vehicle-scoped, not branch-scoped. */
+  async getAvailability(vehicleId: string, date: string): Promise<VehicleAvailabilityResponse> {
+    const vehicle = await this.vehicles.findById(vehicleId);
+    if (!vehicle) {
+      throw new NotFoundException(`Vehicle ${vehicleId} was not found.`);
+    }
+
+    const activeBookings = await this.bookings.findActiveByVehicle(vehicleId);
+    const daySlots = STANDARD_TIME_SLOTS.map((time) => {
+      const start = new Date(`${date}T${time}:00`);
+      const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
+      return { start, end };
+    });
+
+    const availableSlots = daySlots
+      .filter((candidate) => {
+        const candidateSlot = TimeSlot.create(candidate.start, candidate.end);
+        return !activeBookings.some((booking) => candidateSlot.overlaps(booking.toProps().slot));
+      })
+      .map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() }));
+
+    return { vehicleId, date, availableSlots };
   }
 
   estimateEmi(request: EmiEstimateRequest): EmiEstimateResponse {

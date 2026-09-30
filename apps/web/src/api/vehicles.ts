@@ -2,6 +2,7 @@ import type {
   EmiEstimateRequest,
   EmiEstimateResponse,
   Paginated,
+  VehicleAvailabilityResponse,
   VehicleDto,
   VehicleSearchQuery,
   VehicleVariantDto,
@@ -35,5 +36,10 @@ export async function getRelatedVehicles(vehicleId: string): Promise<VehicleDto[
 
 export async function estimateEmi(request: EmiEstimateRequest): Promise<EmiEstimateResponse> {
   const { data } = await apiClient.post<EmiEstimateResponse>("/vehicles/emi-estimate", request);
+  return data;
+}
+
+export async function getVehicleAvailability(vehicleId: string, date: string): Promise<VehicleAvailabilityResponse> {
+  const { data } = await apiClient.get<VehicleAvailabilityResponse>(`/vehicles/${vehicleId}/availability`, { params: { date } });
   return data;
 }

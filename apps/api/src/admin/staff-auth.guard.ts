@@ -1,17 +1,14 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
-import { StaffRole } from "@tdm/postgres-adapter";
 import { ACCESS_TOKEN_COOKIE, AUTH_SCOPE } from "../auth/auth.constants";
 import { parseCookieHeader } from "../common/cookie.util";
+import { TenantContext } from "../tenancy/tenant-context";
 
 export interface AuthenticatedStaff {
   staffUserId: string;
-  role: StaffRole;
-  /** Sales_Rep__c / Salesforce User id this staff account is linked to — undefined unless
-   *  they've completed "Login with Salesforce" at least once. An identity fact (like
-   *  `role`), not a fast-changing grant — safe to carry in the JWT alongside role. */
-  salesRepId?: string;
+  /** Tenant the session was issued for — every staff request runs against this tenant only. */
+  organizationId: string;
 }
 
 /**
@@ -20,8 +17,9 @@ export interface AuthenticatedStaff {
  * token is never exposed to browser JavaScript) and requires `scope: "staff"` in
  * its payload — the mirror image of JwtAuthGuard's `scope: "customer"` check.
  *
- * Note the payload intentionally carries only `sub`/`scope`/`role`/`salesRepId`, not
- * permissions — see AdminAuthService.issueTokens and PermissionGuard.
+ * Note the payload intentionally carries identity only (`sub`/`scope`/`org`) — roles and
+ * dealership access are resolved per request by PermissionGuard. `org` binds the request's
+ * tenant context; a token presented on another tenant's host is rejected.
  */
 @Injectable()
 export class StaffAuthGuard implements CanActivate {
@@ -33,24 +31,18 @@ export class StaffAuthGuard implements CanActivate {
     if (!token) {
       throw new UnauthorizedException("Not authenticated.");
     }
+    let payload: { sub: string; scope?: string; org?: string };
     try {
-      const payload = this.jwtService.verify<{
-        sub: string;
-        scope?: string;
-        role?: StaffRole;
-        salesRepId?: string;
-      }>(token);
-      if (payload.scope !== AUTH_SCOPE.STAFF) {
-        throw new UnauthorizedException("This token is not valid for admin console endpoints.");
-      }
-      request.staff = {
-        staffUserId: payload.sub,
-        role: payload.role ?? StaffRole.Manager,
-        salesRepId: payload.salesRepId,
-      };
-      return true;
+      payload = this.jwtService.verify(token);
     } catch {
       throw new UnauthorizedException("Invalid or expired session.");
     }
+    if (payload.scope !== AUTH_SCOPE.STAFF) {
+      throw new UnauthorizedException("This token is not valid for admin console endpoints.");
+    }
+    // Pre-tenancy tokens carry no `org` — bindSession rejects them, forcing a fresh login.
+    TenantContext.bindSession(payload.org);
+    request.staff = { staffUserId: payload.sub, organizationId: payload.org! };
+    return true;
   }
 }

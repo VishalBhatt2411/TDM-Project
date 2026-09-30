@@ -66,3 +66,21 @@ export class ResetPasswordDto {
   @MinLength(8)
   newPassword!: string;
 }
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
+  @IsIn(["en", "hi", "es", "fr"])
+  preferredLanguage?: LanguageCode;
+
+  @IsOptional()
+  @IsBoolean()
+  marketingOptIn?: boolean;
+}

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { EmiEstimateRequest } from "@tdm/types";
-import { VehicleSearchQueryDto } from "./dto";
+import { VehicleAvailabilityQueryDto, VehicleSearchQueryDto } from "./dto";
 import { VehiclesService } from "./vehicles.service";
 
 export class CompareVehiclesDto {
@@ -44,5 +44,10 @@ export class VehiclesController {
   @Get(":id/related")
   getRelated(@Param("id") id: string) {
     return this.vehiclesService.getRelated(id);
+  }
+
+  @Get(":id/availability")
+  getAvailability(@Param("id") id: string, @Query() query: VehicleAvailabilityQueryDto) {
+    return this.vehiclesService.getAvailability(id, query.date);
   }
 }

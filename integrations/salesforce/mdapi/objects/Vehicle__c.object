@@ -8,7 +8,8 @@
         <displayFormat>VEH-{00000}</displayFormat>
     </nameField>
     <deploymentStatus>Deployed</deploymentStatus>
-    <sharingModel>ReadWrite</sharingModel>
+    <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
     <enableActivities>true</enableActivities>
     <enableHistory>true</enableHistory>
     <enableReports>true</enableReports>
@@ -291,4 +292,42 @@
         <length>32000</length>
         <visibleLines>6</visibleLines>
     </fields>
+    <fields>
+        <fullName>Vehicle_Model__c</fullName>
+        <label>Vehicle Model</label>
+        <type>Lookup</type>
+        <referenceTo>Vehicle_Model__c</referenceTo>
+        <relationshipName>Stock_Units</relationshipName>
+        <deleteConstraint>SetNull</deleteConstraint>
+        <description>Catalog model this stock unit is. Spec/media fields on Vehicle__c are superseded by the model's and kept only until the platform reads from the model.</description>
+    </fields>
+    <fields>
+        <fullName>Dealership__c</fullName>
+        <label>Dealership</label>
+        <type>Lookup</type>
+        <referenceTo>Dealership__c</referenceTo>
+        <relationshipName>Vehicles</relationshipName>
+        <deleteConstraint>Restrict</deleteConstraint>
+        <description>Dealership holding this stock unit.</description>
+    </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
+    <validationRules>
+        <fullName>Branch_Belongs_To_Dealership</fullName>
+        <active>true</active>
+        <description>Keeps a vehicle's branch inside its own dealership, so dealership-scoped access can never leak across dealers.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Branch__c)), NOT(ISBLANK(Dealership__c)), Branch__r.Dealership__c &lt;&gt; Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Branch__c</errorDisplayField>
+        <errorMessage>The selected branch belongs to a different dealership.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Dealership_Required</fullName>
+        <active>true</active>
+        <description>Every vehicle belongs to a dealership: dealership-scoped sharing (TdmRecordSharing) has nothing to grant on a record without one.</description>
+        <errorConditionFormula>ISBLANK(Dealership__c)</errorConditionFormula>
+        <errorDisplayField>Dealership__c</errorDisplayField>
+        <errorMessage>Select the dealership this record belongs to.</errorMessage>
+    </validationRules>
 </CustomObject>

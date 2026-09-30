@@ -4,8 +4,9 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { NotificationsModule } from "../notifications/notifications.module";
-import { ConsoleOtpSender, OTP_SENDER } from "./otp-sender";
+import { EmailOtpSender, OTP_SENDER } from "./otp-sender";
 import { ACCESS_TOKEN_TTL } from "./auth.constants";
+import { env } from "../common/env";
 
 // Global: JwtService (and the guards that depend on it — customer JwtAuthGuard,
 // staff StaffAuthGuard in ./admin) needs to be resolvable from any module without
@@ -16,13 +17,13 @@ import { ACCESS_TOKEN_TTL } from "./auth.constants";
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? "dev-only-secret-change-me",
+      secret: env.jwtSecret,
       signOptions: { expiresIn: ACCESS_TOKEN_TTL },
     }),
     NotificationsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, { provide: OTP_SENDER, useClass: ConsoleOtpSender }],
+  providers: [AuthService, JwtAuthGuard, { provide: OTP_SENDER, useClass: EmailOtpSender }],
   exports: [JwtAuthGuard, JwtModule, AuthService],
 })
 export class AuthModule {}

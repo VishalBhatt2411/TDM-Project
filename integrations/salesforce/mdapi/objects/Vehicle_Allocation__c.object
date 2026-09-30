@@ -8,7 +8,8 @@
         <displayFormat>ALLOC-{00000}</displayFormat>
     </nameField>
     <deploymentStatus>Deployed</deploymentStatus>
-    <sharingModel>ReadWrite</sharingModel>
+    <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
     <enableActivities>false</enableActivities>
     <enableHistory>true</enableHistory>
     <enableReports>true</enableReports>
@@ -58,4 +59,8 @@
             </valueSetDefinition>
         </valueSet>
     </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
 </CustomObject>

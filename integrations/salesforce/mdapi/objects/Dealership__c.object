@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A dealership (dealer) within the connected company. Owns its branches, stock, bookings and
+  staff assignments, and carries its customer-site branding and URL. Private: staff see only
+  their own dealership(s), shared to its tier groups by TdmRecordSharing; the TDM app reads
+  through the integration user, which sees every dealership.
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Dealership</label>
+    <pluralLabel>Dealerships</pluralLabel>
+    <nameField>
+        <label>Dealership Name</label>
+        <type>Text</type>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>Private</sharingModel>
+    <externalSharingModel>Private</externalSharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Url_Slug__c</fullName>
+        <label>URL Slug</label>
+        <type>Text</type>
+        <length>63</length>
+        <required>true</required>
+        <unique>true</unique>
+        <caseSensitive>false</caseSensitive>
+        <externalId>true</externalId>
+        <description>Subdomain label for this dealership's customer site (&lt;slug&gt;.&lt;platform domain&gt;). Lowercase letters, digits and single hyphens. Must also be unique across every company on the platform — the TDM platform reports a clash as a sync conflict.</description>
+    </fields>
+    <fields>
+        <fullName>Custom_Domain__c</fullName>
+        <label>Custom Domain</label>
+        <type>Text</type>
+        <length>253</length>
+        <unique>true</unique>
+        <caseSensitive>false</caseSensitive>
+        <description>Optional own domain for this dealership's customer site (e.g. drive.acme-motors.com). DNS must point at the TDM platform before it is set.</description>
+    </fields>
+    <fields>
+        <fullName>Is_Active__c</fullName>
+        <label>Is Active</label>
+        <type>Checkbox</type>
+        <defaultValue>true</defaultValue>
+        <description>Inactive dealerships stop resolving on their URL; deactivate rather than delete.</description>
+    </fields>
+    <fields>
+        <fullName>Tagline__c</fullName>
+        <label>Tagline</label>
+        <type>Text</type>
+        <length>255</length>
+    </fields>
+    <fields>
+        <fullName>Logo_Text__c</fullName>
+        <label>Logo Text</label>
+        <type>Text</type>
+        <length>40</length>
+        <description>Wordmark shown when no logo image is set.</description>
+    </fields>
+    <fields>
+        <fullName>Logo_Url__c</fullName>
+        <label>Logo URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>Primary_Color_Hex__c</fullName>
+        <label>Primary Color (Hex)</label>
+        <type>Text</type>
+        <length>7</length>
+        <description>Brand colour as #RRGGBB.</description>
+    </fields>
+    <fields>
+        <fullName>Phone__c</fullName>
+        <label>Phone</label>
+        <type>Phone</type>
+    </fields>
+    <fields>
+        <fullName>Email__c</fullName>
+        <label>Email</label>
+        <type>Email</type>
+    </fields>
+    <fields>
+        <fullName>Address__c</fullName>
+        <label>Address</label>
+        <type>TextArea</type>
+    </fields>
+    <fields>
+        <fullName>Operating_Hours__c</fullName>
+        <label>Operating Hours</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <sharingReasons>
+        <fullName>TDM_Dealership__c</fullName>
+        <label>TDM Dealership</label>
+    </sharingReasons>
+    <validationRules>
+        <fullName>Url_Slug_Format</fullName>
+        <active>true</active>
+        <description>Mirrors the TDM platform's subdomain label rule.</description>
+        <errorConditionFormula>NOT(REGEX(Url_Slug__c, "[a-z0-9]+(-[a-z0-9]+)*"))</errorConditionFormula>
+        <errorDisplayField>Url_Slug__c</errorDisplayField>
+        <errorMessage>Use lowercase letters, digits and single hyphens only (e.g. acme-downtown).</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Custom_Domain_Format</fullName>
+        <active>true</active>
+        <description>Custom domains are matched exactly against the request host, so only bare lowercase host names are accepted.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Custom_Domain__c)), NOT(REGEX(Custom_Domain__c, "([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}")))</errorConditionFormula>
+        <errorDisplayField>Custom_Domain__c</errorDisplayField>
+        <errorMessage>Enter a lowercase host name only, without https:// or a path (e.g. drive.acme-motors.com).</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Primary_Color_Hex_Format</fullName>
+        <active>true</active>
+        <description>Branding colour must be a valid CSS hex value.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Primary_Color_Hex__c)), NOT(REGEX(Primary_Color_Hex__c, "#[0-9A-Fa-f]{6}")))</errorConditionFormula>
+        <errorDisplayField>Primary_Color_Hex__c</errorDisplayField>
+        <errorMessage>Use a 6-digit hex colour such as #1A73E8.</errorMessage>
+    </validationRules>
+</CustomObject>

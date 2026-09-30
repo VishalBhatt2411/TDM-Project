@@ -1,25 +1,35 @@
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { SalesforceIdentityProvider } from "@tdm/salesforce-adapter";
+import type { StaffAssignmentRepository, StaffRole } from "@tdm/domain";
 import {
+  OrganizationRecord,
+  OrganizationRepository,
   sha256Hex,
   StaffOAuthStateRepository,
   StaffRefreshTokenRepository,
-  StaffRole,
   StaffUserRepository,
 } from "@tdm/postgres-adapter";
 import {
-  SALESFORCE_IDENTITY_PROVIDER,
+  ORGANIZATION_REPOSITORY,
+  SALESFORCE_IDENTITY_PROVIDER_FACTORY,
+  STAFF_ASSIGNMENT_REPOSITORY,
   STAFF_OAUTH_STATE_REPOSITORY,
   STAFF_REFRESH_TOKEN_REPOSITORY,
   STAFF_USER_REPOSITORY,
 } from "../infrastructure/tokens";
+import type { SalesforceIdentityProviderFactory } from "../infrastructure/identity-provider-factory";
+import { TenantContext } from "../tenancy/tenant-context";
 import { ACCESS_TOKEN_TTL, ACCESS_TOKEN_TTL_SECONDS, AUTH_SCOPE, OAUTH_STATE_TTL_MS, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from "../auth/auth.constants";
+import type { PermissionKey } from "./permissions";
+import { StaffAccessService } from "./staff-access.service";
+import type { AuthenticatedStaff } from "./staff-auth.guard";
 
 /** Public, stable error codes — the only thing ever exposed to the browser. Never a raw exception message. */
 export const AdminAuthErrorCode = {
   INVALID_STATE: "invalid_state",
+  UNKNOWN_ORGANIZATION: "unknown_organization",
+  WRONG_ORGANIZATION: "wrong_organization",
   NOT_PROVISIONED: "not_provisioned",
   INACTIVE: "inactive",
   EXCHANGE_FAILED: "exchange_failed",
@@ -34,20 +44,38 @@ export interface StaffTokenPair {
 }
 
 export type SalesforceCallbackResult = ({ ok: true } & StaffTokenPair) | { ok: false; error: AdminAuthErrorCode };
+export type AuthorizationUrlResult = { ok: true; url: string } | { ok: false; error: AdminAuthErrorCode };
+
+interface StaffTokenPayload {
+  sub: string;
+  scope?: string;
+  org?: string;
+}
 
 export interface StaffProfile {
   staffUserId: string;
-  role: StaffRole;
-  permissions: string[];
-  /** Sales_Rep__c / Salesforce User id this staff account is linked to — undefined until their first "Login with Salesforce". */
-  salesRepId?: string;
+  name: string;
+  email: string;
+  /** The Salesforce User id bookings are assigned to — what "my test drives" matches on. */
+  salesRepId: string;
+  isCompanyAdmin: boolean;
+  /** Held in at least one dealership — each route still limits the data to where it's held. */
+  permissions: PermissionKey[];
+  assignments: { id: string; role: StaffRole; dealershipId?: string; branchId?: string }[];
 }
 
 /**
  * Staff (Admin/Manager/Sales Rep) authenticate with their real Salesforce identity
  * via OAuth2 Authorization Code flow — this app never sees or stores a Salesforce
- * password. Console access/permissions are still governed entirely by StaffUser
- * (role + permissions), matched by the email Salesforce's identity endpoint returns.
+ * password. Login is always against one tenant (chosen by company identifier or the
+ * dealer host) through that tenant's own Connected App, and the identity must come
+ * from that tenant's connected Salesforce org. Console access comes entirely from the
+ * user's active Staff_Assignment__c records in that org (see StaffAccessService) — a
+ * Salesforce user with none can't sign in. The local StaffUser row is identity only.
+ *
+ * The first Company Admin assignment is granted to whoever authorizes the tenant's
+ * Salesforce org through the onboarding wizard; later access is granted from the console
+ * or directly in Salesforce.
  *
  * Access/refresh tokens are handed back to the controller as plain strings — this
  * service has no knowledge of cookies/HTTP transport (that's AdminAuthController's
@@ -59,9 +87,12 @@ export class AdminAuthService {
 
   constructor(
     @Inject(STAFF_USER_REPOSITORY) private readonly staffUsers: StaffUserRepository,
+    @Inject(STAFF_ASSIGNMENT_REPOSITORY) private readonly assignments: StaffAssignmentRepository,
+    private readonly staffAccess: StaffAccessService,
     @Inject(STAFF_REFRESH_TOKEN_REPOSITORY) private readonly refreshTokens: StaffRefreshTokenRepository,
     @Inject(STAFF_OAUTH_STATE_REPOSITORY) private readonly oauthStates: StaffOAuthStateRepository,
-    @Inject(SALESFORCE_IDENTITY_PROVIDER) private readonly identityProvider: SalesforceIdentityProvider,
+    @Inject(ORGANIZATION_REPOSITORY) private readonly organizations: OrganizationRepository,
+    @Inject(SALESFORCE_IDENTITY_PROVIDER_FACTORY) private readonly identityProviders: SalesforceIdentityProviderFactory,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -71,52 +102,97 @@ export class AdminAuthService {
    * never round-tripped through the browser. Keeps the authorization URL short and
    * keeps the verifier out of browser history/referrer headers/access logs.
    */
-  async buildAuthorizationUrl(): Promise<string> {
-    const codeVerifier = this.identityProvider.generateCodeVerifier();
+  async buildAuthorizationUrl(organizationSlug: string | undefined): Promise<AuthorizationUrlResult> {
+    const organization = await this.resolveLoginOrganization(organizationSlug);
+    const identityProvider = organization ? await this.identityProviders(organization.id, "staff_login") : null;
+    if (!organization || !identityProvider) {
+      this.logger.warn(JSON.stringify({ event: "admin_oauth_unknown_organization", provider: "salesforce" }));
+      return { ok: false, error: AdminAuthErrorCode.UNKNOWN_ORGANIZATION };
+    }
+
+    const codeVerifier = identityProvider.generateCodeVerifier();
     const state = randomBytes(24).toString("hex");
-    await this.oauthStates.save(state, codeVerifier, new Date(Date.now() + OAUTH_STATE_TTL_MS));
-    return this.identityProvider.buildAuthorizationUrl(state, codeVerifier);
+    await this.oauthStates.save({
+      state,
+      codeVerifier,
+      expiresAt: new Date(Date.now() + OAUTH_STATE_TTL_MS),
+      organizationId: organization.id,
+      purpose: "staff_login",
+    });
+    return { ok: true, url: identityProvider.buildAuthorizationUrl(state, codeVerifier) };
+  }
+
+  /** Explicit company identifier wins; otherwise the dealer host's tenant. Only a connected tenant can sign staff in. */
+  private async resolveLoginOrganization(organizationSlug: string | undefined): Promise<OrganizationRecord | null> {
+    const hostOrganizationId = TenantContext.hostOrganizationId();
+    const organization = organizationSlug
+      ? await this.organizations.findBySlug(organizationSlug)
+      : hostOrganizationId
+        ? await this.organizations.findById(hostOrganizationId)
+        : null;
+    return organization?.connectionStatus === "connected" && organization.sfOrgId ? organization : null;
   }
 
   async handleCallback(code: string, state: string): Promise<SalesforceCallbackResult> {
     try {
-      const consumed = await this.oauthStates.consume(state);
+      const consumed = await this.oauthStates.consume(state, "staff_login");
       if (!consumed) {
         this.logger.warn(JSON.stringify({ event: "admin_oauth_invalid_state", provider: "salesforce" }));
         return { ok: false, error: AdminAuthErrorCode.INVALID_STATE };
       }
+      const { organizationId } = consumed;
+      const organization = await this.organizations.findById(organizationId);
+      const identityProvider = organization?.sfOrgId ? await this.identityProviders(organizationId, "staff_login") : null;
+      if (!organization?.sfOrgId || !identityProvider) {
+        this.logger.warn(JSON.stringify({ event: "admin_oauth_unknown_organization", provider: "salesforce", organizationId }));
+        return { ok: false, error: AdminAuthErrorCode.UNKNOWN_ORGANIZATION };
+      }
 
       let identity;
       try {
-        identity = await this.identityProvider.exchangeCodeForIdentity(code, consumed.codeVerifier);
+        identity = await identityProvider.exchangeCodeForIdentity(code, consumed.codeVerifier);
       } catch (err) {
         this.logger.error(
-          JSON.stringify({ event: "admin_oauth_exchange_failed", provider: "salesforce", reason: (err as Error).message }),
+          JSON.stringify({
+            event: "admin_oauth_exchange_failed",
+            provider: "salesforce",
+            organizationId,
+            reason: (err as Error).message,
+          }),
         );
         return { ok: false, error: AdminAuthErrorCode.EXCHANGE_FAILED };
       }
 
-      const staff = await this.staffUsers.findByEmail(identity.email);
-      if (!staff) {
+      // The Connected App may be usable from other orgs; only identities from the tenant's own org count.
+      if (identity.salesforceOrgId !== organization.sfOrgId) {
         this.logger.warn(
-          JSON.stringify({ event: "admin_login_denied", provider: "salesforce", email: identity.email, reason: "not_provisioned" }),
+          JSON.stringify({ event: "admin_login_denied", provider: "salesforce", organizationId, reason: "wrong_salesforce_org" }),
+        );
+        return { ok: false, error: AdminAuthErrorCode.WRONG_ORGANIZATION };
+      }
+
+      // The callback arrives on whichever host the Connected App redirects to, so the
+      // assignment lookup is pinned to the tenant the login was started for.
+      const assignments = await TenantContext.run(
+        () => this.assignments.findActiveByUser(identity.salesforceUserId),
+        organizationId,
+      );
+      if (assignments.length === 0) {
+        this.logger.warn(
+          JSON.stringify({ event: "admin_login_denied", provider: "salesforce", organizationId, reason: "not_provisioned" }),
         );
         return { ok: false, error: AdminAuthErrorCode.NOT_PROVISIONED };
       }
-      if (!staff.isActive) {
-        this.logger.warn(
-          JSON.stringify({ event: "admin_login_denied", provider: "salesforce", userId: staff.id, reason: "inactive" }),
-        );
-        return { ok: false, error: AdminAuthErrorCode.INACTIVE };
-      }
-      if (!staff.salesforceUserId) {
-        await this.staffUsers.linkSalesforceUserId(staff.id, identity.salesforceUserId);
-      }
 
-      this.logger.log(JSON.stringify({ event: "admin_login_success", provider: "salesforce", userId: staff.id }));
-      // identity.salesforceUserId (not staff.salesforceUserId) — this login just confirmed it,
-      // whereas the in-memory `staff` record may still reflect the pre-link state above.
-      return { ok: true, ...(await this.issueTokens(staff.id, staff.role, identity.salesforceUserId)) };
+      const staff = await this.staffUsers.upsertFromIdentity({
+        organizationId,
+        salesforceUserId: identity.salesforceUserId,
+        email: identity.email,
+        name: identity.displayName,
+      });
+      this.staffAccess.invalidate(organizationId, identity.salesforceUserId);
+      this.logger.log(JSON.stringify({ event: "admin_login_success", provider: "salesforce", userId: staff.id, organizationId }));
+      return { ok: true, ...(await this.issueTokens(staff.id, organizationId)) };
     } catch (err) {
       // Defense in depth: any unexpected failure (DB outage, etc.) must still map to
       // a generic code — never leak a stack trace or provider-specific message.
@@ -133,15 +209,16 @@ export class AdminAuthService {
       throw new UnauthorizedException("Missing refresh token.");
     }
 
-    let payload: { sub: string; scope?: string };
+    let payload: StaffTokenPayload;
     try {
-      payload = this.jwtService.verify<{ sub: string; scope?: string }>(refreshToken);
+      payload = this.jwtService.verify<StaffTokenPayload>(refreshToken);
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token.");
     }
     if (payload.scope !== AUTH_SCOPE.STAFF) {
       throw new UnauthorizedException("This token is not valid for admin console endpoints.");
     }
+    TenantContext.bindSession(payload.org);
 
     const tokenHash = sha256Hex(refreshToken);
     const isValid = await this.refreshTokens.isValid(payload.sub, tokenHash);
@@ -153,11 +230,14 @@ export class AdminAuthService {
     // (e.g. a stolen cookie value reused after the legitimate client already rotated) fails.
     await this.refreshTokens.revoke(payload.sub, tokenHash);
 
-    const staff = await this.staffUsers.findById(payload.sub);
-    if (!staff || !staff.isActive) {
+    // A session only outlives its access by one access-token lifetime: a user whose last
+    // assignment was removed can't renew it.
+    const access = await this.staffAccess.resolve({ staffUserId: payload.sub, organizationId: payload.org! }, { fresh: true });
+    if (!access) {
+      this.logger.warn(JSON.stringify({ event: "admin_refresh_rejected", userId: payload.sub, reason: "no_active_assignment" }));
       throw new UnauthorizedException("Account is no longer active.");
     }
-    return this.issueTokens(staff.id, staff.role, staff.salesforceUserId);
+    return this.issueTokens(access.staffUser.id, access.staffUser.organizationId);
   }
 
   /** Best-effort: revokes the refresh token if one was presented. Never throws — logout must always succeed from the client's point of view. */
@@ -172,32 +252,32 @@ export class AdminAuthService {
   }
 
   /**
-   * Backs GET /admin/auth/me. Permissions are always read fresh from the database
-   * here (never trusted from the JWT, which intentionally omits them — see
-   * issueTokens) so the console UI reflects the latest grants on every page load.
+   * Backs GET /admin/auth/me. Access is always resolved fresh from the staff assignments
+   * here (never trusted from the JWT, which carries identity only — see issueTokens) so
+   * the console UI reflects the latest grants on every page load.
    */
-  async getProfile(staffUserId: string): Promise<StaffProfile | null> {
-    const staff = await this.staffUsers.findById(staffUserId);
-    if (!staff || !staff.isActive) return null;
+  async getProfile(staff: AuthenticatedStaff): Promise<StaffProfile | null> {
+    const access = await this.staffAccess.resolve(staff, { fresh: true });
+    if (!access) return null;
     return {
-      staffUserId: staff.id,
-      role: staff.role,
-      permissions: staff.permissions,
-      salesRepId: staff.salesforceUserId ?? undefined,
+      staffUserId: access.staffUser.id,
+      name: access.staffUser.name,
+      email: access.staffUser.email,
+      salesRepId: access.salesforceUserId,
+      isCompanyAdmin: access.isCompanyAdmin,
+      permissions: access.permissions(),
+      assignments: access.assignments.map((a) => ({ id: a.id, role: a.role, dealershipId: a.dealershipId, branchId: a.branchId })),
     };
   }
 
   /**
-   * JWT payload is intentionally minimal (sub/scope/role/salesRepId) — no permissions
-   * array. Permissions can change (grant/revoke) faster than a 15-minute access
-   * token's lifetime, so they're always loaded fresh from the DB at authorization
-   * time (PermissionGuard, AdminBookingsService) and for the console UI (getProfile),
-   * never trusted from a token that may already be stale. `salesRepId`, by contrast,
-   * is an identity fact like `role` (set once on first Salesforce login, rarely
-   * changes) — safe to carry in the token the same way `role` is.
+   * JWT payload is intentionally identity only (sub/scope/org). Roles and dealership access
+   * can change faster than a 15-minute access token's lifetime, so they're always resolved
+   * from the staff assignments at authorization time (PermissionGuard, BookingAccessPolicy)
+   * and for the console UI (getProfile), never trusted from a token that may already be stale.
    */
-  private async issueTokens(staffUserId: string, role: StaffRole, salesRepId?: string | null): Promise<StaffTokenPair> {
-    const payload = { sub: staffUserId, scope: AUTH_SCOPE.STAFF, role, salesRepId: salesRepId ?? undefined };
+  private async issueTokens(staffUserId: string, organizationId: string): Promise<StaffTokenPair> {
+    const payload = { sub: staffUserId, scope: AUTH_SCOPE.STAFF, org: organizationId };
     const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: REFRESH_TOKEN_TTL });
     await this.refreshTokens.save(staffUserId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));

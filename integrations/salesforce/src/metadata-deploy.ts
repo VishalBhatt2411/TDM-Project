@@ -3,6 +3,9 @@ import archiver from "archiver";
 import type { Connection } from "jsforce";
 
 const MDAPI_DIR = path.join(__dirname, "..", "mdapi");
+/** A full package deploy (objects, permission sets, Apex compile) routinely exceeds jsforce's 60s default. */
+const DEPLOY_POLL_TIMEOUT_MS = 15 * 60_000;
+const DEPLOY_POLL_INTERVAL_MS = 5_000;
 
 export interface MetadataDeployComponentResult {
   fullName: string;
@@ -33,7 +36,14 @@ export interface MetadataDeployResult {
  */
 export async function deployTdmMetadata(connection: Connection): Promise<MetadataDeployResult> {
   const zipBuffer = await zipMetadataDirectory();
-  const deployResult = await connection.metadata.deploy(zipBuffer, { singlePackage: true, rollbackOnError: true }).complete(true);
+  connection.metadata.pollTimeout = DEPLOY_POLL_TIMEOUT_MS;
+  connection.metadata.pollInterval = DEPLOY_POLL_INTERVAL_MS;
+  const locator = connection.metadata.deploy(zipBuffer, { singlePackage: true, rollbackOnError: true });
+  // jsforce's DeployResultLocator emits "error" before rejecting; with no listener that emit
+  // throws, the reject is never reached and complete() hangs forever. The listener only
+  // exists so the rejection below is delivered — the error itself is handled by the caller.
+  locator.on("error", () => undefined);
+  const deployResult = await locator.complete(true);
 
   const failures = (deployResult.details?.componentFailures ?? []).map((failure) => ({
     fullName: failure.fullName,

@@ -10,7 +10,7 @@
   "scripts": {
     "dev:api": "npm run start:dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @tdm/types -w @tdm/domain -w @tdm/postgres-adapter -w @tdm/salesforce-adapter -w @tdm/api -w @tdm/web",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present"

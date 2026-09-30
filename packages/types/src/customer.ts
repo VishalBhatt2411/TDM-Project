@@ -1,3 +1,6 @@
+import type { BookingDto } from "./booking";
+import type { VehicleDto } from "./vehicle";
+
 export type LanguageCode = "en" | "hi" | "es" | "fr";
 
 export interface CustomerDto {
@@ -52,4 +55,22 @@ export interface UpdateCustomerRequest {
   lastName?: string;
   preferredLanguage?: LanguageCode;
   marketingOptIn?: boolean;
+}
+
+export interface AddWishlistItemRequest {
+  vehicleId: string;
+}
+
+export interface VehicleRecommendationDto {
+  vehicle: VehicleDto;
+  score: number;
+  reasons: string[];
+}
+
+export interface CustomerDashboardDto {
+  upcomingBookingsCount: number;
+  pastBookingsCount: number;
+  wishlistCount: number;
+  nextBooking: BookingDto | null;
+  recentBookings: BookingDto[];
 }

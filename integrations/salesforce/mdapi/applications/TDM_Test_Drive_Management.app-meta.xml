@@ -10,7 +10,11 @@
          admins/managers but is hidden from field reps via the TDM_Sales_Rep permission set. -->
     <tabs>TDM_Dashboard</tabs>
     <tabs>Booking__c</tabs>
+    <tabs>standard-Case</tabs>
     <tabs>Vehicle__c</tabs>
+    <tabs>Vehicle_Model__c</tabs>
+    <tabs>Dealership__c</tabs>
     <tabs>Branch__c</tabs>
+    <tabs>Staff_Assignment__c</tabs>
     <uiType>Lightning</uiType>
 </CustomApplication>

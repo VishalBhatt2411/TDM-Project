@@ -6,16 +6,18 @@ import { RequirePermission } from "./require-permission.decorator";
 import { PERMISSIONS } from "./permissions";
 import { CurrentStaff } from "./current-staff.decorator";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
+import { CurrentStaffAccess } from "./current-staff-access.decorator";
+import type { StaffAccess } from "./staff-access";
 import { AdminBookingsService } from "./admin-bookings.service";
 import { AssignSalesRepDto, CheckInBookingDto, CompleteDriveDto, SetStaffNotesDto, StartDriveDto } from "./dto";
 import { CancelBookingDto, RescheduleBookingDto } from "../bookings/dto";
 
 /**
- * Every route requires a valid staff session (StaffAuthGuard). Platform-wide routes
- * (list, assign-rep) additionally require MANAGE_BOOKINGS via @RequirePermission.
- * The per-booking action routes have no such decorator — any staff member can call
- * them, but AdminBookingsService.assertCanActOn enforces that a rep without
- * MANAGE_BOOKINGS may only act on bookings currently assigned to them.
+ * Every route requires a valid staff session with at least one active assignment. The
+ * dealership-wide routes (list, assign-rep) additionally require MANAGE_BOOKINGS and are
+ * limited to the dealerships where it's held. The per-booking action routes have no such
+ * decorator — BookingAccessPolicy enforces that a rep without MANAGE_BOOKINGS there may
+ * only act on bookings currently assigned to them.
  */
 @Controller("admin/bookings")
 @UseGuards(StaffAuthGuard, PermissionGuard)
@@ -25,28 +27,32 @@ export class AdminBookingsController {
   @Get()
   @RequirePermission(PERMISSIONS.MANAGE_BOOKINGS)
   list(
+    @CurrentStaffAccess() access: StaffAccess,
     @Query("status") status?: BookingStatus,
     @Query("branchId") branchId?: string,
     @Query("page") page?: string,
     @Query("pageSize") pageSize?: string,
   ) {
-    return this.adminBookingsService.list({
-      status,
-      branchId,
-      page: page ? Number(page) : undefined,
-      pageSize: pageSize ? Number(pageSize) : undefined,
-    });
+    return this.adminBookingsService.list(
+      {
+        status,
+        branchId,
+        page: page ? Number(page) : undefined,
+        pageSize: pageSize ? Number(pageSize) : undefined,
+      },
+      access,
+    );
   }
 
-  /** A rep's own bookings — any status. Requires the staff account to be linked to a Sales_Rep__c record. */
+  /** Bookings currently assigned to the signed-in staff member — any status. */
   @Get("mine")
   listMine(
-    @CurrentStaff() staff: AuthenticatedStaff,
+    @CurrentStaffAccess() access: StaffAccess,
     @Query("status") status?: BookingStatus,
     @Query("page") page?: string,
     @Query("pageSize") pageSize?: string,
   ) {
-    return this.adminBookingsService.listMine(staff, {
+    return this.adminBookingsService.listMine(access, {
       status,
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
@@ -60,8 +66,13 @@ export class AdminBookingsController {
 
   @Patch(":id/assign-rep")
   @RequirePermission(PERMISSIONS.MANAGE_BOOKINGS)
-  assignRep(@Param("id") id: string, @Body() dto: AssignSalesRepDto, @CurrentStaff() staff: AuthenticatedStaff) {
-    return this.adminBookingsService.assignSalesRep(id, dto, staff.staffUserId);
+  assignRep(
+    @Param("id") id: string,
+    @Body() dto: AssignSalesRepDto,
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @CurrentStaffAccess() access: StaffAccess,
+  ) {
+    return this.adminBookingsService.assignSalesRep(id, dto, staff.staffUserId, access);
   }
 
   /** A rep handing their own booking off to a colleague. */

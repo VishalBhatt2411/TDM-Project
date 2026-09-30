@@ -47,10 +47,12 @@ export function OnboardingCallbackPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
-              Signing in to the Admin Console for {org.name} isn't available yet — that's the next piece of this rollout. We'll follow up once
-              it's ready, so hold onto this page.
+            <p className="mb-4 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+              Your company identifier is <span className="font-mono font-semibold">{org.slug}</span> — you'll use it to sign in.
             </p>
+            <Button className="w-full" onClick={() => navigate(`/admin/login?org=${encodeURIComponent(org.slug)}`)}>
+              Sign in to the Admin Console
+            </Button>
           </CardContent>
         </Card>
       </div>

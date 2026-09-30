@@ -1,10 +1,10 @@
 import { Customer, CustomerRepository } from "@tdm/domain";
-import { SalesforceConnectionProvider } from "../connection";
+import { SalesforceConnectionSource } from "../connection-source";
 import { contactToCustomer, customerToContactRecord } from "../mappers";
 import { CONTACT_FIELDS, withConnection } from "../soql";
 
 export class SalesforceCustomerRepository implements CustomerRepository {
-  constructor(private readonly connectionProvider: SalesforceConnectionProvider) {}
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
 
   async findById(id: string): Promise<Customer | null> {
     return withConnection(this.connectionProvider, async (conn) => {

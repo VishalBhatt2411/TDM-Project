@@ -9,7 +9,20 @@ export interface OrganizationStatusDto {
   connectionStatus: OrganizationConnectionStatus;
   connectionError: string | null;
   metadataDeployedAt: string | null;
-  salesforceCallbackUrl: string;
+  /** Register all of these on the Connected App (one per line in Salesforce's Callback URL box). */
+  salesforceCallbackUrls: string[];
+}
+
+export interface OnboardingSetupStatus {
+  needsSetup: boolean;
+}
+
+/** Backs the Admin Console pre-login "connect your Salesforce org" banner for one company (by slug, else the current address). */
+export async function getOnboardingSetupStatus(organizationSlug?: string): Promise<OnboardingSetupStatus> {
+  const { data } = await onboardingApiClient.get<OnboardingSetupStatus>("/onboarding/status", {
+    params: organizationSlug ? { org: organizationSlug } : undefined,
+  });
+  return data;
 }
 
 export async function createOrganization(input: { name: string; slug: string }): Promise<OrganizationStatusDto> {

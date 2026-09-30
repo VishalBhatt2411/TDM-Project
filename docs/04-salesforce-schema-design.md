@@ -1,8 +1,8 @@
 # Salesforce Schema Design (Deployed)
 
-**Status: Deployed to org `tdm-dev`** (instance `moreyeahs2-dev-ed.develop.my.salesforce.com`, username `vishal.bhat@wahinnovations.com`)
+**Status:** deployed per tenant by the onboarding wizard (`deployTdmMetadata`). For local development, the seed scripts in `integrations/salesforce` target whichever org the `sf` CLI alias `tdmProjectOrg` points to — re-point it with `sf org login web --alias tdmProjectOrg --instance-url <My Domain URL>` when a dev org expires.
 
-This is the first concrete implementation of the "Salesforce Adapter" repository target described in [Phase 1](01-product-vision-and-requirements.md). Metadata source lives at [integrations/salesforce/mdapi](../integrations/salesforce/mdapi) and was deployed via `sf project deploy start --metadata-dir mdapi --target-org tdm-dev`.
+This is the first concrete implementation of the "Salesforce Adapter" repository target described in [Phase 1](01-product-vision-and-requirements.md). Metadata source lives at [integrations/salesforce/mdapi](../integrations/salesforce/mdapi) and was deployed via `sf project deploy start --metadata-dir mdapi --target-org tdmProjectOrg`.
 
 **Important scoping note:** this schema was designed and deployed directly against a real, live Salesforce org per your request. It has not yet gone through the full Phase 5–9 domain-model/API-contract design pass — treat it as the concrete v1 of that design, refined in place rather than diagrammed first. If the later architecture phases surface a needed schema change, we'll evolve this same metadata rather than starting over.
 
@@ -41,9 +41,9 @@ Test drive booking **requires prior registration**. No guest booking. The custom
 
 ## Verification performed
 
-- `sf project deploy start --metadata-dir mdapi --target-org tdm-dev --dry-run` → 105/105 components valid, 0 errors (after fixing the delete-constraint issue above).
+- `sf project deploy start --metadata-dir mdapi --target-org tdmProjectOrg --dry-run` → 105/105 components valid, 0 errors (after fixing the delete-constraint issue above).
 - Real deploy → 105/105 components deployed, 0 errors.
-- `sf sobject describe --sobject Booking__c --target-org tdm-dev` → confirmed the object and its fields are live and queryable.
+- `sf sobject describe --sobject Booking__c --target-org tdmProjectOrg` → confirmed the object and its fields are live and queryable.
 
 ## What's intentionally not yet built here
 

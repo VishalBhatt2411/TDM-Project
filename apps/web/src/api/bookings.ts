@@ -24,6 +24,11 @@ export async function listMyBookings(): Promise<BookingDto[]> {
   return data;
 }
 
+export async function getBooking(id: string): Promise<BookingDto> {
+  const { data } = await apiClient.get<BookingDto>(`/bookings/${id}`);
+  return data;
+}
+
 export async function cancelBooking(id: string, reason: string): Promise<BookingDto> {
   const { data } = await apiClient.post<BookingDto>(`/bookings/${id}/cancel`, { reason });
   return data;
@@ -36,6 +41,16 @@ export async function rescheduleBooking(id: string, request: RescheduleBookingRe
 
 export async function submitSurvey(id: string, request: SubmitSurveyRequest): Promise<{ opportunityCreated: boolean }> {
   const { data } = await apiClient.post<{ opportunityCreated: boolean }>(`/bookings/${id}/survey`, request);
+  return data;
+}
+
+export interface CheckInToken {
+  token: string;
+  expiresAt: string;
+}
+
+export async function getCheckInToken(id: string): Promise<CheckInToken> {
+  const { data } = await apiClient.get<CheckInToken>(`/bookings/${id}/check-in-token`);
   return data;
 }
 

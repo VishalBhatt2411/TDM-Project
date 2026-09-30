@@ -14,11 +14,21 @@ import { VehiclesPage } from "@/pages/VehiclesPage";
 import { VehicleDetailPage } from "@/pages/VehicleDetailPage";
 import { BookingPage } from "@/pages/BookingPage";
 import { MyBookingsPage } from "@/pages/MyBookingsPage";
+import { ProfilePage } from "@/pages/ProfilePage";
+import { WishlistPage } from "@/pages/WishlistPage";
+import { CompliancePage } from "@/pages/CompliancePage";
+import { BranchLocatorPage } from "@/pages/BranchLocatorPage";
 import { AdminLoginPage } from "@/pages/admin/AdminLoginPage";
 import { AdminAuthCallbackPage } from "@/pages/admin/AdminAuthCallbackPage";
 import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { AdminBookingsPage } from "@/pages/admin/AdminBookingsPage";
+import { AdminFeatureFlagsPage } from "@/pages/admin/AdminFeatureFlagsPage";
+import { AdminAuditLogPage } from "@/pages/admin/AdminAuditLogPage";
+import { AdminBranchesPage } from "@/pages/admin/AdminBranchesPage";
+import { AdminVehiclesPage } from "@/pages/admin/AdminVehiclesPage";
+import { AdminSystemHealthPage } from "@/pages/admin/AdminSystemHealthPage";
+import { AdminNotificationTemplatesPage } from "@/pages/admin/AdminNotificationTemplatesPage";
 import { CreateOrganizationPage } from "@/pages/onboarding/CreateOrganizationPage";
 import { ConnectedAppInstructionsPage } from "@/pages/onboarding/ConnectedAppInstructionsPage";
 import { SalesforceCredentialsPage } from "@/pages/onboarding/SalesforceCredentialsPage";
@@ -37,11 +47,15 @@ export function App() {
         <Route path="/magic-login" element={<MagicLoginPage />} />
         <Route path="/vehicles" element={<VehiclesPage />} />
         <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+        <Route path="/branches" element={<BranchLocatorPage />} />
         {/* Booking is intentionally public — personal info doubles as inline registration. */}
         <Route path="/book/:vehicleId" element={<BookingPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/my-bookings" element={<MyBookingsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/wishlist" element={<WishlistPage />} />
+          <Route path="/bookings/:id/compliance" element={<CompliancePage />} />
         </Route>
       </Route>
 
@@ -59,6 +73,12 @@ export function App() {
           <Route path="/admin" element={<AdminDashboardPage />} />
           <Route path="/admin/bookings" element={<AdminBookingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/feature-flags" element={<AdminFeatureFlagsPage />} />
+          <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
+          <Route path="/admin/branches" element={<AdminBranchesPage />} />
+          <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />
+          <Route path="/admin/system-health" element={<AdminSystemHealthPage />} />
+          <Route path="/admin/notification-templates" element={<AdminNotificationTemplatesPage />} />
         </Route>
       </Route>
 

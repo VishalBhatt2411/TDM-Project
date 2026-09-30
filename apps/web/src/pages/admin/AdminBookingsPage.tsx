@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QrScanner } from "@/components/admin/QrScanner";
+import { ComplianceReviewPanel } from "@/components/admin/ComplianceReviewPanel";
 import type { BookingDto, BookingStatus } from "@tdm/types";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
@@ -40,7 +42,7 @@ function todayIsoDate(): string {
 }
 
 export function AdminBookingsPage() {
-  const { staff, hasPermission } = useAdminAuth();
+  const { hasPermission } = useAdminAuth();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = React.useState<BookingStatus | undefined>(undefined);
 
@@ -63,19 +65,6 @@ export function AdminBookingsPage() {
     onSuccess: invalidate,
   });
 
-  if (!canManageAll && !staff?.salesRepId) {
-    return (
-      <div className="p-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">My Test Drives</h1>
-        </div>
-        <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-          Bookings are assigned to your real Salesforce login, which we haven't confirmed yet — sign out and log back
-          in with Salesforce, then your assigned test drives will show up here.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="p-8">
@@ -138,11 +127,13 @@ export function AdminBookingsPage() {
                       <option value="" disabled>
                         Unassigned
                       </option>
-                      {reps?.map((rep) => (
-                        <option key={rep.id} value={rep.id}>
-                          {rep.name}
-                        </option>
-                      ))}
+                      {reps
+                        ?.filter((rep) => rep.dealershipId === booking.dealershipId)
+                        .map((rep) => (
+                          <option key={rep.id} value={rep.id}>
+                            {rep.name}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 )}
@@ -168,6 +159,8 @@ function BookingActionsPanel({
   const [notes, setNotes] = React.useState(booking.staffNotes ?? "");
   const [showReschedule, setShowReschedule] = React.useState(false);
   const [showCancel, setShowCancel] = React.useState(false);
+  const [showQrScanner, setShowQrScanner] = React.useState(false);
+  const [showCompliance, setShowCompliance] = React.useState(false);
   const [odometer, setOdometer] = React.useState("");
   const [rescheduleDate, setRescheduleDate] = React.useState(todayIsoDate());
   const [rescheduleTime, setRescheduleTime] = React.useState("10:00");
@@ -197,8 +190,18 @@ function BookingActionsPanel({
     <CardContent className="space-y-3 border-t pt-4">
       <div className="flex flex-wrap gap-2">
         {booking.status === "Confirmed" && !booking.checkInTimestamp && (
-          <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate(() => checkInBookingAsStaff(booking.id, "Manual"))}>
-            Check In
+          <>
+            <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate(() => checkInBookingAsStaff(booking.id, "Manual"))}>
+              Check In (Manual)
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowQrScanner((v) => !v)}>
+              {showQrScanner ? "Hide QR Scanner" : "Check In with QR"}
+            </Button>
+          </>
+        )}
+        {booking.status === "Confirmed" && (
+          <Button size="sm" variant="outline" onClick={() => setShowCompliance((v) => !v)}>
+            {showCompliance ? "Hide Compliance" : "Review Compliance"}
           </Button>
         )}
         {booking.status === "Confirmed" && booking.checkInTimestamp && (
@@ -265,7 +268,7 @@ function BookingActionsPanel({
           >
             <option value="">Hand off to…</option>
             {reps
-              .filter((r) => r.id !== booking.salesRepId)
+              .filter((r) => r.id !== booking.salesRepId && r.dealershipId === booking.dealershipId)
               .map((rep) => (
                 <option key={rep.id} value={rep.id}>
                   {rep.name}
@@ -274,6 +277,19 @@ function BookingActionsPanel({
           </select>
         )}
       </div>
+
+      {showQrScanner && (
+        <div className="rounded-md bg-muted/40 p-3">
+          <QrScanner
+            onDetect={(code) => {
+              setShowQrScanner(false);
+              run.mutate(() => checkInBookingAsStaff(booking.id, "QR", code));
+            }}
+          />
+        </div>
+      )}
+
+      {showCompliance && <ComplianceReviewPanel bookingId={booking.id} />}
 
       {showReschedule && (
         <div className="flex flex-wrap items-end gap-3 rounded-md bg-muted/40 p-3">

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VehicleCard } from "@/components/VehicleCard";
 import { searchVehicles } from "@/api/vehicles";
+import { useAuth } from "@/context/auth-context";
+import { useWishlist } from "@/hooks/use-wishlist";
 import type { BodyType } from "@tdm/types";
 
 const BODY_TYPES: BodyType[] = ["Sedan", "SUV", "Hatchback", "MPV", "Luxury", "Pickup"];
@@ -23,6 +25,8 @@ export function VehiclesPage() {
     queryKey: ["vehicles", bodyType, debouncedQ],
     queryFn: () => searchVehicles({ bodyType, q: debouncedQ || undefined }),
   });
+  const { isAuthenticated } = useAuth();
+  const wishlist = useWishlist();
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -69,7 +73,13 @@ export function VehiclesPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {data?.items.map((vehicle, i) => (
-          <VehicleCard key={vehicle.id} vehicle={vehicle} index={i} />
+          <VehicleCard
+            key={vehicle.id}
+            vehicle={vehicle}
+            index={i}
+            isWishlisted={wishlist.wishlistedIds.has(vehicle.id)}
+            onToggleWishlist={isAuthenticated ? () => wishlist.toggle(vehicle.id) : undefined}
+          />
         ))}
       </div>
     </div>

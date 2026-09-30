@@ -19,10 +19,8 @@ import { CurrentStaff } from "./current-staff.decorator";
 import { setStaffAuthCookies, clearStaffAuthCookies } from "./staff-auth-cookies.util";
 import { parseCookieHeader } from "../common/cookie.util";
 import { REFRESH_TOKEN_COOKIE } from "../auth/auth.constants";
-
-function adminWebOrigin(): string {
-  return process.env.ADMIN_WEB_ORIGIN ?? process.env.WEB_ORIGIN ?? "http://localhost:5173";
-}
+import { env } from "../common/env";
+import { isValidOrganizationSlug } from "../tenancy/organization-slug";
 
 // The `state` we hand out is always 24 random bytes as hex (see AdminAuthService.buildAuthorizationUrl).
 const OAUTH_STATE_PATTERN = /^[a-f0-9]{48}$/;
@@ -42,10 +40,18 @@ export class AdminAuthController {
 
   constructor(private readonly adminAuthService: AdminAuthService) {}
 
-  /** Full-page navigation target for the "Login with Salesforce" button — not an XHR call. */
+  /**
+   * Full-page navigation target for the "Login with Salesforce" button — not an XHR call.
+   * `org` is the company identifier (tenant slug); omitted, the dealer host's tenant is used.
+   */
   @Get("salesforce/login")
-  async loginWithSalesforce(@Res() res: Response) {
-    res.redirect(await this.adminAuthService.buildAuthorizationUrl());
+  async loginWithSalesforce(@Query("org") org: unknown, @Res() res: Response) {
+    if (org !== undefined && !isValidOrganizationSlug(org)) {
+      res.redirect(`${env.adminWebOrigin}/admin/login?error=unknown_organization`);
+      return;
+    }
+    const result = await this.adminAuthService.buildAuthorizationUrl(org);
+    res.redirect(result.ok ? result.url : `${env.adminWebOrigin}/admin/login?error=${result.error}`);
   }
 
   @Get("salesforce/callback")
@@ -68,12 +74,12 @@ export class AdminAuthController {
 
     const result = await this.adminAuthService.handleCallback(code, state);
     if (!result.ok) {
-      res.redirect(`${adminWebOrigin()}/admin/login?error=${result.error}`);
+      res.redirect(`${env.adminWebOrigin}/admin/login?error=${result.error}`);
       return;
     }
 
     setStaffAuthCookies(res, result.accessToken, result.refreshToken);
-    res.redirect(`${adminWebOrigin()}/admin`);
+    res.redirect(`${env.adminWebOrigin}/admin`);
   }
 
   @Post("refresh")
@@ -98,7 +104,7 @@ export class AdminAuthController {
   @Get("me")
   @UseGuards(StaffAuthGuard)
   async me(@CurrentStaff() staff: AuthenticatedStaff) {
-    const profile = await this.adminAuthService.getProfile(staff.staffUserId);
+    const profile = await this.adminAuthService.getProfile(staff);
     if (!profile) {
       throw new UnauthorizedException({ error: "inactive", message: "Account is no longer active." });
     }

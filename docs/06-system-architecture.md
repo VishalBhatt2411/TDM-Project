@@ -13,7 +13,7 @@ graph TB
 
     TDM["TDM Platform<br/>(Web PWA + API)"]
 
-    SF[("Salesforce Dev Org<br/>tdm-dev<br/>— data provider")]
+    SF[("Salesforce Dev Org<br/>tdmProjectOrg<br/>— data provider")]
     Maps["Google Maps API"]
     Msg["Messaging Gateways<br/>(Email / SMS / WhatsApp / Push)"]
     Cal["Calendar Providers<br/>(Google / Outlook)"]
@@ -62,7 +62,7 @@ graph TB
     Worker["Notification Worker<br/>(queue consumer: email/SMS/WhatsApp/push, calendar sync)"]
     Queue[("Job Queue<br/>e.g. Redis-backed")]
     OpDB[("Operational Postgres<br/>auth, sessions, audit, flags, templates, read-model cache")]
-    SFOrg[("Salesforce tdm-dev")]
+    SFOrg[("Salesforce tdmProjectOrg")]
 
     Web -->|REST/JSON, OpenAPI-documented| API
     AuthMod --> IntegrationCore

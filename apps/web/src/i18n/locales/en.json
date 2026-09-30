@@ -1,0 +1,35 @@
+{
+  "nav": {
+    "exploreVehicles": "Explore Vehicles",
+    "findABranch": "Find a Branch",
+    "myTestDrives": "My Test Drives",
+    "wishlist": "Wishlist",
+    "profile": "Profile",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "adminConsole": "Admin Console",
+    "bookATestDrive": "Book a Test Drive"
+  },
+  "home": {
+    "tagline": "Authorized Toyota Dealer",
+    "heroTitle": "Experience the drive before you decide.",
+    "heroSubtitle": "Book a free test drive at your nearest showroom or right from your doorstep — no waiting, no hassle.",
+    "bookATestDrive": "Book a Test Drive",
+    "exploreLineup": "Explore the Lineup",
+    "feature1Title": "Showroom or Home",
+    "feature1Body": "Choose to drive at our showroom or have us bring the car to you.",
+    "feature2Title": "Book in Under a Minute",
+    "feature2Body": "No account needed upfront — just pick a slot and go.",
+    "feature3Title": "Trusted Toyota Quality",
+    "feature3Body": "Every vehicle in our lineup, backed by Toyota's reliability.",
+    "featuredVehicles": "Featured Vehicles",
+    "bestSellers": "Best Sellers",
+    "newLaunches": "New Launches",
+    "ctaTitle": "Ready to feel it for yourself?",
+    "ctaSubtitle": "Browse the full lineup and book your test drive today.",
+    "exploreAllVehicles": "Explore All Vehicles"
+  },
+  "language": {
+    "label": "Language"
+  }
+}

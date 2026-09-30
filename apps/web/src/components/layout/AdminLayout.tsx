@@ -1,14 +1,21 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar } from "lucide-react";
+import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail } from "lucide-react";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { cn } from "@/lib/utils";
+import { STAFF_ROLE_OPTIONS, staffRoleLabel } from "@/lib/permissions";
 
 const NAV_ITEMS = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "view_dashboard" },
   // No permission gate — every staff role (including a plain SalesRep with no
   // grantable permissions) can at least reach their own scoped "My Test Drives" view.
   { to: "/admin/bookings", label: "Test Drives", icon: Calendar, permission: null },
+  { to: "/admin/vehicles", label: "Vehicle Inventory", icon: Car, permission: "manage_config" },
+  { to: "/admin/branches", label: "Branches", icon: MapPin, permission: "manage_config" },
   { to: "/admin/users", label: "Users & Permissions", icon: Users, permission: "manage_users" },
+  { to: "/admin/notification-templates", label: "Notification Templates", icon: Mail, permission: "manage_config" },
+  { to: "/admin/feature-flags", label: "Feature Flags", icon: ToggleLeft, permission: "manage_config" },
+  { to: "/admin/audit-log", label: "Audit Log", icon: ScrollText, permission: "view_audit_log" },
+  { to: "/admin/system-health", label: "System Health", icon: Activity, permission: "manage_config" },
 ];
 
 export function AdminLayout() {
@@ -43,7 +50,8 @@ export function AdminLayout() {
         </nav>
         <div className="border-t p-3">
           <div className="mb-2 px-2 text-xs text-muted-foreground">
-            Signed in as <span className="font-medium text-foreground">{staff?.role}</span>
+            Signed in as <span className="font-medium text-foreground">{staff?.name}</span>
+            {staff && <span className="block">{staffRoleLabel(primaryRole(staff.assignments))}</span>}
           </div>
           <button
             onClick={logout}
@@ -58,4 +66,8 @@ export function AdminLayout() {
       </main>
     </div>
   );
+}
+
+function primaryRole(assignments: { role: string }[]): string {
+  return STAFF_ROLE_OPTIONS.find((r) => assignments.some((a) => a.role === r.key))?.key ?? "";
 }
