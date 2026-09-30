@@ -20,9 +20,13 @@ import { StaffAuthModule } from "./staff-auth.module";
 import { AdminComplianceController } from "./admin-compliance.controller";
 import { AdminComplianceService } from "./admin-compliance.service";
 import { ComplianceModule } from "../compliance/compliance.module";
+import { ConfigScopeResolver } from "./config-scope";
+import { AdminBrandingController } from "./admin-branding.controller";
+import { AdminBrandingService } from "./admin-branding.service";
+import { DealershipConfigModule } from "../config/config.module";
 
 @Module({
-  imports: [AuthModule, NotificationsModule, BookingsModule, StaffAuthModule, ComplianceModule],
+  imports: [AuthModule, NotificationsModule, BookingsModule, StaffAuthModule, ComplianceModule, DealershipConfigModule],
   controllers: [
     AdminAuthController,
     AdminUsersController,
@@ -36,7 +40,8 @@ import { ComplianceModule } from "../compliance/compliance.module";
     SystemHealthController,
     NotificationTemplatesController,
     AdminComplianceController,
+    AdminBrandingController,
   ],
-  providers: [AdminAuthService, AdminUsersService, AdminBookingsService, AdminComplianceService],
+  providers: [AdminAuthService, AdminUsersService, AdminBookingsService, AdminComplianceService, AdminBrandingService, ConfigScopeResolver],
 })
 export class AdminModule {}

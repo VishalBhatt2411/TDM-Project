@@ -7,6 +7,8 @@ export const CUSTOMER_REPOSITORY = Symbol("CustomerRepository");
 export const VEHICLE_REPOSITORY = Symbol("VehicleRepository");
 export const BRANCH_REPOSITORY = Symbol("BranchRepository");
 export const DEALERSHIP_REPOSITORY = Symbol("DealershipRepository");
+export const BRANDING_REPOSITORY = Symbol("BrandingRepository");
+export const BRAND_ASSET_REPOSITORY = Symbol("BrandAssetRepository");
 export const SALES_REP_REPOSITORY = Symbol("SalesRepRepository");
 export const STAFF_ASSIGNMENT_REPOSITORY = Symbol("StaffAssignmentRepository");
 /** Users of the business-data provider who can be given staff access — see StaffDirectory. */
@@ -26,7 +28,6 @@ export const SALESFORCE_IDENTITY_PROVIDER_FACTORY = Symbol("SalesforceIdentityPr
 export const DATA_PROVIDER_HEALTH = Symbol("DataProviderHealth");
 /** `(organizationId) => Promise<MetadataDeployResult>` — deploys the TDM package into that tenant's connected org. */
 export const TENANT_METADATA_DEPLOYER = Symbol("TenantMetadataDeployer");
-export const DEALERSHIP_CONFIG_REPOSITORY = Symbol("DealershipConfigRepository");
 export const REMINDER_LOG_REPOSITORY = Symbol("ReminderLogRepository");
 export const FOLLOW_UP_LOG_REPOSITORY = Symbol("FollowUpLogRepository");
 export const MAGIC_LOGIN_REPOSITORY = Symbol("MagicLoginRepository");

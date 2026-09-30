@@ -1,10 +1,12 @@
-import { Controller, Get, Inject, Logger, UseGuards } from "@nestjs/common";
+import { Controller, ForbiddenException, Get, Inject, Logger, UseGuards } from "@nestjs/common";
 import { DataProviderHealth, DomainError } from "@tdm/domain";
 import { getPrismaClient } from "@tdm/postgres-adapter";
 import { DATA_PROVIDER_HEALTH } from "../infrastructure/tokens";
 import { StaffAuthGuard } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
+import { CurrentStaffAccess } from "./current-staff-access.decorator";
+import type { StaffAccess } from "./staff-access";
 import { PERMISSIONS } from "./permissions";
 
 const prisma = getPrismaClient();
@@ -31,6 +33,7 @@ async function checkComponent(name: string, probe: () => Promise<void>): Promise
   }
 }
 
+/** Platform-wide infrastructure status — Company Admins only, even though dealer admins hold MANAGE_CONFIG. */
 @Controller("admin/system-health")
 @UseGuards(StaffAuthGuard, PermissionGuard)
 @RequirePermission(PERMISSIONS.MANAGE_CONFIG)
@@ -38,7 +41,8 @@ export class SystemHealthController {
   constructor(@Inject(DATA_PROVIDER_HEALTH) private readonly dataProvider: DataProviderHealth) {}
 
   @Get()
-  async check() {
+  async check(@CurrentStaffAccess() access: StaffAccess) {
+    if (!access.isCompanyAdmin) throw new ForbiddenException("Only a company admin can view system health.");
     const [database, dataProvider] = await Promise.all([
       checkComponent("Postgres (operational store)", async () => {
         await prisma.$queryRaw`SELECT 1`;

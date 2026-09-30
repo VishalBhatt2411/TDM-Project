@@ -1,13 +1,13 @@
-import { Controller, Get, Inject } from "@nestjs/common";
-import { DealershipConfigRepository } from "@tdm/postgres-adapter";
-import { DEALERSHIP_CONFIG_REPOSITORY } from "../infrastructure/tokens";
+import { Controller, Get } from "@nestjs/common";
+import { BrandingService } from "./branding.service";
 
 @Controller("config")
 export class ConfigController {
-  constructor(@Inject(DEALERSHIP_CONFIG_REPOSITORY) private readonly dealershipConfig: DealershipConfigRepository) {}
+  constructor(private readonly branding: BrandingService) {}
 
+  /** The branding and home-page content of the dealership (or company) this host serves. */
   @Get("dealership")
   getDealershipConfig() {
-    return this.dealershipConfig.get();
+    return this.branding.resolve();
   }
 }

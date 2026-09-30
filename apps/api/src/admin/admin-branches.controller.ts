@@ -3,10 +3,12 @@ import { Type } from "class-transformer";
 import { IsBoolean, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from "class-validator";
 import { Branch, BranchRepository, DealershipRepository } from "@tdm/domain";
 import { BRANCH_REPOSITORY, DEALERSHIP_REPOSITORY } from "../infrastructure/tokens";
-import { IsRecordId } from "../common/record-id";
+import { IsRecordId, ParseRecordIdPipe } from "../common/record-id";
 import { StaffAuthGuard } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
+import { CurrentStaffAccess } from "./current-staff-access.decorator";
+import type { StaffAccess } from "./staff-access";
 import { PERMISSIONS } from "./permissions";
 
 class GeoDto {
@@ -100,15 +102,19 @@ export class AdminBranchesController {
   ) {}
 
   @Get()
-  async list() {
-    const branches = await this.branches.findAllIncludingInactive();
+  async list(@CurrentStaffAccess() access: StaffAccess) {
+    const scope = access.scopeFor(PERMISSIONS.MANAGE_CONFIG) ?? { dealershipIds: [] };
+    const branches = await this.branches.findAllIncludingInactive(scope);
     return branches.map(branchToDto);
   }
 
   @Post()
-  async create(@Body() dto: CreateBranchDto) {
+  async create(@Body() dto: CreateBranchDto, @CurrentStaffAccess() access: StaffAccess) {
     const dealership = await this.dealerships.findById(dto.dealershipId);
-    if (!dealership) throw new BadRequestException("Unknown dealership.");
+    // A dealership outside the admin's scope is indistinguishable from a nonexistent one.
+    if (!dealership || !access.canIn(PERMISSIONS.MANAGE_CONFIG, dealership.id)) {
+      throw new BadRequestException("Unknown dealership.");
+    }
     const branch = Branch.create({
       dealershipId: dealership.id,
       name: dto.name,
@@ -130,9 +136,12 @@ export class AdminBranchesController {
   }
 
   @Patch(":id")
-  async update(@Param("id") id: string, @Body() dto: UpdateBranchDto) {
-    const existing = await this.branches.findById(id);
-    if (!existing) throw new NotFoundException(`Branch ${id} not found.`);
+  async update(
+    @Param("id", ParseRecordIdPipe) id: string,
+    @Body() dto: UpdateBranchDto,
+    @CurrentStaffAccess() access: StaffAccess,
+  ) {
+    const existing = await this.requireBranch(id, access);
     existing.updateDetails({
       name: dto.name,
       address: {
@@ -155,20 +164,27 @@ export class AdminBranchesController {
   }
 
   @Patch(":id/deactivate")
-  async deactivate(@Param("id") id: string) {
-    const existing = await this.branches.findById(id);
-    if (!existing) throw new NotFoundException(`Branch ${id} not found.`);
+  async deactivate(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
+    const existing = await this.requireBranch(id, access);
     existing.deactivate();
     const saved = await this.branches.save(existing);
     return branchToDto(saved);
   }
 
   @Patch(":id/activate")
-  async activate(@Param("id") id: string) {
-    const existing = await this.branches.findById(id);
-    if (!existing) throw new NotFoundException(`Branch ${id} not found.`);
+  async activate(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
+    const existing = await this.requireBranch(id, access);
     existing.activate();
     const saved = await this.branches.save(existing);
     return branchToDto(saved);
+  }
+
+  /** Another dealership's branch is indistinguishable from a nonexistent one. */
+  private async requireBranch(id: string, access: StaffAccess): Promise<Branch> {
+    const branch = await this.branches.findById(id);
+    if (!branch || !access.canIn(PERMISSIONS.MANAGE_CONFIG, branch.dealershipId)) {
+      throw new NotFoundException(`Branch ${id} not found.`);
+    }
+    return branch;
   }
 }

@@ -1,4 +1,4 @@
-import type { DealershipConfig } from "@tdm/postgres-adapter";
+import type { BrandProfile } from "@tdm/domain";
 
 /**
  * Escapes a value for safe interpolation into HTML email bodies. Every template below
@@ -15,16 +15,29 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Validates a `#rrggbb`/`#rgb` hex color before it's placed unescaped into a `style` attribute; falls back to the brand default otherwise. */
-function safeHex(value: string | null | undefined, fallback: string): string {
-  return value && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value) ? value : fallback;
+/** Neutral presentation default for a brand that hasn't set Primary_Color_Hex__c — deliberately no one's brand color. */
+const NEUTRAL_ACCENT_HEX = "#111827";
+
+/** Validates a `#rrggbb`/`#rgb` hex color before it's placed unescaped into a `style` attribute; falls back to the neutral default otherwise. */
+function accentOf(brand: BrandProfile): string {
+  const value = brand.primaryColorHex;
+  return value && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value) ? value : NEUTRAL_ACCENT_HEX;
+}
+
+/** The brand's logo as an <img> when it's an https URL, otherwise its logo text (or name). */
+function brandMark(brand: BrandProfile): string {
+  const label = escapeHtml(brand.logoText ?? brand.name);
+  if (brand.logoUrl && /^https:\/\/[^\s"'<>]+$/.test(brand.logoUrl)) {
+    return `<img src="${escapeHtml(brand.logoUrl)}" alt="${label}" height="32" style="display:block;height:32px;border:0;">`;
+  }
+  return `<span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:0.5px;">${label}</span>`;
 }
 
 function layout(
-  dealership: DealershipConfig,
+  dealership: BrandProfile,
   title: string,
   bodyHtml: string,
-  accentHex = safeHex(dealership.primaryColorHex, "#EB0A1E"),
+  accentHex = accentOf(dealership),
   note?: string,
 ): string {
   const noteHtml = note
@@ -38,7 +51,7 @@ function layout(
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
         <tr>
           <td style="background:${accentHex};padding:24px 32px;">
-            <span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:0.5px;">${escapeHtml(dealership.logoText ?? dealership.name)}</span>
+            ${brandMark(dealership)}
             <div style="color:#ffffff;opacity:0.85;font-size:13px;margin-top:2px;">${escapeHtml(dealership.tagline ?? "")}</div>
           </td>
         </tr>
@@ -51,9 +64,9 @@ function layout(
         </tr>
         <tr>
           <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
-            <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(dealership.name)} · ${escapeHtml(dealership.address ?? "")}</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(dealership.phone ?? "")} ${dealership.email ? "· " + escapeHtml(dealership.email) : ""}</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(dealership.operatingHours ?? "")}</p>
+            ${footerLine([dealership.name, dealership.address], "0")}
+            ${footerLine([dealership.phone, dealership.email], "4px 0 0")}
+            ${footerLine([dealership.operatingHours], "4px 0 0")}
           </td>
         </tr>
       </table>
@@ -61,6 +74,12 @@ function layout(
   </table>
 </body>
 </html>`;
+}
+
+/** A footer line of whichever contact details the brand has set — omitted entirely when none are. */
+function footerLine(parts: (string | undefined)[], margin: string): string {
+  const text = parts.filter((p): p is string => !!p?.trim()).map(escapeHtml).join(" · ");
+  return text ? `<p style="margin:${margin};font-size:13px;color:#6b7280;">${text}</p>` : "";
 }
 
 function button(href: string, label: string, accentHex: string): string {
@@ -81,6 +100,8 @@ export interface TemplateOverride {
 }
 
 export interface BookingEmailContext {
+  /** Dealership the booking's branch belongs to — its branding and template overrides apply. */
+  dealershipId: string;
   customerName: string;
   vehicleLabel: string;
   vehicleImageUrl?: string;
@@ -92,8 +113,8 @@ export interface BookingEmailContext {
   salesRepName?: string;
 }
 
-export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function bookingConfirmationEmail(dealership: BrandProfile, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Your test drive is confirmed! Here are the details:</p>
@@ -114,8 +135,8 @@ export function bookingConfirmationEmail(dealership: DealershipConfig, ctx: Book
   };
 }
 
-export function accountAccessEmail(dealership: DealershipConfig, customerName: string, magicLinkUrl: string, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function accountAccessEmail(dealership: BrandProfile, customerName: string, magicLinkUrl: string, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
     <p style="color:#374151;font-size:15px;">We've created an account for you at ${escapeHtml(dealership.name)} so you can track and manage your test drive bookings.</p>
@@ -128,8 +149,8 @@ export function accountAccessEmail(dealership: DealershipConfig, customerName: s
   };
 }
 
-export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, position: number, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function waitlistedEmail(dealership: BrandProfile, ctx: BookingEmailContext, position: number, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">The ${escapeHtml(ctx.vehicleLabel)} isn't available for your requested time, so we've added you to the waitlist.</p>
@@ -148,8 +169,8 @@ export function waitlistedEmail(dealership: DealershipConfig, ctx: BookingEmailC
   };
 }
 
-export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function waitlistPromotedEmail(dealership: BrandProfile, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Good news — a slot has opened up and your test drive is now confirmed!</p>
@@ -169,8 +190,8 @@ export function waitlistPromotedEmail(dealership: DealershipConfig, ctx: Booking
   };
 }
 
-export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmailContext, reason: string, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function cancellationEmail(dealership: BrandProfile, ctx: BookingEmailContext, reason: string, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Your test drive booking has been cancelled as requested.</p>
@@ -188,8 +209,8 @@ export function cancellationEmail(dealership: DealershipConfig, ctx: BookingEmai
   };
 }
 
-export function rescheduleEmail(dealership: DealershipConfig, ctx: BookingEmailContext, previousStart: Date, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function rescheduleEmail(dealership: BrandProfile, ctx: BookingEmailContext, previousStart: Date, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
     <p style="color:#374151;font-size:15px;">Your test drive has been rescheduled.</p>
@@ -208,12 +229,12 @@ export function rescheduleEmail(dealership: DealershipConfig, ctx: BookingEmailC
 }
 
 export function reminderEmail(
-  dealership: DealershipConfig,
+  dealership: BrandProfile,
   ctx: BookingEmailContext,
   kind: "24h" | "2h" | "day_of",
   override?: TemplateOverride,
 ): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+  const accent = accentOf(dealership);
   const leadText = kind === "24h" ? "tomorrow" : kind === "2h" ? "in about 2 hours" : "today";
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
@@ -232,13 +253,13 @@ export function reminderEmail(
 }
 
 export function followUpEmail(
-  dealership: DealershipConfig,
+  dealership: BrandProfile,
   customerName: string,
   vehicleLabel: string,
   daysSince: number,
   override?: TemplateOverride,
 ): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
     <p style="color:#374151;font-size:15px;">It's been ${daysSince} days since your test drive of the ${escapeHtml(vehicleLabel)}. We hope you enjoyed it!</p>
@@ -252,13 +273,13 @@ export function followUpEmail(
 }
 
 export function passwordSetupEmail(
-  dealership: DealershipConfig,
+  dealership: BrandProfile,
   customerName: string,
   setupUrl: string,
   isNewAccount: boolean,
   override?: TemplateOverride,
 ): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+  const accent = accentOf(dealership);
   const intro = isNewAccount
     ? `We've created an account for you at ${escapeHtml(dealership.name)} so you can track and manage your test drive bookings. Set a password to sign in anytime.`
     : `A password reset was requested for your ${escapeHtml(dealership.name)} account.`;
@@ -275,12 +296,12 @@ export function passwordSetupEmail(
 }
 
 export function otpCodeEmail(
-  dealership: DealershipConfig,
+  dealership: BrandProfile,
   code: string,
   ttlMinutes: number,
   override?: TemplateOverride,
 ): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Use this code to verify your ${escapeHtml(dealership.name)} account:</p>
     <p style="margin:24px 0;font-size:32px;font-weight:bold;letter-spacing:8px;color:#111827;">${escapeHtml(code)}</p>
@@ -293,12 +314,12 @@ export function otpCodeEmail(
 }
 
 export function salesRepAssignedEmail(
-  dealership: DealershipConfig,
+  dealership: BrandProfile,
   repName: string,
   ctx: BookingEmailContext,
   override?: TemplateOverride,
 ): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(repName)},</p>
     <p style="color:#374151;font-size:15px;">You've been assigned to a test drive. Here are the details:</p>
@@ -318,8 +339,8 @@ export function salesRepAssignedEmail(
   };
 }
 
-export function surveyRequestEmail(dealership: DealershipConfig, customerName: string, vehicleLabel: string, surveyUrl: string, override?: TemplateOverride): { subject: string; html: string } {
-  const accent = safeHex(dealership.primaryColorHex, "#EB0A1E");
+export function surveyRequestEmail(dealership: BrandProfile, customerName: string, vehicleLabel: string, surveyUrl: string, override?: TemplateOverride): { subject: string; html: string } {
+  const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
     <p style="color:#374151;font-size:15px;">Thank you for test driving the ${escapeHtml(vehicleLabel)} with us! We'd love your feedback — it takes less than 2 minutes.</p>

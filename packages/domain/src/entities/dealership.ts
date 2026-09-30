@@ -10,6 +10,11 @@ export interface DealershipBranding {
   operatingHours?: string;
 }
 
+/** What customer-facing surfaces (site header, emails) are branded with — a dealership's, or the company's on a company-wide host. */
+export interface BrandProfile extends DealershipBranding {
+  name: string;
+}
+
 export interface DealershipProps {
   id: string;
   name: string;

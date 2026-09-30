@@ -1,11 +1,12 @@
-import type { ALLOWED_IMAGE_CONTENT_TYPES } from "./dto";
+/** Raster formats only — SVG can carry script, so it is never accepted as an uploaded image. */
+export const ALLOWED_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
-type AllowedImageType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number];
+export type AllowedImageType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number];
 
 /**
  * Checks a decoded upload's leading "magic bytes" against the content type the client
  * declared, so a mislabelled or non-image payload is rejected before it is stored and
- * later served back to staff with that Content-Type.
+ * later served back with that Content-Type.
  */
 export function matchesImageSignature(data: Buffer, contentType: string): boolean {
   switch (contentType as AllowedImageType) {

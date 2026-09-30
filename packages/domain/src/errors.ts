@@ -69,3 +69,10 @@ export class TenantNotConnectedError extends DomainError {
     super("This organization's data connection is not available. An administrator must reconnect it.", "TENANT_NOT_CONNECTED");
   }
 }
+
+/** The tenant's data provider lacks storage a feature needs (e.g. its TDM package predates the feature and must be redeployed). */
+export class DataProviderOutdatedError extends DomainError {
+  constructor(feature: string) {
+    super(`This organization's data connection doesn't support ${feature} yet. An administrator must redeploy the TDM package.`, "DATA_PROVIDER_OUTDATED");
+  }
+}

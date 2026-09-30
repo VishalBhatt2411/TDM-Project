@@ -26,7 +26,6 @@
     "showingIn": "Showing vehicles in {{location}}"
   },
   "home": {
-    "tagline": "Authorized Toyota Dealer",
     "heroTitle": "Experience the drive before you decide.",
     "heroSubtitle": "Book a free test drive at your nearest showroom or right from your doorstep — no waiting, no hassle.",
     "bookATestDrive": "Book a Test Drive",
@@ -35,8 +34,8 @@
     "feature1Body": "Choose to drive at our showroom or have us bring the car to you.",
     "feature2Title": "Book in Under a Minute",
     "feature2Body": "No account needed upfront — just pick a slot and go.",
-    "feature3Title": "Trusted Toyota Quality",
-    "feature3Body": "Every vehicle in our lineup, backed by Toyota's reliability.",
+    "feature3Title": "Transparent & Trusted",
+    "feature3Body": "Clear specifications and pricing for every vehicle in our lineup.",
     "featuredVehicles": "Featured Vehicles",
     "bestSellers": "Best Sellers",
     "newLaunches": "New Launches",

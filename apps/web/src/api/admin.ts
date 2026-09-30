@@ -221,20 +221,33 @@ export async function getCustomerSegments(branchId?: string): Promise<CustomerSe
   return data;
 }
 
+/** Where a config setting applies: a branch, a dealership, or (neither) company-wide. */
+export interface ConfigScopeParams {
+  dealershipId?: string;
+  branchId?: string;
+}
+
 export interface FeatureFlagDto {
   key: string;
   label: string;
   description: string;
   enabled: boolean;
+  /** The scope the effective value comes from — "default" means nothing is set anywhere (off). */
+  source: "branch" | "dealership" | "company" | "default";
 }
 
-export async function listFeatureFlags(branchId?: string): Promise<FeatureFlagDto[]> {
-  const { data } = await adminApiClient.get<FeatureFlagDto[]>("/admin/feature-flags", { params: { branchId } });
+export async function listFeatureFlags(scope: ConfigScopeParams): Promise<FeatureFlagDto[]> {
+  const { data } = await adminApiClient.get<FeatureFlagDto[]>("/admin/feature-flags", { params: scope });
   return data;
 }
 
-export async function setFeatureFlag(key: string, enabled: boolean, branchId?: string): Promise<void> {
-  await adminApiClient.put(`/admin/feature-flags/${key}`, { enabled, branchId });
+export async function setFeatureFlag(key: string, enabled: boolean, scope: ConfigScopeParams): Promise<void> {
+  await adminApiClient.put(`/admin/feature-flags/${key}`, { enabled, ...scope });
+}
+
+/** Removes the setting at exactly this scope so the flag inherits from the next wider one. */
+export async function clearFeatureFlag(key: string, scope: ConfigScopeParams): Promise<void> {
+  await adminApiClient.delete(`/admin/feature-flags/${key}`, { params: scope });
 }
 
 export interface AuditLogEntryDto {
@@ -403,20 +416,86 @@ export interface NotificationTemplateDto {
   note?: string;
   isCustomized: boolean;
   updatedAt?: string;
-  updatedBy?: string;
+  /** The company-wide override a dealership inherits when it has none of its own. */
+  inherited?: { subject?: string; note?: string };
 }
 
-export async function listNotificationTemplates(): Promise<NotificationTemplateDto[]> {
-  const { data } = await adminApiClient.get<NotificationTemplateDto[]>("/admin/notification-templates");
+export async function listNotificationTemplates(dealershipId?: string): Promise<NotificationTemplateDto[]> {
+  const { data } = await adminApiClient.get<NotificationTemplateDto[]>("/admin/notification-templates", { params: { dealershipId } });
   return data;
 }
 
-export async function updateNotificationTemplate(key: string, input: { subject?: string; note?: string }): Promise<void> {
-  await adminApiClient.put(`/admin/notification-templates/${key}`, input);
+export async function updateNotificationTemplate(
+  key: string,
+  input: { subject?: string; note?: string },
+  dealershipId?: string,
+): Promise<void> {
+  await adminApiClient.put(`/admin/notification-templates/${key}`, { ...input, dealershipId });
 }
 
-export async function revertNotificationTemplate(key: string): Promise<void> {
-  await adminApiClient.delete(`/admin/notification-templates/${key}`);
+export async function revertNotificationTemplate(key: string, dealershipId?: string): Promise<void> {
+  await adminApiClient.delete(`/admin/notification-templates/${key}`, { params: { dealershipId } });
+}
+
+export interface BrandingFieldsDto {
+  tagline?: string;
+  logoText?: string;
+  logoUrl?: string;
+  primaryColorHex?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  operatingHours?: string;
+}
+
+export type BrandImageKind = "logo" | "hero";
+
+export interface SiteContentDto {
+  logoAssetId?: string;
+  heroImageUrl?: string;
+  heroImageAssetId?: string;
+  sections?: Record<string, boolean>;
+  copy?: Record<string, Record<string, string>>;
+}
+
+export interface BrandLayerDto {
+  branding: BrandingFieldsDto;
+  content: SiteContentDto;
+}
+
+export interface BrandingEditorDto {
+  name: string;
+  own: BrandLayerDto;
+  /** The company-wide layer a dealership inherits unset fields from; null when editing company-wide. */
+  inherited: BrandLayerDto | null;
+  /** The server's field rules, so the form mirrors them instead of duplicating them. */
+  schema: {
+    brandingMaxLength: Partial<Record<keyof BrandingFieldsDto, number>>;
+    copyMaxLength: Record<string, number>;
+    sectionKeys: string[];
+    imageContentTypes: Record<BrandImageKind, string[]>;
+    maxImageBytes: Record<BrandImageKind, number>;
+  };
+}
+
+export async function getBranding(scope: ConfigScopeParams): Promise<BrandingEditorDto> {
+  const { data } = await adminApiClient.get<BrandingEditorDto>("/admin/branding", { params: scope });
+  return data;
+}
+
+/** Replaces the whole layer at this scope — anything omitted inherits again. */
+export async function saveBranding(scope: ConfigScopeParams, layer: BrandLayerDto): Promise<BrandingEditorDto> {
+  const { data } = await adminApiClient.put<BrandingEditorDto>("/admin/branding", layer, { params: scope });
+  return data;
+}
+
+/** Stores an image for this scope without applying it; the returned id is applied by the next save. */
+export async function uploadBrandImage(
+  scope: ConfigScopeParams,
+  input: { kind: BrandImageKind; contentType: string; dataBase64: string },
+): Promise<{ assetId: string; url: string }> {
+  const { data } = await adminApiClient.post<{ assetId: string; url: string }>("/admin/branding/images", input, { params: scope });
+  return data;
 }
 
 export async function getAdminComplianceStatus(bookingId: string): Promise<ComplianceStatusDto> {

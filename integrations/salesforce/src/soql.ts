@@ -39,6 +39,27 @@ export function escapeSoqlLike(value: string): string {
   return escapeSoql(value).replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
+const ID_SUFFIX_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+
+/**
+ * The case-insensitive 18-character form of a record id (a 15-character id gets its checksum
+ * suffix, anything else passes through). Needed wherever an id is compared as text rather than as
+ * an Id — e.g. a composite key built by Apex `String.valueOf(Id)`, which always yields 18 characters.
+ */
+export function toEighteenCharId(id: string): string {
+  if (id.length !== 15) return id;
+  let suffix = "";
+  for (let chunk = 0; chunk < 3; chunk++) {
+    let bits = 0;
+    for (let i = 0; i < 5; i++) {
+      const c = id.charAt(chunk * 5 + i);
+      if (c >= "A" && c <= "Z") bits |= 1 << i;
+    }
+    suffix += ID_SUFFIX_ALPHABET.charAt(bits);
+  }
+  return id + suffix;
+}
+
 /** `('a', 'b')` for an IN clause. Callers must handle an empty list (SOQL rejects `IN ()`). */
 export function soqlIdList(ids: readonly string[]): string {
   return `(${ids.map((id) => `'${escapeSoql(id)}'`).join(", ")})`;
@@ -72,9 +93,10 @@ export const BRANCH_FIELDS =
   "Id, Name, Dealership__c, Address__c, City__c, State__c, Postal_Code__c, Country__c, Latitude__c, Longitude__c, " +
   "Phone__c, Email__c, Operating_Hours__c, Manager_Name__c, Is_Active__c";
 
-export const DEALERSHIP_FIELDS =
-  "Id, Name, Url_Slug__c, Custom_Domain__c, Is_Active__c, Tagline__c, Logo_Text__c, Logo_Url__c, " +
-  "Primary_Color_Hex__c, Phone__c, Email__c, Address__c, Operating_Hours__c";
+export const BRANDING_FIELDS =
+  "Tagline__c, Logo_Text__c, Logo_Url__c, Primary_Color_Hex__c, Phone__c, Email__c, Address__c, Operating_Hours__c";
+
+export const DEALERSHIP_FIELDS = `Id, Name, Url_Slug__c, Custom_Domain__c, Is_Active__c, ${BRANDING_FIELDS}`;
 
 export const BOOKING_FIELDS =
   "Id, Contact__c, Contact__r.Portal_User_Id__c, Contact__r.FirstName, Contact__r.LastName, Contact__r.Email, " +

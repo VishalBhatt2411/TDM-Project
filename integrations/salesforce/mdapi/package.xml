@@ -19,6 +19,7 @@
         <members>Staff_Assignment__c</members>
         <members>Feature_Flag__c</members>
         <members>Notification_Template__c</members>
+        <members>Company_Profile__c</members>
         <name>CustomObject</name>
     </types>
     <types>

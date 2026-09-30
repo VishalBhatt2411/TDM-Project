@@ -1,26 +1,9 @@
 import { AssetPurpose, AssetRepository, StoredAsset } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { escapeSoql, withConnection } from "../soql";
+import { isContentDocumentId, CONTENT_TYPE_BY_EXTENSION, EXTENSION_BY_CONTENT_TYPE, readAll } from "../files";
 
-const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-};
 const PURPOSES: readonly AssetPurpose[] = ["license_photo", "signature"];
-/** ContentDocument ids carry the `069` key prefix. */
-const CONTENT_DOCUMENT_ID = /^069[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/;
-
-function readAll(stream: NodeJS.ReadableStream): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on("data", (chunk: Buffer | string) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    stream.on("end", () => resolve(Buffer.concat(chunks)));
-    stream.on("error", reject);
-  });
-}
 
 /**
  * Compliance images as Salesforce Files: each is a ContentVersion published to the booking's
@@ -63,7 +46,7 @@ export class SalesforceAssetRepository implements AssetRepository {
   }
 
   async findById(id: string): Promise<StoredAsset | null> {
-    if (!CONTENT_DOCUMENT_ID.test(id)) return null;
+    if (!isContentDocumentId(id)) return null;
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
         `SELECT Id, Title, FileExtension, FirstPublishLocationId FROM ContentVersion WHERE ContentDocumentId = '${escapeSoql(id)}' AND IsLatest = true LIMIT 1`,
@@ -87,7 +70,7 @@ export class SalesforceAssetRepository implements AssetRepository {
 
   async deleteMany(ids: string[]): Promise<void> {
     // Ids from another storage backend (e.g. pre-migration UUIDs) aren't files here — nothing to delete.
-    const documentIds = ids.filter((id) => CONTENT_DOCUMENT_ID.test(id));
+    const documentIds = ids.filter((id) => isContentDocumentId(id));
     if (documentIds.length === 0) return;
     await withConnection(this.connectionProvider, async (conn) => {
       const results = await conn.sobject("ContentDocument").destroy(documentIds);

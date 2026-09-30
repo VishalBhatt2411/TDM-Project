@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The connected company's own customer-facing brand: exactly one record (Singleton_Key__c = COMPANY).
+  Every dealership inherits a field from here when its own Dealership__c value is blank, and a
+  company-wide site (no dealership host) uses it directly. Edited from the TDM admin console.
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>TDM Company Profile</label>
+    <pluralLabel>TDM Company Profiles</pluralLabel>
+    <nameField>
+        <label>Profile Number</label>
+        <type>AutoNumber</type>
+        <displayFormat>CP-{00000}</displayFormat>
+    </nameField>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <sharingModel>Read</sharingModel>
+    <enableActivities>false</enableActivities>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <fields>
+        <fullName>Singleton_Key__c</fullName>
+        <label>Singleton Key</label>
+        <type>Text</type>
+        <length>20</length>
+        <required>true</required>
+        <unique>true</unique>
+        <caseSensitive>true</caseSensitive>
+        <externalId>true</externalId>
+        <description>Always COMPANY — the unique constraint keeps the company to one profile record, and the TDM platform upserts on it.</description>
+    </fields>
+    <fields>
+        <fullName>Tagline__c</fullName>
+        <label>Tagline</label>
+        <type>Text</type>
+        <length>255</length>
+    </fields>
+    <fields>
+        <fullName>Logo_Text__c</fullName>
+        <label>Logo Text</label>
+        <type>Text</type>
+        <length>40</length>
+        <description>Wordmark shown when no logo image is set.</description>
+    </fields>
+    <fields>
+        <fullName>Logo_Url__c</fullName>
+        <label>Logo URL</label>
+        <type>Url</type>
+    </fields>
+    <fields>
+        <fullName>Primary_Color_Hex__c</fullName>
+        <label>Primary Color (Hex)</label>
+        <type>Text</type>
+        <length>7</length>
+        <description>Brand colour as #RRGGBB.</description>
+    </fields>
+    <fields>
+        <fullName>Phone__c</fullName>
+        <label>Phone</label>
+        <type>Phone</type>
+    </fields>
+    <fields>
+        <fullName>Email__c</fullName>
+        <label>Email</label>
+        <type>Email</type>
+    </fields>
+    <fields>
+        <fullName>Address__c</fullName>
+        <label>Address</label>
+        <type>TextArea</type>
+    </fields>
+    <fields>
+        <fullName>Operating_Hours__c</fullName>
+        <label>Operating Hours</label>
+        <type>LongTextArea</type>
+        <length>4000</length>
+        <visibleLines>6</visibleLines>
+    </fields>
+    <fields>
+        <fullName>Site_Content__c</fullName>
+        <label>Site Content</label>
+        <type>LongTextArea</type>
+        <length>131072</length>
+        <visibleLines>10</visibleLines>
+        <description>Customer home-page content as JSON (hero, feature cards, call to action per language; section toggles; uploaded image ids). Edited from the TDM admin console, which validates it — invalid JSON is ignored by the platform.</description>
+    </fields>
+    <validationRules>
+        <fullName>Singleton_Key_Value</fullName>
+        <active>true</active>
+        <description>Only one company profile exists; the platform looks it up by this key.</description>
+        <errorConditionFormula>Singleton_Key__c &lt;&gt; "COMPANY"</errorConditionFormula>
+        <errorDisplayField>Singleton_Key__c</errorDisplayField>
+        <errorMessage>Singleton Key must be COMPANY.</errorMessage>
+    </validationRules>
+    <validationRules>
+        <fullName>Primary_Color_Hex_Format</fullName>
+        <active>true</active>
+        <description>Branding colour must be a valid CSS hex value.</description>
+        <errorConditionFormula>AND(NOT(ISBLANK(Primary_Color_Hex__c)), NOT(REGEX(Primary_Color_Hex__c, "#[0-9A-Fa-f]{6}")))</errorConditionFormula>
+        <errorDisplayField>Primary_Color_Hex__c</errorDisplayField>
+        <errorMessage>Use a 6-digit hex colour such as #1A73E8.</errorMessage>
+    </validationRules>
+</CustomObject>

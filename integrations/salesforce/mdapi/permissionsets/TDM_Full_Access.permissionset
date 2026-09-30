@@ -4,6 +4,15 @@
     <description>Grants full CRUD + field-level access to all TDM custom objects/fields for backend integration users.</description>
     <hasActivationRequired>false</hasActivationRequired>
     <objectPermissions>
+        <object>Company_Profile__c</object>
+        <allowCreate>true</allowCreate>
+        <allowDelete>true</allowDelete>
+        <allowEdit>true</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>true</modifyAllRecords>
+        <viewAllRecords>true</viewAllRecords>
+    </objectPermissions>
+    <objectPermissions>
         <object>Booking__c</object>
         <allowCreate>true</allowCreate>
         <allowDelete>true</allowDelete>
@@ -138,6 +147,56 @@
         <modifyAllRecords>false</modifyAllRecords>
         <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
+    <fieldPermissions>
+        <field>Dealership__c.Site_Content__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Tagline__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Logo_Text__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Logo_Url__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Primary_Color_Hex__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Phone__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Email__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Address__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Operating_Hours__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Company_Profile__c.Site_Content__c</field>
+        <readable>true</readable>
+        <editable>true</editable>
+    </fieldPermissions>
     <fieldPermissions>
         <field>Booking__c.Drive_Type__c</field>
         <readable>true</readable>

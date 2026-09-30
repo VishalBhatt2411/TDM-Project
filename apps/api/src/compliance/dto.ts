@@ -1,6 +1,5 @@
 import { Equals, IsBase64, IsBoolean, IsIn, IsISO8601, IsOptional, IsString, Length, MaxLength } from "class-validator";
-
-export const ALLOWED_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+import { ALLOWED_IMAGE_CONTENT_TYPES } from "../common/image-signature";
 
 export class SubmitComplianceDto {
   @IsString()

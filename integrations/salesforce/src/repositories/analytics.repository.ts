@@ -176,7 +176,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
 
       const [completedResult, activityResult, convertedResult] = await Promise.all([
         conn.query(`SELECT Contact__c c, COUNT(Id) cnt FROM Booking__c WHERE Status__c = 'Completed'${branchFilter} GROUP BY Contact__c`),
-        conn.query(`SELECT Contact__c c, MAX(CreatedDate) last FROM Booking__c WHERE Contact__c != null${branchFilter} GROUP BY Contact__c`),
+        conn.query(`SELECT Contact__c c, MAX(CreatedDate) lastBookedAt FROM Booking__c WHERE Contact__c != null${branchFilter} GROUP BY Contact__c`),
         conn.query(
           `SELECT Booking__r.Contact__c c FROM Opportunity WHERE StageName = 'Closed Won' AND Booking__c != null${opportunityBranchFilter} GROUP BY Booking__r.Contact__c`,
         ),
@@ -191,7 +191,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
         const contactId = row.c;
         if (convertedContacts.has(contactId)) {
           counts.converted++;
-        } else if (new Date(row.last).getTime() < dormantCutoff) {
+        } else if (new Date(row.lastBookedAt).getTime() < dormantCutoff) {
           counts.dormant++;
         } else {
           const completed = completedByContact.get(contactId) ?? 0;

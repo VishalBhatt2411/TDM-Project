@@ -1,10 +1,19 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail } from "lucide-react";
+import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail, Palette } from "lucide-react";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { cn } from "@/lib/utils";
 import { STAFF_ROLE_OPTIONS, staffRoleLabel } from "@/lib/permissions";
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  permission: string | null;
+  /** Platform-wide pages a dealer-scoped grant of the same permission doesn't reach. */
+  companyAdminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "view_dashboard" },
   // No permission gate — every staff role (including a plain SalesRep with no
   // grantable permissions) can at least reach their own scoped "My Test Drives" view.
@@ -12,10 +21,11 @@ const NAV_ITEMS = [
   { to: "/admin/vehicles", label: "Vehicle Inventory", icon: Car, permission: "manage_config" },
   { to: "/admin/branches", label: "Branches", icon: MapPin, permission: "manage_config" },
   { to: "/admin/users", label: "Users & Permissions", icon: Users, permission: "manage_users" },
+  { to: "/admin/branding", label: "Branding & Home Page", icon: Palette, permission: "manage_config" },
   { to: "/admin/notification-templates", label: "Notification Templates", icon: Mail, permission: "manage_config" },
   { to: "/admin/feature-flags", label: "Feature Flags", icon: ToggleLeft, permission: "manage_config" },
   { to: "/admin/audit-log", label: "Audit Log", icon: ScrollText, permission: "view_audit_log" },
-  { to: "/admin/system-health", label: "System Health", icon: Activity, permission: "manage_config" },
+  { to: "/admin/system-health", label: "System Health", icon: Activity, permission: "manage_config", companyAdminOnly: true },
 ];
 
 export function AdminLayout() {
@@ -30,7 +40,9 @@ export function AdminLayout() {
           <span className="font-semibold">Admin Console</span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {NAV_ITEMS.filter((item) => !item.permission || hasPermission(item.permission)).map((item) => {
+          {NAV_ITEMS.filter(
+            (item) => (!item.permission || hasPermission(item.permission)) && (!item.companyAdminOnly || staff?.isCompanyAdmin),
+          ).map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.to;
             return (

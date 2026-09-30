@@ -45,39 +45,21 @@ model RefreshToken {
   @@unique([customerId, tokenHash])
 }
 
+// Tenant-scoped: every read and write filters by organizationId explicitly (see PostgresAuditLogRepository).
 model AuditLogEntry {
-  id         String   @id @default(uuid())
-  actorId    String
-  action     String
-  entityType String
-  entityId   String
-  metadata   Json
-  occurredAt DateTime @default(now())
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json
+  occurredAt     DateTime     @default(now())
 
-  @@index([entityType, entityId])
-  @@index([actorId])
-}
-
-model FeatureFlag {
-  key       String   @id
-  enabled   Boolean  @default(false)
-  branchId  String?
-  updatedAt DateTime @updatedAt
-}
-
-// Configurable dealership branding shown in the header, emails, and footer.
-// Single-row table (id is always "default").
-model DealershipConfig {
-  id              String   @id @default("default")
-  name            String
-  tagline         String?
-  logoText        String?
-  phone           String?
-  email           String?
-  address         String?
-  operatingHours  String?
-  primaryColorHex String?
-  updatedAt       DateTime @updatedAt
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, actorId])
 }
 
 // Tracks which scheduled reminders have already been sent for a booking, so the
@@ -216,6 +198,7 @@ model Organization {
   oauthStates StaffOAuthState[]
   hosts       TenantHost[]
   subdomains  TenantSubdomain[]
+  auditLog    AuditLogEntry[]
 }
 
 // Routes a company's or dealer's own custom domain to its tenant. Platform subdomains
@@ -245,32 +228,4 @@ model TenantSubdomain {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
-}
-
-// Staff-editable overrides for the hardcoded transactional email templates in
-// apps/api/src/notifications/email-templates.ts (see NOTIFICATION_TEMPLATE_KEYS
-// for the fixed set of keys). Sparse by design — a row only exists once an admin
-// has customized that template; both fields are individually optional so a
-// missing one falls back to the hardcoded default subject / no extra note.
-model NotificationTemplateOverride {
-  key       String   @id
-  subject   String?
-  note      String?
-  updatedBy String?
-  updatedAt DateTime @updatedAt
-}
-
-// In-house storage for pre-drive compliance images (license photo, canvas-drawn
-// signature) — no external blob/CDN dependency. Served back only to staff via
-// GET /assets/:id (StaffAuthGuard); the URL stored on ComplianceRecord.licenseImageUrl
-// / signatureImageUrl points at that route.
-model UploadedAsset {
-  id          String   @id @default(uuid())
-  contentType String
-  data        Bytes
-  purpose     String // "license_photo" | "signature"
-  bookingId   String?
-  createdAt   DateTime @default(now())
-
-  @@index([bookingId])
 }

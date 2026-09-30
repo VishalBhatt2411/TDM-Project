@@ -23,17 +23,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { STAFF_ROLE_OPTIONS, staffRoleLabel } from "@/lib/permissions";
-
-type ApiError = { response?: { data?: { message?: string | string[] } } };
+import { errorMessage } from "@/lib/api-error";
 
 const SELECT_CLASS = "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
 const DEFAULT_MAX_DAILY_BOOKINGS = 8;
-
-function errorMessage(error: unknown): string | undefined {
-  const message = (error as ApiError | null)?.response?.data?.message;
-  if (!message) return error ? "Something went wrong. Please try again." : undefined;
-  return Array.isArray(message) ? message.join(" ") : message;
-}
 
 /** The editable part of an assignment — shared by the grant and edit forms. */
 interface AssignmentFieldsValue {

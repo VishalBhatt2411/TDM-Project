@@ -23,6 +23,8 @@ process.on("unhandledRejection", (reason) => {
 const DEFAULT_BODY_LIMIT = "1mb";
 // Two base64 images at SubmitComplianceDto's 8,000,000-char cap each, plus JSON overhead.
 const COMPLIANCE_BODY_LIMIT = "17mb";
+// One base64 image at MAX_BRAND_IMAGE_BYTES.hero (4 MB decoded ≈ 5.4 MB encoded), plus JSON overhead.
+const BRAND_IMAGE_BODY_LIMIT = "6mb";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
@@ -32,9 +34,10 @@ async function bootstrap() {
   if (env.trustProxyHops > 0) app.set("trust proxy", env.trustProxyHops);
 
   // Body limits: only the compliance upload (base64 license photo + signature, each capped
-  // by SubmitComplianceDto) needs a large body; everything else keeps a tight limit so an
+  // by SubmitComplianceDto) and a brand image upload need a large body; everything else keeps a tight limit so an
   // oversized payload can't tie up memory on any other route.
   app.use(/^\/api\/v1\/bookings\/[^/]+\/compliance$/, json({ limit: COMPLIANCE_BODY_LIMIT }));
+  app.use(/^\/api\/v1\/admin\/branding\/images$/, json({ limit: BRAND_IMAGE_BODY_LIMIT }));
   app.use(json({ limit: DEFAULT_BODY_LIMIT }));
   app.use(urlencoded({ extended: false, limit: DEFAULT_BODY_LIMIT }));
 

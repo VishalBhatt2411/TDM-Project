@@ -1,7 +1,14 @@
-import { UNASSIGNED_ID, VehicleAllocation, VehicleAllocationRepository, WishlistItem, WishlistRepository } from "@tdm/domain";
+import {
+  UNASSIGNED_ID,
+  VehicleAllocation,
+  VehicleAllocationFilter,
+  VehicleAllocationRepository,
+  WishlistItem,
+  WishlistRepository,
+} from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { allocationRecordToDomain, allocationToRecord, wishlistRecordToDomain } from "../mappers";
-import { escapeSoql, withConnection } from "../soql";
+import { dealershipCondition, escapeSoql, withConnection } from "../soql";
 
 export class SalesforceWishlistRepository implements WishlistRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
@@ -74,9 +81,15 @@ export class SalesforceVehicleAllocationRepository implements VehicleAllocationR
     });
   }
 
-  async findAll(filter?: { status?: VehicleAllocation["status"] }): Promise<VehicleAllocation[]> {
+  async findAll(filter?: VehicleAllocationFilter): Promise<VehicleAllocation[]> {
     return withConnection(this.connectionProvider, async (conn) => {
-      const where = filter?.status ? `WHERE Status__c = '${escapeSoql(filter.status)}'` : "";
+      const from = dealershipCondition("From_Branch__r.Dealership__c", filter?.dealershipIds);
+      const to = dealershipCondition("To_Branch__r.Dealership__c", filter?.dealershipIds);
+      const conditions = [
+        filter?.status ? `Status__c = '${escapeSoql(filter.status)}'` : null,
+        from && to ? `(${from} OR ${to})` : null,
+      ].filter(Boolean);
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
       const result = await conn.query(
         `SELECT ${ALLOCATION_FIELDS} FROM Vehicle_Allocation__c ${where} ORDER BY CreatedDate DESC LIMIT 200`,
       );

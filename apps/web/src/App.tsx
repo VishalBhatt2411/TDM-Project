@@ -29,6 +29,7 @@ import { AdminBranchesPage } from "@/pages/admin/AdminBranchesPage";
 import { AdminVehiclesPage } from "@/pages/admin/AdminVehiclesPage";
 import { AdminSystemHealthPage } from "@/pages/admin/AdminSystemHealthPage";
 import { AdminNotificationTemplatesPage } from "@/pages/admin/AdminNotificationTemplatesPage";
+import { AdminBrandingPage } from "@/pages/admin/AdminBrandingPage";
 import { CreateOrganizationPage } from "@/pages/onboarding/CreateOrganizationPage";
 import { ConnectedAppInstructionsPage } from "@/pages/onboarding/ConnectedAppInstructionsPage";
 import { SalesforceCredentialsPage } from "@/pages/onboarding/SalesforceCredentialsPage";
@@ -79,6 +80,7 @@ export function App() {
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />
           <Route path="/admin/system-health" element={<AdminSystemHealthPage />} />
           <Route path="/admin/notification-templates" element={<AdminNotificationTemplatesPage />} />
+          <Route path="/admin/branding" element={<AdminBrandingPage />} />
         </Route>
       </Route>
 

@@ -6,6 +6,7 @@ import { getVehicle, getVehicleAvailability, getVehicleVariants } from "@/api/ve
 import { useShoppingLocation } from "@/context/location-context";
 import { createBooking, createPublicBooking, isBookingConflictError } from "@/api/bookings";
 import { useAuth } from "@/context/auth-context";
+import { useDealershipConfig } from "@/hooks/use-dealership-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,7 @@ export function BookingPage() {
   const { isAuthenticated, profile } = useAuth();
 
   const { data: vehicle, isError: vehicleError } = useQuery({ queryKey: ["vehicle", vehicleId], queryFn: () => getVehicle(vehicleId!), enabled: !!vehicleId });
+  const { data: dealership } = useDealershipConfig();
   const { data: variants } = useQuery({ queryKey: ["vehicle-variants", vehicleId], queryFn: () => getVehicleVariants(vehicleId!), enabled: !!vehicleId });
   const { branches, isReady: branchesReady } = useShoppingLocation();
   // A vehicle is test-driven at the branch that stocks it — not a customer choice.
@@ -274,12 +276,12 @@ export function BookingPage() {
               </div>
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" className="h-4 w-4 rounded border-input" {...register("isExistingCustomer")} />
-                I'm an existing Toyota customer
+                {dealership?.name ? `I'm an existing ${dealership.name} customer` : "I'm an existing customer"}
               </label>
               {isExistingCustomer && (
                 <div className="mt-2 space-y-1.5">
                   <Label htmlFor="currentVehicleOwned">Current vehicle owned</Label>
-                  <Input id="currentVehicleOwned" placeholder="e.g. Toyota Innova 2019" {...register("currentVehicleOwned")} />
+                  <Input id="currentVehicleOwned" placeholder="Make, model and year" {...register("currentVehicleOwned")} />
                 </div>
               )}
             </section>

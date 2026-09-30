@@ -1,7 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { DealershipConfigRepository } from "@tdm/postgres-adapter";
-import { NotificationTemplateRepository } from "@tdm/domain";
-import { DEALERSHIP_CONFIG_REPOSITORY, NOTIFICATION_TEMPLATE_REPOSITORY } from "../infrastructure/tokens";
+import { BrandProfile, NotificationTemplateRepository } from "@tdm/domain";
+import { NOTIFICATION_TEMPLATE_REPOSITORY } from "../infrastructure/tokens";
+import { BrandingService } from "../config/branding.service";
+import { TenantContext } from "../tenancy/tenant-context";
 import { EMAIL_SENDER, EmailSender } from "./email-sender";
 import {
   accountAccessEmail,
@@ -21,88 +22,81 @@ import {
   waitlistPromotedEmail,
 } from "./email-templates";
 
+type RenderedEmail = { subject: string; html: string };
+
+/**
+ * Sends transactional emails branded by the dealership they concern — a booking's own
+ * dealership, or (for emails with no booking, e.g. an OTP) the host dealership the customer
+ * is on — with that dealership's template overrides, else the company-wide ones.
+ */
 @Injectable()
 export class NotificationsService {
   constructor(
     @Inject(EMAIL_SENDER) private readonly emailSender: EmailSender,
-    @Inject(DEALERSHIP_CONFIG_REPOSITORY) private readonly dealershipConfig: DealershipConfigRepository,
     @Inject(NOTIFICATION_TEMPLATE_REPOSITORY) private readonly templateOverrides: NotificationTemplateRepository,
+    private readonly branding: BrandingService,
   ) {}
 
-  private async getOverride(key: NotificationTemplateKey): Promise<TemplateOverride | undefined> {
-    const record = await this.templateOverrides.findByKey(key);
-    return record ? { subject: record.subject, note: record.note } : undefined;
-  }
-
-  async sendBookingConfirmation(toEmail: string, ctx: BookingEmailContext): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("bookingConfirmation")]);
-    const { subject, html } = bookingConfirmationEmail(dealership, ctx, override);
+  private async send(
+    toEmail: string,
+    key: NotificationTemplateKey,
+    dealershipId: string | undefined,
+    render: (brand: BrandProfile, override?: TemplateOverride) => RenderedEmail,
+  ): Promise<void> {
+    const scopeDealershipId = dealershipId ?? TenantContext.hostDealershipId();
+    const [brand, record] = await Promise.all([
+      this.branding.resolveForEmail(scopeDealershipId),
+      this.templateOverrides.findEffective(key, scopeDealershipId),
+    ]);
+    const { subject, html } = render(brand, record ? { subject: record.subject, note: record.note } : undefined);
     await this.emailSender.send({ to: toEmail, subject, html });
   }
 
-  async sendAccountAccess(toEmail: string, customerName: string, magicLinkUrl: string): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("accountAccess")]);
-    const { subject, html } = accountAccessEmail(dealership, customerName, magicLinkUrl, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendBookingConfirmation(toEmail: string, ctx: BookingEmailContext): Promise<void> {
+    return this.send(toEmail, "bookingConfirmation", ctx.dealershipId, (brand, o) => bookingConfirmationEmail(brand, ctx, o));
   }
 
-  async sendCancellation(toEmail: string, ctx: BookingEmailContext, reason: string): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("cancellation")]);
-    const { subject, html } = cancellationEmail(dealership, ctx, reason, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendAccountAccess(toEmail: string, customerName: string, magicLinkUrl: string): Promise<void> {
+    return this.send(toEmail, "accountAccess", undefined, (brand, o) => accountAccessEmail(brand, customerName, magicLinkUrl, o));
   }
 
-  async sendWaitlisted(toEmail: string, ctx: BookingEmailContext, position: number): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("waitlisted")]);
-    const { subject, html } = waitlistedEmail(dealership, ctx, position, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendCancellation(toEmail: string, ctx: BookingEmailContext, reason: string): Promise<void> {
+    return this.send(toEmail, "cancellation", ctx.dealershipId, (brand, o) => cancellationEmail(brand, ctx, reason, o));
   }
 
-  async sendWaitlistPromotion(toEmail: string, ctx: BookingEmailContext): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("waitlistPromoted")]);
-    const { subject, html } = waitlistPromotedEmail(dealership, ctx, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendWaitlisted(toEmail: string, ctx: BookingEmailContext, position: number): Promise<void> {
+    return this.send(toEmail, "waitlisted", ctx.dealershipId, (brand, o) => waitlistedEmail(brand, ctx, position, o));
   }
 
-  async sendReschedule(toEmail: string, ctx: BookingEmailContext, previousStart: Date): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("reschedule")]);
-    const { subject, html } = rescheduleEmail(dealership, ctx, previousStart, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendWaitlistPromotion(toEmail: string, ctx: BookingEmailContext): Promise<void> {
+    return this.send(toEmail, "waitlistPromoted", ctx.dealershipId, (brand, o) => waitlistPromotedEmail(brand, ctx, o));
   }
 
-  async sendRepAssignment(toEmail: string, repName: string, ctx: BookingEmailContext): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("salesRepAssigned")]);
-    const { subject, html } = salesRepAssignedEmail(dealership, repName, ctx, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendReschedule(toEmail: string, ctx: BookingEmailContext, previousStart: Date): Promise<void> {
+    return this.send(toEmail, "reschedule", ctx.dealershipId, (brand, o) => rescheduleEmail(brand, ctx, previousStart, o));
   }
 
-  async sendReminder(toEmail: string, ctx: BookingEmailContext, kind: "24h" | "2h" | "day_of"): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("reminder")]);
-    const { subject, html } = reminderEmail(dealership, ctx, kind, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendRepAssignment(toEmail: string, repName: string, ctx: BookingEmailContext): Promise<void> {
+    return this.send(toEmail, "salesRepAssigned", ctx.dealershipId, (brand, o) => salesRepAssignedEmail(brand, repName, ctx, o));
   }
 
-  async sendFollowUp(toEmail: string, customerName: string, vehicleLabel: string, daysSince: number): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("followUp")]);
-    const { subject, html } = followUpEmail(dealership, customerName, vehicleLabel, daysSince, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendReminder(toEmail: string, ctx: BookingEmailContext, kind: "24h" | "2h" | "day_of"): Promise<void> {
+    return this.send(toEmail, "reminder", ctx.dealershipId, (brand, o) => reminderEmail(brand, ctx, kind, o));
   }
 
-  async sendSurveyRequest(toEmail: string, customerName: string, vehicleLabel: string, surveyUrl: string): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("surveyRequest")]);
-    const { subject, html } = surveyRequestEmail(dealership, customerName, vehicleLabel, surveyUrl, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendFollowUp(toEmail: string, dealershipId: string, customerName: string, vehicleLabel: string, daysSince: number): Promise<void> {
+    return this.send(toEmail, "followUp", dealershipId, (brand, o) => followUpEmail(brand, customerName, vehicleLabel, daysSince, o));
   }
 
-  async sendPasswordSetup(toEmail: string, customerName: string, setupUrl: string, isNewAccount: boolean): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("passwordSetup")]);
-    const { subject, html } = passwordSetupEmail(dealership, customerName, setupUrl, isNewAccount, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendSurveyRequest(toEmail: string, dealershipId: string, customerName: string, vehicleLabel: string, surveyUrl: string): Promise<void> {
+    return this.send(toEmail, "surveyRequest", dealershipId, (brand, o) => surveyRequestEmail(brand, customerName, vehicleLabel, surveyUrl, o));
   }
 
-  async sendOtpCode(toEmail: string, code: string, ttlMinutes: number): Promise<void> {
-    const [dealership, override] = await Promise.all([this.dealershipConfig.get(), this.getOverride("otpCode")]);
-    const { subject, html } = otpCodeEmail(dealership, code, ttlMinutes, override);
-    await this.emailSender.send({ to: toEmail, subject, html });
+  sendPasswordSetup(toEmail: string, customerName: string, setupUrl: string, isNewAccount: boolean): Promise<void> {
+    return this.send(toEmail, "passwordSetup", undefined, (brand, o) => passwordSetupEmail(brand, customerName, setupUrl, isNewAccount, o));
+  }
+
+  sendOtpCode(toEmail: string, code: string, ttlMinutes: number): Promise<void> {
+    return this.send(toEmail, "otpCode", undefined, (brand, o) => otpCodeEmail(brand, code, ttlMinutes, o));
   }
 }

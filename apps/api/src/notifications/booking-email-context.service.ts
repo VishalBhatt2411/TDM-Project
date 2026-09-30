@@ -25,6 +25,7 @@ export class BookingEmailContextService {
     const vehicleProps = vehicle.toProps();
     const branchProps = branch.toProps();
     return {
+      dealershipId: booking.dealershipId,
       customerName: customerNameOverride ?? (customer ? `${customer.name.firstName} ${customer.name.lastName}` : "there"),
       vehicleLabel: `${vehicleProps.year} ${vehicleProps.make} ${vehicleProps.model}`,
       bookingReference: booking.id,

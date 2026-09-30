@@ -14,10 +14,13 @@ import {
   VehicleStatus,
 } from "@tdm/domain";
 import { BRANCH_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
+import { ParseRecordIdPipe } from "../common/record-id";
 import { vehicleToDto } from "../vehicles/vehicles.service";
 import { StaffAuthGuard } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
+import { CurrentStaffAccess } from "./current-staff-access.decorator";
+import type { StaffAccess } from "./staff-access";
 import { PERMISSIONS } from "./permissions";
 
 const BODY_TYPES = ["Sedan", "SUV", "Hatchback", "Coupe", "Convertible", "Truck", "Van", "Wagon", "MPV", "Pickup", "Luxury"];
@@ -255,21 +258,24 @@ export class AdminVehiclesController {
   ) {}
 
   @Post()
-  async create(@Body() dto: CreateVehicleDto) {
-    const branch = await this.requireBranch(dto.branchId);
+  async create(@Body() dto: CreateVehicleDto, @CurrentStaffAccess() access: StaffAccess) {
+    const branch = await this.requireBranch(dto.branchId, access);
     const vehicle = Vehicle.create({ ...toVehicleProps(dto), dealershipId: branch.dealershipId });
     const saved = await this.vehicles.save(vehicle);
     return vehicleToDto(saved);
   }
 
   @Patch(":id")
-  async update(@Param("id") id: string, @Body() dto: UpdateVehicleDto) {
-    const existing = await this.vehicles.findById(id);
-    if (!existing) throw new NotFoundException(`Vehicle ${id} not found.`);
+  async update(
+    @Param("id", ParseRecordIdPipe) id: string,
+    @Body() dto: UpdateVehicleDto,
+    @CurrentStaffAccess() access: StaffAccess,
+  ) {
+    const existing = await this.requireVehicle(id, access);
     const { branchId, ...patch } = toVehiclePatch(dto);
     existing.updateDetails(patch);
     if (branchId && branchId !== existing.branchId) {
-      const branch = await this.requireBranch(branchId);
+      const branch = await this.requireBranch(branchId, access);
       existing.moveToBranch(branch.id, branch.dealershipId);
     }
     const saved = await this.vehicles.save(existing);
@@ -277,23 +283,36 @@ export class AdminVehiclesController {
   }
 
   @Delete(":id")
-  async remove(@Param("id") id: string) {
-    const existing = await this.vehicles.findById(id);
-    if (!existing) throw new NotFoundException(`Vehicle ${id} not found.`);
+  async remove(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
+    await this.requireVehicle(id, access);
     await this.vehicles.delete(id);
     return { deleted: true };
   }
 
   @Get()
-  async list() {
-    const { items } = await this.vehicles.search({ pageSize: 200 });
+  async list(@CurrentStaffAccess() access: StaffAccess) {
+    const scope = access.scopeFor(PERMISSIONS.MANAGE_CONFIG) ?? { dealershipIds: [] };
+    const { items } = await this.vehicles.search({ pageSize: 200, ...scope });
     return items.map(vehicleToDto);
   }
 
-  /** A vehicle's dealership always follows its branch, so the branch must be real. */
-  private async requireBranch(branchId: string): Promise<Branch> {
+  /**
+   * A vehicle's dealership always follows its branch, so the branch must be real — and one the
+   * admin manages. Another dealership's branch is indistinguishable from a nonexistent one.
+   */
+  private async requireBranch(branchId: string, access: StaffAccess): Promise<Branch> {
     const branch = await this.branches.findById(branchId);
-    if (!branch) throw new BadRequestException("Unknown branch.");
+    if (!branch || !access.canIn(PERMISSIONS.MANAGE_CONFIG, branch.dealershipId)) {
+      throw new BadRequestException("Unknown branch.");
+    }
     return branch;
+  }
+
+  private async requireVehicle(id: string, access: StaffAccess): Promise<Vehicle> {
+    const vehicle = await this.vehicles.findById(id);
+    if (!vehicle || !access.canIn(PERMISSIONS.MANAGE_CONFIG, vehicle.dealershipId)) {
+      throw new NotFoundException(`Vehicle ${id} not found.`);
+    }
+    return vehicle;
   }
 }

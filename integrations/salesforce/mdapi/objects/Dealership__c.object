@@ -93,6 +93,14 @@
         <length>4000</length>
         <visibleLines>6</visibleLines>
     </fields>
+    <fields>
+        <fullName>Site_Content__c</fullName>
+        <label>Site Content</label>
+        <type>LongTextArea</type>
+        <length>131072</length>
+        <visibleLines>10</visibleLines>
+        <description>Customer home-page content as JSON (hero, feature cards, call to action per language; section toggles; uploaded image ids). Edited from the TDM admin console, which validates it — invalid JSON is ignored by the platform.</description>
+    </fields>
     <sharingReasons>
         <fullName>TDM_Dealership__c</fullName>
         <label>TDM Dealership</label>

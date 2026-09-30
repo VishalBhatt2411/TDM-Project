@@ -65,6 +65,7 @@ export class FollowUpScheduler {
       const vehicleProps = vehicle.toProps();
       await this.notifications.sendFollowUp(
         customer.email.value,
+        booking.dealershipId,
         `${customer.name.firstName} ${customer.name.lastName}`,
         `${vehicleProps.year} ${vehicleProps.make} ${vehicleProps.model}`,
         days,

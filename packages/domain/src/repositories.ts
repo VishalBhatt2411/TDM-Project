@@ -2,6 +2,7 @@ import { Branch, SalesRepresentative } from "./entities/branch";
 import { Booking, ComplianceRecord, DriveFeedback } from "./entities/booking";
 import { Customer } from "./entities/customer";
 import { Dealership } from "./entities/dealership";
+import { BrandLayer } from "./entities/site-content";
 import { StaffAssignment, StaffRole } from "./entities/staff-assignment";
 import { VehicleAllocation, WishlistItem } from "./entities/inventory";
 import { SalesOpportunity } from "./entities/sales-opportunity";
@@ -151,11 +152,16 @@ export interface WishlistRepository {
   remove(customerId: string, vehicleId: string): Promise<void>;
 }
 
+/** An allocation is in scope when either its source or its destination branch is. */
+export interface VehicleAllocationFilter extends DealershipScope {
+  status?: VehicleAllocation["status"];
+}
+
 export interface VehicleAllocationRepository {
   /** Returns the persisted aggregate — on first save this carries the provider-assigned id. */
   save(allocation: VehicleAllocation): Promise<VehicleAllocation>;
   findById(id: string): Promise<VehicleAllocation | null>;
-  findAll(filter?: { status?: VehicleAllocation["status"] }): Promise<VehicleAllocation[]>;
+  findAll(filter?: VehicleAllocationFilter): Promise<VehicleAllocation[]>;
 }
 
 export interface SalesOpportunityRepository {
@@ -192,6 +198,7 @@ export interface AuditLogEntry {
   occurredAt: Date;
 }
 
+/** Always scoped to the current tenant — an implementation must fail closed when no tenant is resolved. */
 export interface AuditLogRepository {
   append(entry: Omit<AuditLogEntry, "id" | "occurredAt">): Promise<void>;
   query(filter: { entityType?: string; actorId?: string; limit?: number }): Promise<AuditLogEntry[]>;
@@ -237,27 +244,52 @@ export interface AnalyticsRepository {
   getCustomerSegments(scope?: AnalyticsScope): Promise<CustomerSegmentCounts>;
 }
 
+/**
+ * Where a feature flag or notification-template override applies: a branch (always within its
+ * dealership), a whole dealership, or — neither set — the whole company.
+ */
+export interface ConfigScope {
+  dealershipId?: string;
+  branchId?: string;
+}
+
+/** Which scope a flag's effective value came from; "default" means it isn't set anywhere (off). */
+export type FeatureFlagSource = "branch" | "dealership" | "company" | "default";
+
+export interface FeatureFlagSetting {
+  enabled: boolean;
+  source: FeatureFlagSource;
+}
+
 export interface FeatureFlagRepository {
-  isEnabled(key: string, context?: { branchId?: string }): Promise<boolean>;
-  setFlag(key: string, enabled: boolean, context?: { branchId?: string }): Promise<void>;
+  /** The most specific setting wins — branch, then dealership, then company-wide; set nowhere is off. */
+  resolve(keys: readonly string[], scope?: ConfigScope): Promise<Record<string, FeatureFlagSetting>>;
+  isEnabled(key: string, scope?: ConfigScope): Promise<boolean>;
+  setFlag(key: string, enabled: boolean, scope?: ConfigScope): Promise<void>;
+  /** Removes the setting at exactly `scope`, so the flag inherits from the next wider scope again. */
+  clearFlag(key: string, scope?: ConfigScope): Promise<void>;
 }
 
 export interface NotificationTemplateOverrideRecord {
   key: string;
   subject?: string;
   note?: string;
-  updatedBy?: string;
+  /** Absent for a company-wide override. */
+  dealershipId?: string;
   updatedAt: Date;
 }
 
 /** Staff-editable overrides layered on top of the hardcoded email templates in
  *  apps/api/src/notifications/email-templates.ts — see NOTIFICATION_TEMPLATE_KEYS
- *  for the fixed set of keys this repository stores rows for. */
+ *  for the fixed set of keys this repository stores rows for. Overrides are
+ *  company-wide or per dealership; a dealership override wins over the company one. */
 export interface NotificationTemplateRepository {
-  findByKey(key: string): Promise<NotificationTemplateOverrideRecord | null>;
-  findAll(): Promise<NotificationTemplateOverrideRecord[]>;
-  upsert(key: string, patch: { subject?: string; note?: string }, updatedBy?: string): Promise<NotificationTemplateOverrideRecord>;
-  delete(key: string): Promise<void>;
+  /** The override that applies to `dealershipId`'s emails: its own, else the company-wide one. */
+  findEffective(key: string, dealershipId?: string): Promise<NotificationTemplateOverrideRecord | null>;
+  /** Overrides set at exactly this scope (company-wide when `dealershipId` is absent). */
+  findAtScope(dealershipId?: string): Promise<NotificationTemplateOverrideRecord[]>;
+  upsert(key: string, patch: { subject?: string; note?: string }, dealershipId?: string): Promise<NotificationTemplateOverrideRecord>;
+  delete(key: string, dealershipId?: string): Promise<void>;
 }
 
 export type AssetPurpose = "license_photo" | "signature";
@@ -277,6 +309,39 @@ export interface StoredAsset {
 export interface AssetRepository {
   save(input: { contentType: string; data: Buffer; purpose: AssetPurpose; bookingId?: string }): Promise<{ id: string }>;
   findById(id: string): Promise<StoredAsset | null>;
+  deleteMany(ids: string[]): Promise<void>;
+}
+
+/**
+ * Where each scope's brand layer lives: a dealership's own, or (no dealershipId) the company-wide
+ * one every dealership inherits unset fields from — see mergeBrandLayers.
+ */
+export interface BrandingRepository {
+  /** Null when the dealership doesn't exist; company-wide returns an empty layer until one is saved. */
+  findLayer(dealershipId?: string): Promise<BrandLayer | null>;
+  /** Replaces the whole layer at that scope. */
+  saveLayer(layer: BrandLayer, dealershipId?: string): Promise<void>;
+}
+
+export type BrandAssetKind = "logo" | "hero";
+
+export interface BrandAssetInfo {
+  id: string;
+  kind: BrandAssetKind;
+  contentType: string;
+  /** Undefined for a company-wide asset. */
+  dealershipId?: string;
+}
+
+/**
+ * Public brand images (logo, hero). Stored apart from compliance assets so a customer-facing
+ * image route can never serve anything but a brand image.
+ */
+export interface BrandAssetRepository {
+  save(input: { kind: BrandAssetKind; contentType: string; data: Buffer; dealershipId?: string }): Promise<{ id: string }>;
+  describe(id: string): Promise<BrandAssetInfo | null>;
+  read(id: string): Promise<(BrandAssetInfo & { data: Buffer }) | null>;
+  /** Ignores ids that aren't brand assets. */
   deleteMany(ids: string[]): Promise<void>;
 }
 

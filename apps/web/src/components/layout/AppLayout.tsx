@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Car, Clock, Heart, Menu, MapPin, Phone, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
-import { useDealershipConfig } from "@/hooks/use-dealership-config";
+import { brandLogoUrl, useBrandTheme, useDealershipConfig } from "@/hooks/use-dealership-config";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LocationPicker } from "@/components/LocationPicker";
 import { LocationProvider } from "@/context/location-context";
@@ -20,7 +20,9 @@ export function AppLayout() {
 
 function AppShell() {
   const { isAuthenticated, logout } = useAuth();
-  const { data: dealership } = useDealershipConfig();
+  const { data: dealership, isLoading: isBrandLoading } = useDealershipConfig();
+  const logoUrl = brandLogoUrl(dealership);
+  useBrandTheme(dealership?.primaryColorHex);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { t } = useTranslation();
 
@@ -51,20 +53,26 @@ function AppShell() {
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="flex items-center gap-2.5">
-            <span
-              className="flex h-10 w-10 items-center justify-center rounded-md text-white"
-              style={{ backgroundColor: dealership?.primaryColorHex ?? "#EB0A1E" }}
-            >
-              <Car className="h-5 w-5" />
-            </span>
-            <span>
-              <span className="block text-base font-bold leading-tight tracking-tight">
-                {dealership?.name ?? "Toyota Indore"}
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-contain" />
+            ) : (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <Car className="h-5 w-5" />
               </span>
-              <span className="block text-xs leading-tight text-muted-foreground">
-                {dealership?.tagline ?? "Authorized Toyota Dealer"}
+            )}
+            {isBrandLoading ? (
+              <span className="block space-y-1.5" aria-hidden>
+                <span className="block h-4 w-32 animate-pulse rounded bg-muted" />
+                <span className="block h-3 w-24 animate-pulse rounded bg-muted" />
               </span>
-            </span>
+            ) : (
+              <span className="min-w-0">
+                <span className="block truncate text-base font-bold leading-tight tracking-tight">{dealership?.logoText ?? dealership?.name}</span>
+                {dealership?.tagline && (
+                  <span className="block truncate text-xs leading-tight text-muted-foreground">{dealership.tagline}</span>
+                )}
+              </span>
+            )}
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -169,8 +177,8 @@ function AppShell() {
         <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted-foreground">
           <div className="grid gap-6 sm:grid-cols-3">
             <div>
-              <p className="font-semibold text-foreground">{dealership?.name ?? "Toyota Indore"}</p>
-              <p className="mt-1">{dealership?.tagline ?? "Authorized Toyota Dealer"}</p>
+              <p className="font-semibold text-foreground">{dealership?.name}</p>
+              {dealership?.tagline && <p className="mt-1">{dealership.tagline}</p>}
             </div>
             <div>
               <p className="font-semibold text-foreground">Contact</p>
@@ -184,7 +192,7 @@ function AppShell() {
             </div>
           </div>
           <p className="mt-8 text-xs">
-            &copy; {new Date().getFullYear()} {dealership?.name ?? "Toyota Indore"}. Vehicle specifications and pricing shown are illustrative and subject to change.
+            &copy; {new Date().getFullYear()} {dealership?.name}. Vehicle specifications and pricing shown are illustrative and subject to change.
           </p>
         </div>
       </footer>

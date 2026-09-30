@@ -4,6 +4,7 @@ import {
   ComplianceRecord,
   Customer,
   Dealership,
+  DealershipBranding,
   DriveFeedback,
   Email,
   EngineOption,
@@ -204,17 +205,36 @@ export function dealershipRecordToDomain(record: any): Dealership {
     urlSlug: record.Url_Slug__c,
     customDomain: record.Custom_Domain__c ?? undefined,
     isActive: !!record.Is_Active__c,
-    branding: {
-      tagline: record.Tagline__c ?? undefined,
-      logoText: record.Logo_Text__c ?? undefined,
-      logoUrl: record.Logo_Url__c ?? undefined,
-      primaryColorHex: record.Primary_Color_Hex__c ?? undefined,
-      phone: record.Phone__c ?? undefined,
-      email: record.Email__c ?? undefined,
-      address: record.Address__c ?? undefined,
-      operatingHours: record.Operating_Hours__c ?? undefined,
-    },
+    branding: brandingFromRecord(record),
   });
+}
+
+/** Dealership__c and Company_Profile__c carry the same branding fields. */
+export function brandingFromRecord(record: any): DealershipBranding {
+  return {
+    tagline: record.Tagline__c ?? undefined,
+    logoText: record.Logo_Text__c ?? undefined,
+    logoUrl: record.Logo_Url__c ?? undefined,
+    primaryColorHex: record.Primary_Color_Hex__c ?? undefined,
+    phone: record.Phone__c ?? undefined,
+    email: record.Email__c ?? undefined,
+    address: record.Address__c ?? undefined,
+    operatingHours: record.Operating_Hours__c ?? undefined,
+  };
+}
+
+/** Every branding field is written, so an unset one clears the stored value (full replacement). */
+export function brandingToRecord(branding: DealershipBranding): Record<string, unknown> {
+  return {
+    Tagline__c: branding.tagline ?? null,
+    Logo_Text__c: branding.logoText ?? null,
+    Logo_Url__c: branding.logoUrl ?? null,
+    Primary_Color_Hex__c: branding.primaryColorHex ?? null,
+    Phone__c: branding.phone ?? null,
+    Email__c: branding.email ?? null,
+    Address__c: branding.address ?? null,
+    Operating_Hours__c: branding.operatingHours ?? null,
+  };
 }
 
 export function branchToRecord(branch: Branch): Record<string, unknown> {

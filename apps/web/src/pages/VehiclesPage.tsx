@@ -39,7 +39,7 @@ export function VehiclesPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Explore the Toyota Lineup</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("home.exploreLineup")}</h1>
         <p className="text-sm text-muted-foreground">
           {locationLabel ? t("location.showingIn", { location: locationLabel }) : "Find the right vehicle and book a test drive in minutes."}
         </p>

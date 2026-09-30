@@ -4,7 +4,7 @@ import { AssetRepository, BookingRepository, ComplianceRecord } from "@tdm/domai
 import { ComplianceStatusDto } from "@tdm/types";
 import { ASSET_REPOSITORY, BOOKING_REPOSITORY } from "../infrastructure/tokens";
 import { SubmitComplianceDto } from "./dto";
-import { matchesImageSignature } from "./image-signature";
+import { matchesImageSignature } from "../common/image-signature";
 
 const ASSET_URL_PREFIX = "/api/v1/assets/";
 
