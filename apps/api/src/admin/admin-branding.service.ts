@@ -91,6 +91,7 @@ export class AdminBrandingService {
       action: "BRANDING_UPDATED",
       entityType: "Branding",
       entityId: dealershipId ?? "company",
+      dealershipId,
       metadata: { dealershipId: dealershipId ?? null, changedFields: changedFields(before, layer) },
     });
 

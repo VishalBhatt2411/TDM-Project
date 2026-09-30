@@ -86,6 +86,7 @@ export class AdminBookingsService {
       action: "BOOKING_REP_REASSIGNED",
       entityType: "Booking",
       entityId: bookingId,
+      dealershipId: saved.dealershipId,
       metadata: { salesRepId: rep.id },
     });
 
@@ -109,6 +110,7 @@ export class AdminBookingsService {
       action: "BOOKING_REP_HANDOFF",
       entityType: "Booking",
       entityId: bookingId,
+      dealershipId: saved.dealershipId,
       metadata: { salesRepId: rep.id },
     });
 
@@ -131,7 +133,7 @@ export class AdminBookingsService {
 
     booking.checkIn(dto.method);
     const saved = await this.bookings.save(booking);
-    await this.logAction(staff, "BOOKING_CHECKED_IN", bookingId, { method: dto.method });
+    await this.logAction(staff, "BOOKING_CHECKED_IN", saved, { method: dto.method });
     return adminBookingToDto(saved);
   }
 
@@ -150,7 +152,7 @@ export class AdminBookingsService {
 
     booking.start(dto.odometerStart);
     const saved = await this.bookings.save(booking);
-    await this.logAction(staff, "BOOKING_STARTED", bookingId, { odometerStart: dto.odometerStart });
+    await this.logAction(staff, "BOOKING_STARTED", saved, { odometerStart: dto.odometerStart });
     return adminBookingToDto(saved);
   }
 
@@ -160,7 +162,7 @@ export class AdminBookingsService {
 
     booking.complete(dto.odometerEnd);
     const saved = await this.bookings.save(booking);
-    await this.logAction(staff, "BOOKING_COMPLETED", bookingId, { odometerEnd: dto.odometerEnd });
+    await this.logAction(staff, "BOOKING_COMPLETED", saved, { odometerEnd: dto.odometerEnd });
     return adminBookingToDto(saved);
   }
 
@@ -170,7 +172,7 @@ export class AdminBookingsService {
 
     booking.markNoShow();
     const saved = await this.bookings.save(booking);
-    await this.logAction(staff, "BOOKING_NO_SHOW", bookingId, {});
+    await this.logAction(staff, "BOOKING_NO_SHOW", saved, {});
     return adminBookingToDto(saved);
   }
 
@@ -180,7 +182,7 @@ export class AdminBookingsService {
 
     booking.setStaffNotes(dto.notes);
     const saved = await this.bookings.save(booking);
-    await this.logAction(staff, "BOOKING_NOTES_UPDATED", bookingId, {});
+    await this.logAction(staff, "BOOKING_NOTES_UPDATED", saved, {});
     return adminBookingToDto(saved);
   }
 
@@ -222,12 +224,13 @@ export class AdminBookingsService {
     return rep;
   }
 
-  private async logAction(staff: AuthenticatedStaff, action: string, bookingId: string, metadata: Record<string, unknown>) {
+  private async logAction(staff: AuthenticatedStaff, action: string, booking: Booking, metadata: Record<string, unknown>) {
     await this.auditLog.append({
       actorId: staff.staffUserId,
       action,
       entityType: "Booking",
-      entityId: bookingId,
+      entityId: booking.id,
+      dealershipId: booking.dealershipId,
       metadata,
     });
   }

@@ -273,6 +273,8 @@ export interface AuditLogEntryDto {
   action: string;
   entityType: string;
   entityId: string;
+  /** Absent for a company-wide change — only unrestricted viewers see those. */
+  dealershipId?: string;
   metadata: Record<string, unknown>;
   occurredAt: string;
 }

@@ -63,6 +63,7 @@ export class AdminUsersService {
       action: "STAFF_ASSIGNMENT_CREATED",
       entityType: "StaffAssignment",
       entityId: saved.id,
+      dealershipId: saved.dealershipId ?? undefined,
       metadata: { userId: saved.userId, role: saved.role, dealershipId: saved.dealershipId ?? null },
     });
     return toPublicDto(StaffAssignment.restore({ ...saved.toProps(), userName: user.name, userEmail: user.email }));
@@ -96,6 +97,7 @@ export class AdminUsersService {
       action: "STAFF_ASSIGNMENT_UPDATED",
       entityType: "StaffAssignment",
       entityId: id,
+      dealershipId: saved.dealershipId ?? undefined,
       metadata: { userId: saved.userId, ...dto },
     });
     return toPublicDto(saved);

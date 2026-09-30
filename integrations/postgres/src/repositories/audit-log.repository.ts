@@ -1,4 +1,4 @@
-import { AuditLogEntry, AuditLogRepository } from "@tdm/domain";
+import { AuditLogEntry, AuditLogFilter, AuditLogRepository } from "@tdm/domain";
 import { PrismaClient } from "@prisma/client";
 
 /**
@@ -26,17 +26,20 @@ export class PostgresAuditLogRepository implements AuditLogRepository {
         action: entry.action,
         entityType: entry.entityType,
         entityId: entry.entityId,
+        dealershipId: entry.dealershipId ?? null,
         metadata: entry.metadata as any,
       },
     });
   }
 
-  async query(filter: { entityType?: string; actorId?: string; limit?: number }): Promise<AuditLogEntry[]> {
+  async query(filter: AuditLogFilter): Promise<AuditLogEntry[]> {
+    const { dealershipIds } = filter.scope;
     const records = await this.prisma.auditLogEntry.findMany({
       where: {
         organizationId: this.organizationId(),
         entityType: filter.entityType,
         actorId: filter.actorId,
+        ...(dealershipIds ? { dealershipId: { in: [...dealershipIds] } } : {}),
       },
       orderBy: { occurredAt: "desc" },
       take: filter.limit ?? 50,
@@ -47,6 +50,7 @@ export class PostgresAuditLogRepository implements AuditLogRepository {
       action: r.action,
       entityType: r.entityType,
       entityId: r.entityId,
+      ...(r.dealershipId ? { dealershipId: r.dealershipId } : {}),
       metadata: r.metadata as Record<string, unknown>,
       occurredAt: r.occurredAt,
     }));

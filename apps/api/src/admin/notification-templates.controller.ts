@@ -87,6 +87,7 @@ export class NotificationTemplatesController {
       action: "NOTIFICATION_TEMPLATE_UPDATED",
       entityType: "NotificationTemplate",
       entityId: key,
+      dealershipId,
       metadata: { dealershipId: dealershipId ?? null },
     });
     return { key: saved.key, subject: saved.subject, note: saved.note, updatedAt: saved.updatedAt.toISOString() };
@@ -106,6 +107,7 @@ export class NotificationTemplatesController {
       action: "NOTIFICATION_TEMPLATE_REVERTED",
       entityType: "NotificationTemplate",
       entityId: key,
+      dealershipId,
       metadata: { dealershipId: dealershipId ?? null },
     });
     return { reverted: true };

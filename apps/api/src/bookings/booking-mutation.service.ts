@@ -53,6 +53,7 @@ export class BookingMutationService {
       action: "BOOKING_CANCELLED",
       entityType: "Booking",
       entityId: booking.id,
+      dealershipId: booking.dealershipId,
       metadata: { reason },
     });
 
@@ -106,6 +107,7 @@ export class BookingMutationService {
       action: "BOOKING_RESCHEDULED",
       entityType: "Booking",
       entityId: saved.id,
+      dealershipId: saved.dealershipId,
       metadata: { previousBookingId: booking.id },
     });
 

@@ -54,10 +54,13 @@ model AuditLogEntry {
   action         String
   entityType     String
   entityId       String
+  /// The dealership (data-provider id) the change belongs to; null for a company-wide change.
+  dealershipId   String?
   metadata       Json
   occurredAt     DateTime     @default(now())
 
   @@index([organizationId, occurredAt])
+  @@index([organizationId, dealershipId, occurredAt])
   @@index([organizationId, entityType, entityId])
   @@index([organizationId, actorId])
 }

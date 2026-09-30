@@ -67,6 +67,7 @@ export class AdminBookingScheduleService {
       action: "BOOKING_SCHEDULE_UPDATED",
       entityType: "BookingSchedule",
       entityId: dealershipId ?? "company",
+      dealershipId,
       metadata: {
         dealershipId: dealershipId ?? null,
         changedFields: BOOKING_SCHEDULE_FIELDS.filter((key) => JSON.stringify(before[key]) !== JSON.stringify(schedule[key])),

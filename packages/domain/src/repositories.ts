@@ -203,14 +203,24 @@ export interface AuditLogEntry {
   action: string;
   entityType: string;
   entityId: string;
+  /** The dealership the change belongs to; absent for a company-wide one. */
+  dealershipId?: string;
   metadata: Record<string, unknown>;
   occurredAt: Date;
+}
+
+export interface AuditLogFilter {
+  entityType?: string;
+  actorId?: string;
+  limit?: number;
+  /** A viewer limited to some dealerships sees only their entries — never company-wide ones. */
+  scope: DealershipScope;
 }
 
 /** Always scoped to the current tenant — an implementation must fail closed when no tenant is resolved. */
 export interface AuditLogRepository {
   append(entry: Omit<AuditLogEntry, "id" | "occurredAt">): Promise<void>;
-  query(filter: { entityType?: string; actorId?: string; limit?: number }): Promise<AuditLogEntry[]>;
+  query(filter: AuditLogFilter): Promise<AuditLogEntry[]>;
 }
 
 export interface DashboardSummary {

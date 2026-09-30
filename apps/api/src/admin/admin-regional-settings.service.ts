@@ -55,6 +55,7 @@ export class AdminRegionalSettingsService {
       action: "REGIONAL_SETTINGS_UPDATED",
       entityType: "RegionalSettings",
       entityId: dealershipId ?? "company",
+      dealershipId,
       metadata: {
         dealershipId: dealershipId ?? null,
         changedFields: REGIONAL_KEYS.filter((key) => before[key] !== settings[key]),

@@ -61,6 +61,7 @@ export class FeatureFlagsController {
       action: "FEATURE_FLAG_SET",
       entityType: "FeatureFlag",
       entityId: key,
+      dealershipId: scope.dealershipId,
       metadata: { enabled: dto.enabled, ...scopeMetadata(scope) },
     });
     return { key, enabled: dto.enabled, ...scope };
@@ -81,6 +82,7 @@ export class FeatureFlagsController {
       action: "FEATURE_FLAG_CLEARED",
       entityType: "FeatureFlag",
       entityId: key,
+      dealershipId: scope.dealershipId,
       metadata: scopeMetadata(scope),
     });
     return { key, cleared: true };

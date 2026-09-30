@@ -51,13 +51,14 @@ export class AdminComplianceService {
       action: "COMPLIANCE_LICENSE_AI_CHECKED",
       entityType: "Booking",
       entityId: bookingId,
+      dealershipId: booking.dealershipId,
       metadata: {},
     });
     return assessment;
   }
 
   async confirmLicense(bookingId: string, staff: AuthenticatedStaff): Promise<ComplianceStatusDto> {
-    await this.requireAccessibleBooking(bookingId, staff);
+    const booking = await this.requireAccessibleBooking(bookingId, staff);
     const record = await this.bookings.findComplianceByBooking(bookingId);
     if (!record) {
       throw new NotFoundException("No compliance submission exists for this booking yet.");
@@ -69,6 +70,7 @@ export class AdminComplianceService {
       action: "COMPLIANCE_LICENSE_CONFIRMED",
       entityType: "Booking",
       entityId: bookingId,
+      dealershipId: booking.dealershipId,
       metadata: {},
     });
     return complianceToDto(bookingId, record);
