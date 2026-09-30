@@ -202,8 +202,8 @@ export interface DashboardSummaryDto {
   averageSatisfactionRating: number | null;
 }
 
-export async function getAdminDashboardSummary(branchId?: string): Promise<DashboardSummaryDto> {
-  const { data } = await adminApiClient.get<DashboardSummaryDto>("/analytics/dashboard", { params: { branchId } });
+export async function getAdminDashboardSummary(periodDays: number, branchId?: string): Promise<DashboardSummaryDto> {
+  const { data } = await adminApiClient.get<DashboardSummaryDto>("/analytics/dashboard", { params: { branchId, periodDays } });
   return data;
 }
 
@@ -220,9 +220,12 @@ export interface FunnelInsightDto {
   summary: string;
 }
 
-export async function getFunnelInsight(branchId?: string): Promise<{ counts: FunnelStageCountsDto; insight: FunnelInsightDto }> {
+export async function getFunnelInsight(
+  periodDays: number,
+  branchId?: string,
+): Promise<{ counts: FunnelStageCountsDto; insight: FunnelInsightDto }> {
   const { data } = await adminApiClient.get<{ counts: FunnelStageCountsDto; insight: FunnelInsightDto }>("/analytics/funnel", {
-    params: { branchId },
+    params: { branchId, periodDays },
   });
   return data;
 }
@@ -235,8 +238,10 @@ export interface CustomerSegmentCountsDto {
   newProspects: number;
 }
 
-export async function getCustomerSegments(branchId?: string): Promise<CustomerSegmentCountsDto> {
-  const { data } = await adminApiClient.get<CustomerSegmentCountsDto>("/analytics/customer-segments", { params: { branchId } });
+export async function getCustomerSegments(dormantAfterDays: number, branchId?: string): Promise<CustomerSegmentCountsDto> {
+  const { data } = await adminApiClient.get<CustomerSegmentCountsDto>("/analytics/customer-segments", {
+    params: { branchId, dormantAfterDays },
+  });
   return data;
 }
 

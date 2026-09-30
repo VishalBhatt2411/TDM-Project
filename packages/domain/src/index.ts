@@ -7,6 +7,7 @@ export * from "./entities/dealership";
 export * from "./entities/site-content";
 export * from "./entities/regional-settings";
 export * from "./entities/booking-schedule";
+export * from "./entities/analytics-window";
 export * from "./entities/staff-assignment";
 export * from "./entities/booking";
 export * from "./entities/inventory";

@@ -4,3 +4,4 @@ export * from "./vehicle";
 export * from "./booking";
 export * from "./branch";
 export * from "./zoned-time";
+export * from "./analytics";

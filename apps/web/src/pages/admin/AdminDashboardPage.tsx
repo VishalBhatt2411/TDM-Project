@@ -3,6 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { Trophy } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  ANALYTICS_PERIOD_DAYS,
+  DEFAULT_ANALYTICS_PERIOD_DAYS,
+  DEFAULT_DORMANT_AFTER_DAYS,
+  DORMANT_AFTER_DAYS_OPTIONS,
+} from "@tdm/types";
 import { getAdminDashboardSummary, getCustomerSegments, getFunnelInsight, listBranchesLookup } from "@/api/admin";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,24 +51,27 @@ export function AdminDashboardPage() {
   // land them on their own bookings instead of a dashboard call that will 403 forever.
   const canViewDashboard = hasPermission("view_dashboard");
   const [branchId, setBranchId] = React.useState("");
+  const [periodDays, setPeriodDays] = React.useState<number>(DEFAULT_ANALYTICS_PERIOD_DAYS);
+  const [dormantAfterDays, setDormantAfterDays] = React.useState<number>(DEFAULT_DORMANT_AFTER_DAYS);
+  const period = `${periodDays} days`;
 
   const { data: branches } = useQuery({ queryKey: ["branches-lookup"], queryFn: listBranchesLookup, enabled: canViewDashboard });
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery({
-    queryKey: ["admin-dashboard", branchId],
-    queryFn: () => getAdminDashboardSummary(branchId || undefined),
+    queryKey: ["admin-dashboard", branchId, periodDays],
+    queryFn: () => getAdminDashboardSummary(periodDays, branchId || undefined),
     enabled: canViewDashboard,
   });
 
   const { data: funnel, error: funnelError, refetch: refetchFunnel } = useQuery({
-    queryKey: ["admin-funnel", branchId],
-    queryFn: () => getFunnelInsight(branchId || undefined),
+    queryKey: ["admin-funnel", branchId, periodDays],
+    queryFn: () => getFunnelInsight(periodDays, branchId || undefined),
     enabled: canViewDashboard,
   });
 
   const { data: segments, error: segmentsError, refetch: refetchSegments } = useQuery({
-    queryKey: ["admin-customer-segments", branchId],
-    queryFn: () => getCustomerSegments(branchId || undefined),
+    queryKey: ["admin-customer-segments", branchId, dormantAfterDays],
+    queryFn: () => getCustomerSegments(dormantAfterDays, branchId || undefined),
     enabled: canViewDashboard,
   });
 
@@ -90,6 +99,7 @@ export function AdminDashboardPage() {
     );
   }
 
+  const hasTrend = data.bookingTrend.some((d) => d.count > 0);
   const trendData = data.bookingTrend.map((d) => ({ date: d.date?.slice(5) ?? d.date, "Test Drives": d.count }));
   const branchData = data.branchPerformance.map((b) => ({ name: b.branchName, Bookings: b.bookings }));
 
@@ -97,33 +107,46 @@ export function AdminDashboardPage() {
     <div className="p-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Operations Dashboard</h1>
-        <select
-          className="flex h-10 rounded-md border border-input bg-background px-3 text-sm"
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
-        >
-          <option value="">All Branches</option>
-          {branches?.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          <select
+            aria-label="Reporting period"
+            className="flex h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={periodDays}
+            onChange={(e) => setPeriodDays(Number(e.target.value))}
+          >
+            {ANALYTICS_PERIOD_DAYS.map((days) => (
+              <option key={days} value={days}>Last {days} days</option>
+            ))}
+          </select>
+          <select
+            aria-label="Branch"
+            className="flex h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value)}
+          >
+            <option value="">All Branches</option>
+            {branches?.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Today's Test Drives" value={data.todaysTestDrives} />
         <StatTile label="Upcoming Bookings" value={data.upcomingBookings} />
         <StatTile label="Vehicle Utilization" value={data.vehicleUtilizationPct} suffix="%" />
-        <StatTile label="Cancellation Rate (30d)" value={data.cancellationRatePct} suffix="%" />
-        <StatTile label="Conversion Rate (30d)" value={data.conversionRatePct} suffix="%" />
+        <StatTile label={`Cancellation Rate (${periodDays}d)`} value={data.cancellationRatePct} suffix="%" />
+        <StatTile label={`Conversion Rate (${periodDays}d)`} value={data.conversionRatePct} suffix="%" />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Booking Trend (14 days)</CardTitle>
+            <CardTitle className="text-base">Booking Trend ({period})</CardTitle>
           </CardHeader>
           <CardContent className="h-64">
-            {trendData.length === 0 ? (
+            {!hasTrend ? (
               <p className="flex h-full items-center justify-center text-sm text-muted-foreground">No bookings in this period yet.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -141,7 +164,7 @@ export function AdminDashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Branch Performance (30 days)</CardTitle>
+            <CardTitle className="text-base">Branch Performance ({period})</CardTitle>
           </CardHeader>
           <CardContent className="h-64">
             {branchData.length === 0 ? (
@@ -164,7 +187,7 @@ export function AdminDashboardPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Most Requested Vehicles (90 days)</CardTitle>
+            <CardTitle className="text-base">Most Requested Vehicles ({period})</CardTitle>
           </CardHeader>
           <CardContent>
             {data.mostRequestedVehicles.length === 0 ? (
@@ -185,7 +208,7 @@ export function AdminDashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Trophy className="h-4 w-4 text-amber-500" /> Sales Rep Leaderboard (30 days)
+              <Trophy className="h-4 w-4 text-amber-500" /> Sales Rep Leaderboard ({period})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -226,7 +249,7 @@ export function AdminDashboardPage() {
         <div className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Conversion Funnel (30 days)</CardTitle>
+              <CardTitle className="text-base">Conversion Funnel ({period})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -260,7 +283,21 @@ export function AdminDashboardPage() {
         <div className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Customer Segments</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base">Customer Segments</CardTitle>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  Dormant after
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                    value={dormantAfterDays}
+                    onChange={(e) => setDormantAfterDays(Number(e.target.value))}
+                  >
+                    {DORMANT_AFTER_DAYS_OPTIONS.map((days) => (
+                      <option key={days} value={days}>{days} days</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </CardHeader>
             <CardContent>
               {(() => {

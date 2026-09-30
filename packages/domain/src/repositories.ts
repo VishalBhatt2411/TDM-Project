@@ -5,6 +5,7 @@ import { Dealership } from "./entities/dealership";
 import { BrandLayer } from "./entities/site-content";
 import { ProviderRegionalDefaults, RegionalSettings } from "./entities/regional-settings";
 import { BookingSchedule, Closure, WeeklyHours } from "./entities/booking-schedule";
+import { AnalyticsWindow } from "./entities/analytics-window";
 import { StaffAssignment, StaffRole } from "./entities/staff-assignment";
 import { VehicleAllocation, WishlistItem } from "./entities/inventory";
 import { SalesOpportunity } from "./entities/sales-opportunity";
@@ -249,7 +250,7 @@ export interface DashboardSummary {
 export interface CustomerSegmentCounts {
   /** Won at least one opportunity off a booking. */
   converted: number;
-  /** Not converted; no booking activity in 90+ days. */
+  /** Not converted; no booking activity since the dormancy cutoff. */
   dormant: number;
   /** Not converted, not dormant; 2+ completed test drives. */
   repeatVisitors: number;
@@ -263,12 +264,16 @@ export interface AnalyticsScope extends DealershipScope {
   branchId?: string;
 }
 
-/** Every figure, including branch/rep breakdowns and feedback averages, is limited to the scope. */
+/**
+ * Every figure, including branch/rep breakdowns and feedback averages, is limited to the scope.
+ * Period figures cover `window.days`; "today" is `window.today` — both in the tenant's time zone.
+ */
 export interface AnalyticsRepository {
-  getDashboardSummary(scope?: AnalyticsScope): Promise<DashboardSummary>;
-  /** Raw booking-lifecycle-stage counts (last 30 days) for funnel/conversion analysis — see HeuristicInsightEngine.analyzeFunnel. */
-  getFunnelCounts(scope?: AnalyticsScope): Promise<FunnelStageCounts>;
-  getCustomerSegments(scope?: AnalyticsScope): Promise<CustomerSegmentCounts>;
+  getDashboardSummary(window: AnalyticsWindow, scope?: AnalyticsScope): Promise<DashboardSummary>;
+  /** Raw booking-lifecycle-stage counts over the period for funnel/conversion analysis — see HeuristicInsightEngine.analyzeFunnel. */
+  getFunnelCounts(window: AnalyticsWindow, scope?: AnalyticsScope): Promise<FunnelStageCounts>;
+  /** Lifetime segments; a customer whose last booking is before `dormantBefore` is dormant. */
+  getCustomerSegments(dormantBefore: Date, scope?: AnalyticsScope): Promise<CustomerSegmentCounts>;
 }
 
 /**
