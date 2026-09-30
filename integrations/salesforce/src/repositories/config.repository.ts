@@ -74,11 +74,6 @@ export class SalesforceFeatureFlagRepository implements FeatureFlagRepository {
     return settings;
   }
 
-  async isEnabled(key: string, scope?: ConfigScope): Promise<boolean> {
-    const settings = await this.resolve([key], scope);
-    return settings[key]?.enabled ?? false;
-  }
-
   async setFlag(key: string, enabled: boolean, scope?: ConfigScope): Promise<void> {
     const { dealershipId, branchId } = normalize(scope);
     const scopeKey = [key, dealershipId ?? COMPANY_SCOPE, branchId ?? ALL_BRANCHES].join(":");

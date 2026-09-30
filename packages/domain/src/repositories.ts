@@ -281,9 +281,8 @@ export interface FeatureFlagSetting {
 }
 
 export interface FeatureFlagRepository {
-  /** The most specific setting wins — branch, then dealership, then company-wide; set nowhere is off. */
+  /** The most specific setting wins — branch, then dealership, then company-wide; set nowhere is source "default" (see FEATURE_FLAGS). */
   resolve(keys: readonly string[], scope?: ConfigScope): Promise<Record<string, FeatureFlagSetting>>;
-  isEnabled(key: string, scope?: ConfigScope): Promise<boolean>;
   setFlag(key: string, enabled: boolean, scope?: ConfigScope): Promise<void>;
   /** Removes the setting at exactly `scope`, so the flag inherits from the next wider scope again. */
   clearFlag(key: string, scope?: ConfigScope): Promise<void>;

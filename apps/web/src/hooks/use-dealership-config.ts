@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { brandAssetUrl, getDealershipConfig } from "@/api/config";
-import type { DealershipConfigDto } from "@/api/config";
+import type { DealershipConfigDto, SiteFeaturesDto } from "@/api/config";
 import { hexToRgb, isHexColor, mixRgb, readableOn, rgbToHslTriplet, WHITE } from "@/lib/color";
 
 const HTTPS_URL = /^https:\/\//i;
@@ -17,6 +17,13 @@ export function useDealershipConfig() {
     queryFn: getDealershipConfig,
     staleTime: 5 * 60_000,
   });
+}
+
+const FEATURES_UNTIL_LOADED: SiteFeaturesDto = { wishlist: false, aiRecommendations: false, qrCheckIn: false };
+
+/** Which optional features this site offers — all hidden until the config arrives, so a switched-off one never flashes in. */
+export function useSiteFeatures(): SiteFeaturesDto {
+  return useDealershipConfig().data?.features ?? FEATURES_UNTIL_LOADED;
 }
 
 /** An image the site may load: an https URL, or a brand image uploaded to this API. */

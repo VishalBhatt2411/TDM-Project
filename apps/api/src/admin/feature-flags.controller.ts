@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Inject, Param, ParseEnumPipe, Put, Query, UseGuards } from "@nestjs/common";
 import { IsBoolean } from "class-validator";
-import { AuditLogRepository, FeatureFlagRepository } from "@tdm/domain";
+import { AuditLogRepository, FEATURE_FLAG_KEYS, FEATURE_FLAGS, FeatureFlagRepository } from "@tdm/domain";
 import { AUDIT_LOG_REPOSITORY, FEATURE_FLAG_REPOSITORY } from "../infrastructure/tokens";
+import { FeatureFlagService } from "../config/feature-flag.service";
+import { TenantContext } from "../tenancy/tenant-context";
 import { StaffAuthGuard } from "./staff-auth.guard";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
@@ -17,19 +19,9 @@ export class SetFeatureFlagDto extends ConfigScopeQueryDto {
   enabled!: boolean;
 }
 
-/**
- * The features that can be switched — a registry of what the code actually gates, not an
- * open key/value store. A flag is set company-wide, per dealership or per branch; the most
- * specific setting wins (see FeatureFlagRepository.resolve).
- */
-export const KNOWN_FEATURE_FLAGS = [
-  { key: "ai_recommendations", label: "AI vehicle recommendations", description: "Show personalized vehicle recommendations on the customer dashboard." },
-  { key: "wishlist", label: "Wishlist", description: "Let customers save vehicles to a wishlist." },
-  { key: "qr_check_in", label: "QR check-in", description: "Allow staff to check customers in by scanning a QR code instead of a manual button." },
-] as const;
+const FLAG_KEYS = [...FEATURE_FLAG_KEYS];
 
-const FLAG_KEYS = KNOWN_FEATURE_FLAGS.map((f) => f.key);
-
+/** Switches the features in FEATURE_FLAGS company-wide, per dealership or per branch; the most specific setting wins. */
 @Controller("admin/feature-flags")
 @UseGuards(StaffAuthGuard, PermissionGuard)
 @RequirePermission(PERMISSIONS.MANAGE_CONFIG)
@@ -38,13 +30,14 @@ export class FeatureFlagsController {
     @Inject(FEATURE_FLAG_REPOSITORY) private readonly flags: FeatureFlagRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
     private readonly scopes: ConfigScopeResolver,
+    private readonly featureFlags: FeatureFlagService,
   ) {}
 
   @Get()
   async list(@Query() query: ConfigScopeQueryDto, @CurrentStaffAccess() access: StaffAccess) {
     const scope = await this.scopes.resolve(access, query);
-    const settings = await this.flags.resolve(FLAG_KEYS, scope);
-    return KNOWN_FEATURE_FLAGS.map((flag) => ({ ...flag, ...settings[flag.key] }));
+    const settings = await this.featureFlags.resolve(scope);
+    return FEATURE_FLAGS.map((flag) => ({ ...flag, ...settings[flag.key] }));
   }
 
   @Put(":key")
@@ -56,6 +49,7 @@ export class FeatureFlagsController {
   ) {
     const scope = await this.scopes.resolve(access, dto);
     await this.flags.setFlag(key, dto.enabled, scope);
+    this.invalidate();
     await this.auditLog.append({
       actorId: staff.staffUserId,
       action: "FEATURE_FLAG_SET",
@@ -77,6 +71,7 @@ export class FeatureFlagsController {
   ) {
     const scope = await this.scopes.resolve(access, query);
     await this.flags.clearFlag(key, scope);
+    this.invalidate();
     await this.auditLog.append({
       actorId: staff.staffUserId,
       action: "FEATURE_FLAG_CLEARED",
@@ -86,5 +81,10 @@ export class FeatureFlagsController {
       metadata: scopeMetadata(scope),
     });
     return { key, cleared: true };
+  }
+
+  private invalidate(): void {
+    const organizationId = TenantContext.currentOrganizationId();
+    if (organizationId) this.featureFlags.invalidate(organizationId);
   }
 }

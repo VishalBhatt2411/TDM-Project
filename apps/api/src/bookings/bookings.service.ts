@@ -32,6 +32,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 import { RegionalSettingsService } from "../config/regional-settings.service";
 import { BookingScheduleService } from "../config/booking-schedule.service";
+import { FeatureFlagService } from "../config/feature-flag.service";
 import { TenantContext } from "../tenancy/tenant-context";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
@@ -83,6 +84,7 @@ export class BookingsService {
     private readonly mutations: BookingMutationService,
     private readonly qrCheckin: QrCheckinService,
     private readonly regional: RegionalSettingsService,
+    private readonly featureFlags: FeatureFlagService,
     private readonly schedule: BookingScheduleService,
   ) {}
 
@@ -181,6 +183,7 @@ export class BookingsService {
     if (booking.status !== "Confirmed") {
       throw new ForbiddenException("A check-in code is only available for a confirmed booking.");
     }
+    await this.featureFlags.assertEnabled("qr_check_in", { dealershipId: booking.dealershipId, branchId: booking.branchId });
     return this.qrCheckin.issueToken(booking.id);
   }
 

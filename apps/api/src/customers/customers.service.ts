@@ -11,6 +11,7 @@ import {
 import type { CustomerDashboardDto, VehicleDto, VehicleRecommendationDto } from "@tdm/types";
 import { BOOKING_REPOSITORY, VEHICLE_REPOSITORY, WISHLIST_REPOSITORY } from "../infrastructure/tokens";
 import { bookingToDto } from "../bookings/bookings.service";
+import { FeatureFlagService } from "../config/feature-flag.service";
 import { vehicleToDto } from "../vehicles/vehicles.service";
 
 const UPCOMING_STATUSES = new Set(["Requested", "Confirmed", "Waitlisted", "InProgress"]);
@@ -22,15 +23,18 @@ export class CustomersService {
     @Inject(WISHLIST_REPOSITORY) private readonly wishlist: WishlistRepository,
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
+    private readonly featureFlags: FeatureFlagService,
   ) {}
 
   async listWishlist(customerId: string): Promise<VehicleDto[]> {
+    await this.featureFlags.assertEnabled("wishlist");
     const items = await this.wishlist.findByCustomer(customerId);
     const vehicles = await Promise.all(items.map((item) => this.vehicles.findById(item.toProps().vehicleId)));
     return vehicles.filter((v): v is Vehicle => v !== null).map(vehicleToDto);
   }
 
   async addToWishlist(customerId: string, vehicleId: string): Promise<{ added: true }> {
+    await this.featureFlags.assertEnabled("wishlist");
     const vehicle = await this.vehicles.findById(vehicleId);
     if (!vehicle) {
       throw new ConflictException(`Vehicle ${vehicleId} was not found.`);
@@ -73,6 +77,7 @@ export class CustomersService {
 
   /** Heuristic recommendations (see packages/domain HeuristicRecommendationEngine) scored from this customer's wishlist + booking history. */
   async getRecommendations(customerId: string, limit = 6): Promise<VehicleRecommendationDto[]> {
+    await this.featureFlags.assertEnabled("ai_recommendations");
     const [bookings, wishlistItems] = await Promise.all([
       this.bookings.findByCustomer(customerId),
       this.wishlist.findByCustomer(customerId),

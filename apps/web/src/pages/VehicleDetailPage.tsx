@@ -225,7 +225,7 @@ export function VehicleDetailPage() {
             <Link to={`/book/${vehicle.id}`} className={cn(buttonVariants({ variant: "default", size: "lg" }), "mt-3 w-full")}>
               Book a Test Drive
             </Link>
-            {isAuthenticated && (
+            {isAuthenticated && wishlist.enabled && (
               <Button
                 variant="outline"
                 size="lg"

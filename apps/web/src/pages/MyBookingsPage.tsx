@@ -14,6 +14,7 @@ import { TimeSlotSelect } from "@/components/TimeSlotSelect";
 import { downloadBookingIcs } from "@/lib/ics";
 import { useShoppingLocation } from "@/context/location-context";
 import { useRegional } from "@/hooks/use-regional";
+import { useSiteFeatures } from "@/hooks/use-dealership-config";
 import { useEarliestDate, useSlotPicker } from "@/hooks/use-slot-picker";
 import type { BookingDto } from "@tdm/types";
 
@@ -44,7 +45,12 @@ export function MyBookingsPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["my-bookings"], queryFn: listMyBookings });
   const { data: dashboard } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
-  const { data: recommendations } = useQuery({ queryKey: ["recommendations"], queryFn: () => getRecommendations(3) });
+  const features = useSiteFeatures();
+  const { data: recommendations } = useQuery({
+    queryKey: ["recommendations"],
+    queryFn: () => getRecommendations(3),
+    enabled: features.aiRecommendations,
+  });
   const [cancellingId, setCancellingId] = React.useState<string | null>(null);
   const [reschedulingId, setReschedulingId] = React.useState<string | null>(null);
   const regional = useRegional();
@@ -115,7 +121,7 @@ export function MyBookingsPage() {
       </div>
 
       {dashboard && (
-        <div className="mb-6 grid grid-cols-3 gap-3">
+        <div className={features.wishlist ? "mb-6 grid grid-cols-3 gap-3" : "mb-6 grid grid-cols-2 gap-3"}>
           <Card>
             <CardContent className="py-4 text-center">
               <p className="text-2xl font-bold text-foreground">{dashboard.upcomingBookingsCount}</p>
@@ -128,12 +134,14 @@ export function MyBookingsPage() {
               <p className="text-xs text-muted-foreground">Completed</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="py-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{dashboard.wishlistCount}</p>
-              <p className="text-xs text-muted-foreground">Wishlisted</p>
-            </CardContent>
-          </Card>
+          {features.wishlist && (
+            <Card>
+              <CardContent className="py-4 text-center">
+                <p className="text-2xl font-bold text-foreground">{dashboard.wishlistCount}</p>
+                <p className="text-xs text-muted-foreground">Wishlisted</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -165,9 +173,11 @@ export function MyBookingsPage() {
                 <Link to={`/bookings/${booking.id}/compliance`}>
                   <Button size="sm" variant="outline">Pre-Drive Check-In</Button>
                 </Link>
-                <Button size="sm" variant="outline" onClick={() => setQrBookingId(qrBookingId === booking.id ? null : booking.id)}>
-                  {qrBookingId === booking.id ? "Hide Check-In Code" : "Show Check-In Code"}
-                </Button>
+                {features.qrCheckIn && (
+                  <Button size="sm" variant="outline" onClick={() => setQrBookingId(qrBookingId === booking.id ? null : booking.id)}>
+                    {qrBookingId === booking.id ? "Hide Check-In Code" : "Show Check-In Code"}
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => addToCalendar(booking)}>
                   Add to Calendar
                 </Button>
@@ -247,7 +257,7 @@ export function MyBookingsPage() {
         ))}
       </div>
 
-      {recommendations && recommendations.length > 0 && (
+      {features.aiRecommendations && recommendations && recommendations.length > 0 && (
         <div className="mt-10">
           <h2 className="mb-4 text-lg font-semibold tracking-tight">Recommended for you</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

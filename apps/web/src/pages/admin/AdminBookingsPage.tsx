@@ -7,6 +7,7 @@ import {
   completeDriveAsStaff,
   handoffBooking,
   listAdminBookings,
+  listDealershipsLookup,
   listMyAssignedBookings,
   listSalesRepsLookup,
   markNoShowAsStaff,
@@ -167,6 +168,8 @@ function BookingActionsPanel({
   const regional = useAdminRegional();
   // The booking happens at its dealership: dates and times are picked on that wall clock.
   const timeZone = useDealershipTimeZones().get(booking.dealershipId) ?? regional.timeZone;
+  const { data: dealerships } = useQuery({ queryKey: ["dealerships-lookup"], queryFn: listDealershipsLookup });
+  const qrCheckIn = dealerships?.find((d) => d.id === booking.dealershipId)?.qrCheckIn ?? false;
   const [rescheduleDate, setRescheduleDate] = React.useState(() => regional.today(timeZone));
   const reschedulePicker = useStaffSlotPicker(booking.id, rescheduleDate, showReschedule);
   const rescheduleMin = useEarliestDate(rescheduleDate, reschedulePicker.availability, setRescheduleDate, regional.today(timeZone));
@@ -201,9 +204,11 @@ function BookingActionsPanel({
             <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate(() => checkInBookingAsStaff(booking.id, "Manual"))}>
               Check In (Manual)
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowQrScanner((v) => !v)}>
-              {showQrScanner ? "Hide QR Scanner" : "Check In with QR"}
-            </Button>
+            {qrCheckIn && (
+              <Button size="sm" variant="outline" onClick={() => setShowQrScanner((v) => !v)}>
+                {showQrScanner ? "Hide QR Scanner" : "Check In with QR"}
+              </Button>
+            )}
           </>
         )}
         {booking.status === "Confirmed" && (
@@ -285,7 +290,7 @@ function BookingActionsPanel({
         )}
       </div>
 
-      {showQrScanner && (
+      {qrCheckIn && showQrScanner && (
         <div className="rounded-md bg-muted/40 p-3">
           <QrScanner
             onDetect={(code) => {

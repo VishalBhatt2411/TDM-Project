@@ -13,5 +13,6 @@ export * from "./entities/inventory";
 export * from "./entities/sales-opportunity";
 export * from "./events";
 export * from "./repositories";
+export * from "./feature-flags";
 export * from "./services/booking-domain-service";
 export * from "./services/recommendation-engine";

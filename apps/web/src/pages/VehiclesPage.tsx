@@ -93,7 +93,7 @@ export function VehiclesPage() {
             vehicle={vehicle}
             index={i}
             isWishlisted={wishlist.wishlistedIds.has(vehicle.id)}
-            onToggleWishlist={isAuthenticated ? () => wishlist.toggle(vehicle.id) : undefined}
+            onToggleWishlist={isAuthenticated && wishlist.enabled ? () => wishlist.toggle(vehicle.id) : undefined}
           />
         ))}
       </div>

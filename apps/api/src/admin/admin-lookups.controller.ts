@@ -6,6 +6,7 @@ import { PermissionGuard } from "./permission.guard";
 import { CurrentStaffAccess } from "./current-staff-access.decorator";
 import type { StaffAccess } from "./staff-access";
 import { RegionalSettingsService } from "../config/regional-settings.service";
+import { FeatureFlagService } from "../config/feature-flag.service";
 
 /**
  * Small reference-data endpoints (dealerships, branches, sales reps) used to populate admin
@@ -21,6 +22,7 @@ export class AdminLookupsController {
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(DEALERSHIP_REPOSITORY) private readonly dealerships: DealershipRepository,
     private readonly regional: RegionalSettingsService,
+    private readonly featureFlags: FeatureFlagService,
   ) {}
 
   @Get("sales-reps")
@@ -54,10 +56,14 @@ export class AdminLookupsController {
       (d) => d.isActive && (!dealershipIds || dealershipIds.includes(d.id)),
     );
     // Each dealership's zone, so the console shows a booking's time where it takes place.
-    const zones = await this.regional.timeZonesOf(dealerships.map((d) => d.id));
-    return dealerships.map((d) => {
+    // Whether staff there check drives in by scanning the customer's QR code.
+    const [zones, qrCheckIn] = await Promise.all([
+      this.regional.timeZonesOf(dealerships.map((d) => d.id)),
+      Promise.all(dealerships.map((d) => this.featureFlags.isEnabled("qr_check_in", { dealershipId: d.id }))),
+    ]);
+    return dealerships.map((d, i) => {
       const props = d.toProps();
-      return { id: props.id, name: props.name, timeZone: zones.get(d.id)! };
+      return { id: props.id, name: props.name, timeZone: zones.get(d.id)!, qrCheckIn: qrCheckIn[i] };
     });
   }
 }

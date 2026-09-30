@@ -14,12 +14,16 @@ type ScopeLevel = Exclude<FeatureFlagDto["source"], "default">;
 const levelOf = (scope: ConfigScopeParams): ScopeLevel =>
   scope.branchId ? "branch" : scope.dealershipId ? "dealership" : "company";
 
-const SOURCE_LABEL: Record<FeatureFlagDto["source"], string> = {
+const SOURCE_LABEL: Record<Exclude<FeatureFlagDto["source"], "default">, string> = {
   branch: "Inherited from branch",
   dealership: "Inherited from dealership",
   company: "Inherited from company-wide setting",
-  default: "Not set — off by default",
 };
+
+function sourceLabel(flag: FeatureFlagDto): string {
+  if (flag.source === "default") return `Not set — ${flag.defaultEnabled ? "on" : "off"} by default`;
+  return SOURCE_LABEL[flag.source];
+}
 
 export function AdminFeatureFlagsPage() {
   const queryClient = useQueryClient();
@@ -83,7 +87,7 @@ export function AdminFeatureFlagsPage() {
                       {isSetHere ? (
                         <Badge variant="accent">Set here</Badge>
                       ) : (
-                        <span className="text-xs text-muted-foreground">{SOURCE_LABEL[flag.source]}</span>
+                        <span className="text-xs text-muted-foreground">{sourceLabel(flag)}</span>
                       )}
                       {isSetHere && (
                         <Button

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Car, Clock, Heart, Menu, MapPin, Phone, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
-import { brandLogoUrl, useBrandTheme, useDealershipConfig } from "@/hooks/use-dealership-config";
+import { brandLogoUrl, useBrandTheme, useDealershipConfig, useSiteFeatures } from "@/hooks/use-dealership-config";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LocationPicker } from "@/components/LocationPicker";
 import { LocationProvider } from "@/context/location-context";
@@ -21,6 +21,7 @@ export function AppLayout() {
 function AppShell() {
   const { isAuthenticated, logout } = useAuth();
   const { data: dealership, isLoading: isBrandLoading } = useDealershipConfig();
+  const features = useSiteFeatures();
   const logoUrl = brandLogoUrl(dealership);
   useBrandTheme(dealership?.primaryColorHex);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -87,9 +88,11 @@ function AppShell() {
                 <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
                   {t("nav.myTestDrives")}
                 </Link>
-                <Link to="/wishlist" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
-                  {t("nav.wishlist")}
-                </Link>
+                {features.wishlist && (
+                  <Link to="/wishlist" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                    {t("nav.wishlist")}
+                  </Link>
+                )}
                 <Link to="/profile" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
                   {t("nav.profile")}
                 </Link>
@@ -140,9 +143,11 @@ function AppShell() {
                   <Link to="/my-bookings" className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
                     {t("nav.myTestDrives")}
                   </Link>
-                  <Link to="/wishlist" className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
-                    <Heart className="h-4 w-4" /> {t("nav.wishlist")}
-                  </Link>
+                  {features.wishlist && (
+                    <Link to="/wishlist" className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
+                      <Heart className="h-4 w-4" /> {t("nav.wishlist")}
+                    </Link>
+                  )}
                   <Link to="/profile" className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted" onClick={() => setMobileMenuOpen(false)}>
                     <User className="h-4 w-4" /> {t("nav.profile")}
                   </Link>

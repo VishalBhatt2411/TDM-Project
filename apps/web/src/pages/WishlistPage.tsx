@@ -3,9 +3,25 @@ import { Heart } from "lucide-react";
 import { VehicleCard } from "@/components/VehicleCard";
 import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/hooks/use-wishlist";
+import { useDealershipConfig } from "@/hooks/use-dealership-config";
 
 export function WishlistPage() {
   const wishlist = useWishlist();
+  const { isLoading: isConfigLoading } = useDealershipConfig();
+
+  if (!isConfigLoading && !wishlist.enabled) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-16">
+        <div className="rounded-lg border border-dashed p-10 text-center">
+          <Heart className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+          <p className="text-muted-foreground">Saving vehicles isn't offered at this dealership.</p>
+          <Link to="/vehicles" className="mt-4 inline-block">
+            <Button size="sm">Explore Vehicles</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">

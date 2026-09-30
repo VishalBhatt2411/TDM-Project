@@ -13,6 +13,14 @@ export interface DealershipConfigDto {
   primaryColorHex?: string;
   content: SiteContentConfigDto;
   regional: RegionalSettingsDto;
+  /** Customer-facing features switched on for this site (admin console → Feature Flags). */
+  features: SiteFeaturesDto;
+}
+
+export interface SiteFeaturesDto {
+  wishlist: boolean;
+  aiRecommendations: boolean;
+  qrCheckIn: boolean;
 }
 
 /** How the dealership (or company) this host serves formats and schedules — see useRegional. */

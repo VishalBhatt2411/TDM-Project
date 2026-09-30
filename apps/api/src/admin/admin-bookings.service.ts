@@ -6,6 +6,7 @@ import { bookingToDto } from "../bookings/bookings.service";
 import { BookingMutationService } from "../bookings/booking-mutation.service";
 import { QrCheckinService } from "../bookings/qr-checkin.service";
 import { BookingScheduleService } from "../config/booking-schedule.service";
+import { FeatureFlagService } from "../config/feature-flag.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 import { BookingAccessPolicy } from "./booking-access.policy";
@@ -32,6 +33,7 @@ export class AdminBookingsService {
     private readonly mutations: BookingMutationService,
     private readonly qrCheckin: QrCheckinService,
     private readonly schedule: BookingScheduleService,
+    private readonly featureFlags: FeatureFlagService,
   ) {}
 
   /** Every booking at the dealerships where the actor holds MANAGE_BOOKINGS. */
@@ -128,6 +130,7 @@ export class AdminBookingsService {
       if (!dto.qrToken) {
         throw new BadRequestException("A QR token is required for a QR check-in.");
       }
+      await this.featureFlags.assertEnabled("qr_check_in", { dealershipId: booking.dealershipId, branchId: booking.branchId });
       this.qrCheckin.verifyToken(dto.qrToken, bookingId);
     }
 

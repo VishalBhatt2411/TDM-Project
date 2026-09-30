@@ -168,6 +168,8 @@ export interface DealershipLookupDto {
   name: string;
   /** IANA zone the dealership operates in — its bookings' times are shown in it. */
   timeZone: string;
+  /** Whether staff there may check drives in by scanning the customer's QR code. */
+  qrCheckIn: boolean;
 }
 
 export async function listSalesRepsLookup(): Promise<SalesRepLookupDto[]> {
@@ -249,7 +251,9 @@ export interface FeatureFlagDto {
   label: string;
   description: string;
   enabled: boolean;
-  /** The scope the effective value comes from — "default" means nothing is set anywhere (off). */
+  /** What the flag is when set nowhere. */
+  defaultEnabled: boolean;
+  /** The scope the effective value comes from — "default" means nothing is set anywhere. */
   source: "branch" | "dealership" | "company" | "default";
 }
 
