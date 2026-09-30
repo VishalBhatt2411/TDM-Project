@@ -1,36 +1,11 @@
-import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, Puzzle } from "lucide-react";
+import { Puzzle } from "lucide-react";
 import { getOrganizationStatus } from "@/api/onboarding";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingUnavailable } from "@/components/onboarding/OnboardingUnavailable";
-
-function CopyableField({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = React.useState(false);
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-        <code className="flex-1 whitespace-pre-line break-all text-sm">{value}</code>
-        <button
-          type="button"
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            navigator.clipboard.writeText(value).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            });
-          }}
-          aria-label={`Copy ${label}`}
-        >
-          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        </button>
-      </div>
-    </div>
-  );
-}
+import { CopyableField } from "@/components/ui/copyable-field";
 
 export function ConnectedAppInstructionsPage() {
   const { organizationId } = useParams<{ organizationId: string }>();

@@ -10,6 +10,7 @@ import { AdminBookingsController } from "./admin-bookings.controller";
 import { AdminBookingsService } from "./admin-bookings.service";
 import { AdminLookupsController } from "./admin-lookups.controller";
 import { FeatureFlagsController } from "./feature-flags.controller";
+import { CustomDomainsController } from "./custom-domains.controller";
 import { AuditLogController } from "./audit-log.controller";
 import { AdminBranchesController } from "./admin-branches.controller";
 import { AdminVehiclesController } from "./admin-vehicles.controller";
@@ -37,6 +38,7 @@ import { AdminBookingScheduleService } from "./admin-booking-schedule.service";
     AdminBookingsController,
     AdminLookupsController,
     FeatureFlagsController,
+    CustomDomainsController,
     AuditLogController,
     AdminBranchesController,
     AdminVehiclesController,

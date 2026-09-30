@@ -38,6 +38,11 @@ export class TenantResolverService {
     return route;
   }
 
+  /** Drops a cached resolution after the host registry changed, so the new route applies at once. */
+  forget(hostname: string): void {
+    this.cache.delete(hostname.trim().toLowerCase());
+  }
+
   private async lookup(host: string): Promise<HostRoute | null> {
     // The bare platform domain is the shared (tenant-less) origin — never a custom domain.
     if (host === env.tenantBaseDomain) return null;

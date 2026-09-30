@@ -34,12 +34,32 @@ export interface DealershipHostEntry {
   customDomain?: string;
 }
 
-/** A desired host another tenant (or another dealership) already holds — never overwritten, only reported. */
+/** A desired host another of this tenant's dealerships (or another tenant's label) already holds — never overwritten, only reported. */
 export interface DealershipHostConflict {
   dealershipId: string;
   host: string;
   kind: "label" | "custom_domain";
 }
+
+/** A dealer custom domain the tenant wants but doesn't hold yet — it goes live once DNS proves ownership (see claimVerifiedHost). */
+export interface UnverifiedDealershipDomain {
+  dealershipId: string;
+  hostname: string;
+}
+
+export interface DealershipHostSyncResult {
+  conflicts: DealershipHostConflict[];
+  unverifiedDomains: UnverifiedDealershipDomain[];
+}
+
+/** A custom domain routed to a tenant: company-wide (dealershipId null) or a dealer's. */
+export interface TenantCustomDomain {
+  hostname: string;
+  dealershipId: string | null;
+}
+
+/** "transferred": the domain was held by another tenant, and DNS now proves this one controls it. */
+export type HostClaimOutcome = "claimed" | "transferred" | "conflict";
 
 /** Thrown by create() when the company slug is already a registered subdomain label (company or dealer). */
 export class OrganizationSlugTakenError extends Error {
@@ -95,12 +115,13 @@ export class OrganizationRepository {
 
   /**
    * Reconciles one tenant's dealer hosts with its data provider: removes that tenant's dealer
-   * rows that are no longer desired, then claims each desired label/domain that is free. A host
-   * already held by another tenant — or by another of this tenant's dealerships, or by the
-   * company label — is never taken over; it is returned as a conflict. Company-level rows
+   * rows that are no longer desired, then claims each desired label that is free. A label
+   * already held elsewhere is never taken over; it is returned as a conflict. A desired custom
+   * domain is never claimed here — anyone can type any domain into a data provider — it is
+   * returned as unverified until DNS proves ownership (claimVerifiedHost). Company-level rows
    * (dealershipId null) are left untouched.
    */
-  async syncDealershipHosts(organizationId: string, entries: DealershipHostEntry[]): Promise<DealershipHostConflict[]> {
+  async syncDealershipHosts(organizationId: string, entries: DealershipHostEntry[]): Promise<DealershipHostSyncResult> {
     const wantedLabels = new Map(entries.map((e) => [e.label.toLowerCase(), e.dealershipId]));
     const wantedDomains = new Map(
       entries.filter((e) => e.customDomain).map((e) => [e.customDomain!.toLowerCase(), e.dealershipId]),
@@ -127,14 +148,88 @@ export class OrganizationRepository {
       );
       if (!claimed) conflicts.push({ dealershipId, host: label, kind: "label" });
     }
+    const unverifiedDomains: UnverifiedDealershipDomain[] = [];
     for (const [hostname, dealershipId] of wantedDomains) {
-      const claimed = await this.claim(organizationId, dealershipId, () =>
-        this.prisma.tenantHost.findUnique({ where: { hostname } }),
-        () => this.prisma.tenantHost.create({ data: { hostname, organizationId, dealershipId } }),
-      );
-      if (!claimed) conflicts.push({ dealershipId, host: hostname, kind: "custom_domain" });
+      const existing = await this.prisma.tenantHost.findUnique({ where: { hostname } });
+      if (existing?.organizationId === organizationId) {
+        if (existing.dealershipId !== dealershipId) conflicts.push({ dealershipId, host: hostname, kind: "custom_domain" });
+        continue;
+      }
+      unverifiedDomains.push({ dealershipId, hostname });
     }
-    return conflicts;
+    return { conflicts, unverifiedDomains };
+  }
+
+  /**
+   * Routes a custom domain whose DNS ownership was just proven to this tenant (dealershipId
+   * null = company-wide). The proof outranks an earlier holder in another tenant — whoever
+   * controls the domain's DNS decides where it points — but never moves a domain between two
+   * sites of the same tenant. A company-wide claim is consumed once it is live.
+   */
+  async claimVerifiedHost(organizationId: string, dealershipId: string | null, hostname: string): Promise<HostClaimOutcome> {
+    const host = hostname.toLowerCase();
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.tenantHost.findUnique({ where: { hostname: host } });
+        let outcome: HostClaimOutcome = "claimed";
+        if (existing?.organizationId === organizationId) {
+          if (existing.dealershipId !== dealershipId) return "conflict";
+        } else {
+          if (existing) {
+            await tx.tenantHost.delete({ where: { hostname: host } });
+            outcome = "transferred";
+          }
+          await tx.tenantHost.create({ data: { hostname: host, organizationId, dealershipId } });
+        }
+        if (dealershipId === null) {
+          await tx.companyDomainClaim.deleteMany({ where: { organizationId, hostname: host } });
+        }
+        return outcome;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) return "conflict";
+      throw err;
+    }
+  }
+
+  /** Every custom domain routed to this tenant. */
+  async listCustomDomains(organizationId: string): Promise<TenantCustomDomain[]> {
+    const rows = await this.prisma.tenantHost.findMany({
+      where: { organizationId },
+      select: { hostname: true, dealershipId: true },
+      orderBy: { hostname: "asc" },
+    });
+    return rows;
+  }
+
+  /** Company-wide custom domains this tenant asked for that aren't verified yet. */
+  async listCompanyDomainClaims(organizationId: string): Promise<string[]> {
+    const rows = await this.prisma.companyDomainClaim.findMany({
+      where: { organizationId },
+      select: { hostname: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return rows.map((r) => r.hostname);
+  }
+
+  /** Idempotent — asking twice for the same domain keeps one claim. */
+  async addCompanyDomainClaim(organizationId: string, hostname: string): Promise<void> {
+    const host = hostname.toLowerCase();
+    await this.prisma.companyDomainClaim.upsert({
+      where: { organizationId_hostname: { organizationId, hostname: host } },
+      create: { organizationId, hostname: host },
+      update: {},
+    });
+  }
+
+  /** Drops a company-wide custom domain, pending or live. False when this tenant had no such domain. */
+  async removeCompanyDomain(organizationId: string, hostname: string): Promise<boolean> {
+    const host = hostname.toLowerCase();
+    const [claims, hosts] = await this.prisma.$transaction([
+      this.prisma.companyDomainClaim.deleteMany({ where: { organizationId, hostname: host } }),
+      this.prisma.tenantHost.deleteMany({ where: { organizationId, hostname: host, dealershipId: null } }),
+    ]);
+    return claims.count + hosts.count > 0;
   }
 
   /** True if the host is (now) held by exactly this tenant + dealership; a concurrent claim (P2002) counts as a loss. */

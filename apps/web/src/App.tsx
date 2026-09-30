@@ -24,6 +24,7 @@ import { AdminDashboardPage } from "@/pages/admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { AdminBookingsPage } from "@/pages/admin/AdminBookingsPage";
 import { AdminFeatureFlagsPage } from "@/pages/admin/AdminFeatureFlagsPage";
+import { AdminDomainsPage } from "@/pages/admin/AdminDomainsPage";
 import { AdminAuditLogPage } from "@/pages/admin/AdminAuditLogPage";
 import { AdminBranchesPage } from "@/pages/admin/AdminBranchesPage";
 import { AdminVehiclesPage } from "@/pages/admin/AdminVehiclesPage";
@@ -75,6 +76,7 @@ export function App() {
           <Route path="/admin/bookings" element={<AdminBookingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/feature-flags" element={<AdminFeatureFlagsPage />} />
+          <Route path="/admin/domains" element={<AdminDomainsPage />} />
           <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
           <Route path="/admin/branches" element={<AdminBranchesPage />} />
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />

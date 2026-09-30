@@ -23,12 +23,12 @@ model AuthCredential {
 }
 
 model OtpCode {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   customerId String
   codeHash   String
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([customerId])
 }
@@ -41,8 +41,8 @@ model RefreshToken {
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
 
-  @@index([customerId])
   @@unique([customerId, tokenHash])
+  @@index([customerId])
 }
 
 // Tenant-scoped: every read and write filters by organizationId explicitly (see PostgresAuditLogRepository).
@@ -128,14 +128,14 @@ model CustomerPasswordToken {
 model StaffUser {
   // Local identity only — roles and dealership access live in the business-data provider's
   // staff assignments and are re-read at authorization time (see StaffAccessService).
-  id                String        @id @default(uuid())
-  salesforceUserId  String
-  email             String
-  name              String
-  organizationId    String
-  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id               String       @id @default(uuid())
+  salesforceUserId String
+  email            String
+  name             String
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   // Salesforce emails aren't unique within an org, so identity is keyed by the User id.
   @@unique([organizationId, salesforceUserId])
@@ -149,8 +149,8 @@ model StaffRefreshToken {
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
 
-  @@index([staffUserId])
   @@unique([staffUserId, tokenHash])
+  @@index([staffUserId])
 }
 
 // Server-side storage for a pending "Login with Salesforce" OAuth2/PKCE handshake.
@@ -168,7 +168,7 @@ model StaffOAuthState {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   expiresAt      DateTime
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId])
 }
@@ -200,11 +200,12 @@ model Organization {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  staffUsers  StaffUser[]
-  oauthStates StaffOAuthState[]
-  hosts       TenantHost[]
-  subdomains  TenantSubdomain[]
-  auditLog    AuditLogEntry[]
+  staffUsers   StaffUser[]
+  oauthStates  StaffOAuthState[]
+  hosts        TenantHost[]
+  domainClaims CompanyDomainClaim[]
+  subdomains   TenantSubdomain[]
+  auditLog     AuditLogEntry[]
 }
 
 // Routes a company's or dealer's own custom domain to its tenant. Platform subdomains
@@ -219,6 +220,18 @@ model TenantHost {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId])
+}
+
+// A company-wide custom domain an admin has asked for but whose DNS ownership proof (a TXT
+// record) hasn't been seen yet. Claims are per tenant, so asking for a domain never blocks the
+// domain's real owner; only a verified claim becomes a TenantHost.
+model CompanyDomainClaim {
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  hostname       String // lowercase, no port
+  createdAt      DateTime     @default(now())
+
+  @@id([organizationId, hostname])
 }
 
 // Platform subdomain labels ("<label>.<TENANT_BASE_DOMAIN>"). Company slugs and dealer

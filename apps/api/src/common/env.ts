@@ -21,6 +21,8 @@ export interface AppEnv {
   enableApiDocs: boolean;
   /** Tenants' customer apps are served on "<org slug>.<tenantBaseDomain>" (plus any registered custom domain). */
   tenantBaseDomain: string;
+  /** Host a tenant's custom domain must CNAME to so it reaches the platform (defaults to tenantBaseDomain). */
+  customDomainTarget: string;
   sfOAuthRedirectUri: string;
   sfOnboardingRedirectUri: string;
   anthropicApiKey?: string;
@@ -86,6 +88,11 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     errors.push("TENANT_BASE_DOMAIN must be a bare hostname (no scheme, port or path), e.g. tdm.example.com.");
   }
 
+  const customDomainTarget = (read("CUSTOM_DOMAIN_TARGET") ?? tenantBaseDomain).toLowerCase();
+  if (customDomainTarget && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(customDomainTarget)) {
+    errors.push("CUSTOM_DOMAIN_TARGET must be a bare hostname, e.g. cname.vercel-dns.com.");
+  }
+
   const webOrigin = url("WEB_ORIGIN", "http://localhost:5173");
   const adminWebOrigin = read("ADMIN_WEB_ORIGIN") ? url("ADMIN_WEB_ORIGIN", webOrigin) : webOrigin;
 
@@ -100,6 +107,7 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     trustProxyHops,
     enableApiDocs: read("ENABLE_API_DOCS") ? read("ENABLE_API_DOCS") === "true" : !isProduction,
     tenantBaseDomain,
+    customDomainTarget,
     sfOAuthRedirectUri: url("SF_OAUTH_REDIRECT_URI", "http://localhost:3000/api/v1/admin/auth/salesforce/callback"),
     sfOnboardingRedirectUri: url("SF_ONBOARDING_REDIRECT_URI", "http://localhost:3000/api/v1/onboarding/salesforce/callback"),
     anthropicApiKey: read("ANTHROPIC_API_KEY"),
