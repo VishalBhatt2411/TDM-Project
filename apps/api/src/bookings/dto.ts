@@ -14,6 +14,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from "class-validator";
+import type { PurchaseTimeline } from "@tdm/types";
 import { IsRecordId } from "../common/record-id";
 
 class TimeSlotDto {
@@ -41,7 +42,7 @@ class AddressDto {
   country!: string;
 }
 
-const PURCHASE_TIMELINES = ["Immediate", "Within_1_Month", "Within_3_Months", "Within_6_Months", "Just_Exploring"];
+const PURCHASE_TIMELINES: readonly PurchaseTimeline[] = ["Immediate", "Within_1_Month", "Within_3_Months", "Within_6_Months", "Just_Exploring"];
 
 export class CreateBookingDto {
   @IsRecordId()
@@ -86,7 +87,7 @@ export class CreateBookingDto {
 
   @IsOptional()
   @IsIn(PURCHASE_TIMELINES)
-  purchaseTimeline?: string;
+  purchaseTimeline?: PurchaseTimeline;
 
   @IsOptional()
   @IsBoolean()

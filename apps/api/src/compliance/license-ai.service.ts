@@ -61,7 +61,7 @@ export class LicenseAiService {
     try {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
-      const flags = Array.isArray(parsed.flags) ? parsed.flags.filter((f: unknown) => KNOWN_FLAGS.includes(f as any)) : [];
+      const flags = Array.isArray(parsed.flags) ? parsed.flags.filter((f: unknown) => (KNOWN_FLAGS as readonly unknown[]).includes(f)) : [];
       return {
         extractedName: typeof parsed.extractedName === "string" ? parsed.extractedName : undefined,
         extractedLicenseNumber: typeof parsed.extractedLicenseNumber === "string" ? parsed.extractedLicenseNumber : undefined,

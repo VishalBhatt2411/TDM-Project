@@ -92,7 +92,7 @@ function VehicleForm({
   onSubmit: (input: AdminVehicleInput) => void;
   onCancel?: () => void;
   isSubmitting: boolean;
-  error?: { response?: { data?: { message?: string } } };
+  error?: unknown;
   submitLabel: string;
 }) {
   const [form, setForm] = React.useState(initial);
@@ -223,7 +223,7 @@ function VehicleForm({
           </label>
         ))}
       </div>
-      {error?.response?.data?.message && <p className="text-sm text-destructive">{error.response.data.message}</p>}
+      {error != null && <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Saving…" : submitLabel}
@@ -302,7 +302,7 @@ export function AdminVehiclesPage() {
               branches={branches ?? []}
               onSubmit={(input) => createMutation.mutate(input)}
               isSubmitting={createMutation.isPending}
-              error={createMutation.error as any}
+              error={createMutation.error}
               submitLabel="Create Vehicle"
             />
           </CardContent>
@@ -368,7 +368,7 @@ export function AdminVehiclesPage() {
                       onSubmit={(input) => updateMutation.mutate({ id: vehicle.id, input })}
                       onCancel={() => setEditingId(null)}
                       isSubmitting={updateMutation.isPending}
-                      error={editingId === vehicle.id ? (updateMutation.error as any) : undefined}
+                      error={editingId === vehicle.id ? updateMutation.error : undefined}
                       submitLabel="Save"
                     />
                   </div>

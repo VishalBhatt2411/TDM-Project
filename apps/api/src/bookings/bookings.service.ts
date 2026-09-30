@@ -10,7 +10,6 @@ import {
   CustomerRepository,
   DriveFeedback,
   PersonName,
-  PhoneNumber,
   phoneNumberFromInput,
   SalesOpportunity,
   SalesOpportunityRepository,
@@ -281,7 +280,7 @@ export class BookingsService {
       preferredVariantId: dto.preferredVariantId,
       isExistingCustomer: dto.isExistingCustomer,
       currentVehicleOwned: dto.currentVehicleOwned,
-      purchaseTimeline: dto.purchaseTimeline as any,
+      purchaseTimeline: dto.purchaseTimeline,
       pickupRequired: dto.pickupRequired,
       additionalNotes: dto.additionalNotes,
     });

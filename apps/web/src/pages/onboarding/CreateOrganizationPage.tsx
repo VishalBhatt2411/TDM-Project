@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { errorMessage } from "@/lib/api-error";
 
 function slugify(value: string): string {
   return value
@@ -93,7 +94,7 @@ export function CreateOrganizationPage() {
             </div>
             {mutation.isError && (
               <p className="text-sm text-destructive">
-                {(mutation.error as any)?.response?.data?.message ?? "Couldn't create your organization. Please try again."}
+                {errorMessage(mutation.error, "Couldn't create your organization. Please try again.")}
               </p>
             )}
             <Button type="submit" className="w-full" disabled={mutation.isPending}>

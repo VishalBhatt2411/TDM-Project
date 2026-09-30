@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/auth-context";
+import { errorMessage } from "@/lib/api-error";
 
 export function VerifyOtpPage() {
   const location = useLocation();
@@ -30,8 +31,8 @@ export function VerifyOtpPage() {
     try {
       await verifyOtp({ customerId, code });
       navigate("/login", { state: { verified: true } });
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? "Invalid or expired code.");
+    } catch (err) {
+      setError(errorMessage(err, "Invalid or expired code.") ?? null);
     } finally {
       setIsSubmitting(false);
     }

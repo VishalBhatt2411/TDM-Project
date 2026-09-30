@@ -1,8 +1,11 @@
 type ApiError = { response?: { data?: { message?: string | string[] } } };
 
-/** The API's validation/permission message for a failed request, or a generic fallback; undefined when there's no error. */
-export function errorMessage(error: unknown): string | undefined {
+/**
+ * The API's validation/permission message for a failed request, or `fallback` when the response carries
+ * none (network failure, 5xx without a body); undefined when there's no error.
+ */
+export function errorMessage(error: unknown, fallback = "Something went wrong. Please try again."): string | undefined {
   const message = (error as ApiError | null)?.response?.data?.message;
-  if (!message) return error ? "Something went wrong. Please try again." : undefined;
+  if (!message) return error ? fallback : undefined;
   return Array.isArray(message) ? message.join(" ") : message;
 }

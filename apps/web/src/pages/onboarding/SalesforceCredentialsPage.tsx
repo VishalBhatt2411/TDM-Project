@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { errorMessage } from "@/lib/api-error";
 
 export function SalesforceCredentialsPage() {
   const { organizationId } = useParams<{ organizationId: string }>();
@@ -26,7 +27,7 @@ export function SalesforceCredentialsPage() {
       window.location.href = authorizationUrl;
     },
   });
-  const errorMessage = (mutation.error as any)?.response?.data?.message;
+  const saveError = errorMessage(mutation.error, "Couldn't save these credentials. Double-check them and try again.");
 
   if (!organizationId || !hasOnboardingSession(organizationId)) return <OnboardingUnavailable />;
 
@@ -80,9 +81,7 @@ export function SalesforceCredentialsPage() {
             </div>
             {mutation.isError && (
               <p className="text-sm text-destructive">
-                {Array.isArray(errorMessage)
-                  ? errorMessage.join(" ")
-                  : (errorMessage ?? "Couldn't save these credentials. Double-check them and try again.")}
+                {saveError}
               </p>
             )}
             <Button type="submit" className="w-full" disabled={mutation.isPending}>

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/auth-context";
+import { errorMessage } from "@/lib/api-error";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -31,8 +32,8 @@ export function LoginPage() {
     try {
       await login({ email: values.email, password: values.password });
       navigate("/vehicles");
-    } catch (err: any) {
-      setServerError(err?.response?.data?.message ?? "Invalid email or password.");
+    } catch (err) {
+      setServerError(errorMessage(err, "Invalid email or password.") ?? null);
     }
   };
 

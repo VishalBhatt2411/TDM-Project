@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DriveType, PurchaseTimeline } from "@tdm/types";
+import { errorMessage } from "@/lib/api-error";
 
 const PURCHASE_TIMELINE_OPTIONS: { value: PurchaseTimeline; label: string }[] = [
   { value: "Immediate", label: "Immediately" },
@@ -187,7 +188,7 @@ export function BookingPage() {
       if (isBookingConflictError(err)) {
         setServerError(err.response.data.message);
       } else {
-        setServerError((err as any)?.response?.data?.message ?? "Could not complete your booking. Please try again.");
+        setServerError(errorMessage(err, "Could not complete your booking. Please try again.") ?? null);
       }
     }
   };

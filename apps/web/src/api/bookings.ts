@@ -58,6 +58,6 @@ export function isBookingConflictError(error: unknown): error is { response: { d
   return (
     typeof error === "object" &&
     error !== null &&
-    (error as any).response?.data?.error === "SLOT_CONFLICT"
+    (error as { response?: { data?: { error?: unknown } } }).response?.data?.error === "SLOT_CONFLICT"
   );
 }

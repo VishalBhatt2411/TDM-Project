@@ -1,6 +1,6 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus } from "@nestjs/common";
 import { Response } from "express";
-import { DomainError } from "@tdm/domain";
+import { BookingConflictError, DomainError } from "@tdm/domain";
 
 const STATUS_BY_CODE: Record<string, number> = {
   INVALID_VALUE: HttpStatus.BAD_REQUEST,
@@ -21,8 +21,8 @@ export class DomainExceptionFilter implements ExceptionFilter {
     const response = host.switchToHttp().getResponse<Response>();
     const status = STATUS_BY_CODE[exception.code] ?? HttpStatus.BAD_REQUEST;
     const body: Record<string, unknown> = { error: exception.code, message: exception.message };
-    if ("suggestedSlots" in exception) {
-      body.suggestedSlots = (exception as any).suggestedSlots;
+    if (exception instanceof BookingConflictError) {
+      body.suggestedSlots = exception.suggestedSlots;
     }
     response.status(status).json(body);
   }

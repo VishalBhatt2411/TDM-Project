@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { errorMessage } from "@/lib/api-error";
 
 const EMPTY_FORM: BranchInput = {
   name: "",
@@ -36,7 +37,7 @@ function BranchForm({
   dealerships?: DealershipLookupDto[];
   onCancel?: () => void;
   isSubmitting: boolean;
-  error?: { response?: { data?: { message?: string } } };
+  error?: unknown;
   submitLabel: string;
 }) {
   const [form, setForm] = React.useState(initial);
@@ -153,7 +154,7 @@ function BranchForm({
         </div>
       </div>
       {geoError && <p className="text-sm text-destructive">{geoError}</p>}
-      {error?.response?.data?.message && <p className="text-sm text-destructive">{error.response.data.message}</p>}
+      {error != null && <p role="alert" className="text-sm text-destructive">{errorMessage(error)}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Saving…" : submitLabel}
@@ -235,7 +236,7 @@ export function AdminBranchesPage() {
               dealerships={dealerships ?? []}
               onSubmit={(input, dealershipId) => createMutation.mutate({ ...input, dealershipId })}
               isSubmitting={createMutation.isPending}
-              error={createMutation.error as any}
+              error={createMutation.error}
               submitLabel="Create Branch"
             />
           </CardContent>
@@ -299,7 +300,7 @@ export function AdminBranchesPage() {
                       onSubmit={(input) => updateMutation.mutate({ id: branch.id, input })}
                       onCancel={() => setEditingId(null)}
                       isSubmitting={updateMutation.isPending}
-                      error={editingId === branch.id ? (updateMutation.error as any) : undefined}
+                      error={editingId === branch.id ? updateMutation.error : undefined}
                       submitLabel="Save"
                     />
                   </div>

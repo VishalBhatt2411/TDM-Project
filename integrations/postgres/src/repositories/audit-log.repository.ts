@@ -1,5 +1,5 @@
 import { AuditLogEntry, AuditLogFilter, AuditLogRepository } from "@tdm/domain";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 /**
  * Tenant-scoped audit log. The tenant comes from the caller's ambient context (the same
@@ -27,7 +27,7 @@ export class PostgresAuditLogRepository implements AuditLogRepository {
         entityType: entry.entityType,
         entityId: entry.entityId,
         dealershipId: entry.dealershipId ?? null,
-        metadata: entry.metadata as any,
+        metadata: entry.metadata as Prisma.InputJsonValue,
       },
     });
   }

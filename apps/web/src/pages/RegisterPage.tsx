@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/auth-context";
+import { errorMessage } from "@/lib/api-error";
 
 const schema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -40,8 +41,8 @@ export function RegisterPage() {
         password: values.password,
       });
       navigate("/verify-otp", { state: { customerId: result.customerId } });
-    } catch (err: any) {
-      setServerError(err?.response?.data?.message ?? "Registration failed. Please try again.");
+    } catch (err) {
+      setServerError(errorMessage(err, "Registration failed. Please try again.") ?? null);
     }
   };
 

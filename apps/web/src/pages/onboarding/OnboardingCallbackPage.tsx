@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingUnavailable } from "@/components/onboarding/OnboardingUnavailable";
 import { forgetOnboardingToken } from "@/lib/onboarding-session";
+import { errorMessage } from "@/lib/api-error";
 
 /** Polls until the wizard's terminal states (connected+deployed, or a hard connection error) are reached. */
 function shouldKeepPolling(status?: { connectionStatus: string; metadataDeployedAt: string | null }): boolean {
@@ -117,7 +118,7 @@ export function OnboardingCallbackPage() {
           )}
           {completeMutation.isError && (
             <p className="text-sm text-destructive">
-              {(completeMutation.error as any)?.response?.data?.message ?? "Couldn't provision your admin account. Please try again."}
+              {errorMessage(completeMutation.error, "Couldn't provision your admin account. Please try again.")}
             </p>
           )}
         </CardContent>
