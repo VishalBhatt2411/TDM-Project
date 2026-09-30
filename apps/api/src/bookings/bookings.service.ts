@@ -11,13 +11,14 @@ import {
   DriveFeedback,
   PersonName,
   PhoneNumber,
+  phoneNumberFromInput,
   SalesOpportunity,
   SalesOpportunityRepository,
   SalesRepRepository,
   TimeSlot,
   VehicleRepository,
 } from "@tdm/domain";
-import { BookingDto } from "@tdm/types";
+import { BookingDto, zonedDayWindow, zonedIsoDate } from "@tdm/types";
 import { AuthService } from "../auth/auth.service";
 import {
   BOOKING_REPOSITORY,
@@ -29,6 +30,7 @@ import {
 } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
+import { RegionalSettingsService } from "../config/regional-settings.service";
 import { TenantContext } from "../tenancy/tenant-context";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
@@ -79,6 +81,7 @@ export class BookingsService {
     private readonly emailContext: BookingEmailContextService,
     private readonly mutations: BookingMutationService,
     private readonly qrCheckin: QrCheckinService,
+    private readonly regional: RegionalSettingsService,
   ) {}
 
   /** Authenticated booking creation — for a customer who already has an account/session. */
@@ -104,6 +107,8 @@ export class BookingsService {
   async createPublic(dto: CreatePublicBookingDto): Promise<BookingDto & { conflictChecked: true }> {
     // Validated before any account is created or updated, so a bad request leaves no trace.
     const branch = await this.resolveBookingBranch(dto);
+    const { phoneCountryCode } = await this.regional.resolve(branch.dealershipId);
+    const submittedPhone = phoneNumberFromInput(dto.mobileNumber, phoneCountryCode);
     let customer = await this.customers.findByEmail(dto.email);
     let isNewAccount = false;
 
@@ -112,7 +117,7 @@ export class BookingsService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
-        mobileNumber: dto.mobileNumber,
+        phone: submittedPhone,
       });
       isNewAccount = true;
     } else {
@@ -122,7 +127,6 @@ export class BookingsService {
       // This is a best-effort enrichment, not part of the booking's critical path:
       // a Salesforce write failure here must never block the booking itself.
       try {
-        const submittedPhone = PhoneNumber.create(`+91${dto.mobileNumber}`);
         const submittedName = PersonName.create(dto.firstName, dto.lastName);
         if (
           submittedPhone.value !== customer.phone.value ||
@@ -283,7 +287,10 @@ export class BookingsService {
       // check has nothing left to wait on. Without this, checkIn()/reminders (both gated
       // on status "Confirmed") would never fire for a normal, non-waitlisted booking.
       booking.confirm();
-      const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, slot.start);
+      // "That day" is the calendar day where the branch is, not where this server runs.
+      const { timeZone } = await this.regional.resolve(branch.dealershipId);
+      const day = zonedDayWindow(zonedIsoDate(slot.start, timeZone), timeZone);
+      const rep = await this.salesReps.findLeastLoadedForBranch(dto.branchId, day);
       if (rep) {
         booking.assignRep(rep.id);
         assignedRepEmail = rep.toProps().email;

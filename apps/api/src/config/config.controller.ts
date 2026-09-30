@@ -1,13 +1,18 @@
 import { Controller, Get } from "@nestjs/common";
 import { BrandingService } from "./branding.service";
+import { RegionalSettingsService } from "./regional-settings.service";
 
 @Controller("config")
 export class ConfigController {
-  constructor(private readonly branding: BrandingService) {}
+  constructor(
+    private readonly branding: BrandingService,
+    private readonly regional: RegionalSettingsService,
+  ) {}
 
-  /** The branding and home-page content of the dealership (or company) this host serves. */
+  /** The branding, home-page content and regional settings of the dealership (or company) this host serves. */
   @Get("dealership")
-  getDealershipConfig() {
-    return this.branding.resolve();
+  async getDealershipConfig() {
+    const [branding, regional] = await Promise.all([this.branding.resolve(), this.regional.resolve()]);
+    return { ...branding, regional };
   }
 }

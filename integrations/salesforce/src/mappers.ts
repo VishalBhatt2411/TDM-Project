@@ -21,14 +21,15 @@ import {
   VehicleFaq,
   VehicleVariant,
   WishlistItem,
+  phoneNumberFromInput,
 } from "@tdm/domain";
 
-export function contactToCustomer(record: any): Customer {
+export function contactToCustomer(record: any, phoneCountryCode?: string): Customer {
   return Customer.restore({
     id: record.Portal_User_Id__c,
     name: PersonName.create(record.FirstName ?? "", record.LastName ?? ""),
     email: Email.create(record.Email),
-    phone: PhoneNumber.create(normalizeIndianPhone(record.Phone ?? record.MobilePhone)),
+    phone: PhoneNumber.create(normalizeContactPhone(record.Phone ?? record.MobilePhone, phoneCountryCode)),
     emailVerified: !!record.Email_Verified__c,
     phoneVerified: !!record.Phone_Verified__c,
     preferredLanguage: record.Preferred_Language__c ?? "en",
@@ -38,21 +39,26 @@ export function contactToCustomer(record: any): Customer {
 }
 
 /**
- * Salesforce Contact.Phone is a free-text field with no format enforcement — a staff
- * member can (and will) edit it directly in Salesforce without knowing this app writes
- * strict E.164. Every number this app itself ever writes is a 10-digit Indian mobile
- * number prefixed with +91, so a bare/reformatted 10 or 12-digit value read back is
- * near-certainly the same number missing that prefix, not a different country's number.
- * Anything else is passed through unchanged so PhoneNumber.create still reports a clear,
- * specific error rather than this silently guessing at genuinely foreign/malformed data.
+ * Salesforce Contact.Phone is free text — staff edit it directly in Salesforce, so a value read
+ * back may have lost its "+". A number that already begins with the calling code (and is longer
+ * than a national number) is taken as international; any other one as national. Without a
+ * calling code the value is passed through, so PhoneNumber.create reports it rather than this guessing.
  */
-function normalizeIndianPhone(raw: string | null | undefined): string {
+export function normalizeContactPhone(raw: string | null | undefined, phoneCountryCode: string | undefined): string {
   const trimmed = (raw ?? "").trim();
-  if (!trimmed || trimmed.startsWith("+")) return trimmed;
+  if (!trimmed || trimmed.startsWith("+") || !phoneCountryCode) return trimmed;
   const digitsOnly = trimmed.replace(/\D/g, "");
-  if (digitsOnly.length === 10) return `+91${digitsOnly}`;
-  if (digitsOnly.length === 12 && digitsOnly.startsWith("91")) return `+${digitsOnly}`;
-  return trimmed;
+  if (digitsOnly.startsWith(phoneCountryCode) && digitsOnly.length > MAX_NATIONAL_DIGITS) return `+${digitsOnly}`;
+  return phoneNumberFromInput(digitsOnly, phoneCountryCode).value;
+}
+
+/** Longest common national (significant) number length — longer digit strings already carry a calling code. */
+const MAX_NATIONAL_DIGITS = 10;
+
+/** True when a stored phone needs the company calling code to read back (see normalizeContactPhone). */
+export function contactPhoneNeedsCountryCode(record: any): boolean {
+  const phone = String(record.Phone ?? record.MobilePhone ?? "").trim();
+  return !!phone && !phone.startsWith("+");
 }
 
 export function customerToContactRecord(customer: Customer): Record<string, unknown> {
@@ -72,7 +78,8 @@ export function customerToContactRecord(customer: Customer): Record<string, unkn
   };
 }
 
-export function vehicleRecordToDomain(record: any): Vehicle {
+/** `currency` is what the org stores amounts in — see orgRegionalDefaults. */
+export function vehicleRecordToDomain(record: any, currency: string): Vehicle {
   return Vehicle.restore({
     id: record.Id,
     make: record.Make__c,
@@ -84,8 +91,8 @@ export function vehicleRecordToDomain(record: any): Vehicle {
     fuelType: record.Fuel_Type__c,
     transmission: record.Transmission__c,
     color: record.Color__c ?? undefined,
-    price: Money.create(record.Price__c ?? 0, "INR"),
-    priceMax: record.Price_Max__c != null ? Money.create(record.Price_Max__c, "INR") : undefined,
+    price: Money.create(record.Price__c ?? 0, currency),
+    priceMax: record.Price_Max__c != null ? Money.create(record.Price_Max__c, currency) : undefined,
     odometer: record.Odometer__c ?? 0,
     status: record.Status__c,
     dealershipId: record.Dealership__c,
@@ -160,12 +167,12 @@ export function vehicleToFullRecord(vehicle: Vehicle): Record<string, unknown> {
   };
 }
 
-export function variantRecordToDomain(record: any): VehicleVariant {
+export function variantRecordToDomain(record: any, currency: string): VehicleVariant {
   return VehicleVariant.restore({
     id: record.Id,
     vehicleId: record.Vehicle__c,
     name: record.Name,
-    price: Money.create(record.Price__c ?? 0, "INR"),
+    price: Money.create(record.Price__c ?? 0, currency),
     engine: record.Engine__c ?? undefined,
     fuelType: record.Fuel_Type__c,
     transmission: record.Transmission__c,

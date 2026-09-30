@@ -12,6 +12,19 @@ export interface DealershipConfigDto {
   operatingHours?: string;
   primaryColorHex?: string;
   content: SiteContentConfigDto;
+  regional: RegionalSettingsDto;
+}
+
+/** How the dealership (or company) this host serves formats and schedules — see useRegional. */
+export interface RegionalSettingsDto {
+  /** BCP 47 with a region, e.g. "en-IN". */
+  locale: string;
+  /** IANA zone, e.g. "Asia/Kolkata". */
+  timeZone: string;
+  /** ISO 4217 — the currency prices are stored in. */
+  currencyCode: string;
+  /** Calling code digits; absent means phone numbers are entered in full international format. */
+  phoneCountryCode?: string;
 }
 
 /** Tenant home-page content. A copy key missing for a language falls back to the app's own translation. */

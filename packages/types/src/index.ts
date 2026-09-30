@@ -3,3 +3,4 @@ export * from "./customer";
 export * from "./vehicle";
 export * from "./booking";
 export * from "./branch";
+export * from "./zoned-time";

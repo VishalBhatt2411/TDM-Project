@@ -5,6 +5,8 @@ import { CheckCircle2 } from "lucide-react";
 import { getBooking } from "@/api/bookings";
 import { getVehicle } from "@/api/vehicles";
 import { getComplianceStatus, submitCompliance } from "@/api/compliance";
+import { useShoppingLocation } from "@/context/location-context";
+import { useRegional } from "@/hooks/use-regional";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +32,8 @@ export function CompliancePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const signaturePadRef = React.useRef<SignaturePadHandle>(null);
+  const regional = useRegional();
+  const { branches } = useShoppingLocation();
 
   const { data: booking } = useQuery({ queryKey: ["booking", bookingId], queryFn: () => getBooking(bookingId) });
   const { data: vehicle } = useQuery({
@@ -93,7 +97,7 @@ export function CompliancePage() {
       <h1 className="text-2xl font-semibold tracking-tight">Pre-Drive Check-In</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {vehicle ? `${vehicle.make} ${vehicle.model}` : "Your test drive"}
-        {booking ? ` · ${new Date(booking.slot.start).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""}
+        {booking ? ` · ${regional.dateTime(booking.slot.start, branches.find((b) => b.id === booking.branchId)?.timeZone)}` : ""}
       </p>
 
       <Card className="mt-6">

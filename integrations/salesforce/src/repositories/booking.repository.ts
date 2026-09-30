@@ -1,4 +1,13 @@
-import { Booking, BookingListFilter, BookingRepository, BookingStatus, ComplianceRecord, DriveFeedback, UNASSIGNED_ID } from "@tdm/domain";
+import {
+  Booking,
+  BookingListFilter,
+  BookingRepository,
+  BookingStatus,
+  ComplianceRecord,
+  DriveFeedback,
+  InstantWindow,
+  UNASSIGNED_ID,
+} from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import {
   bookingRecordToDomain,
@@ -93,16 +102,12 @@ export class SalesforceBookingRepository implements BookingRepository {
   }
 
   /** Used to compute a rep's current-day load for least-loaded auto-assignment — only counts slot-occupying statuses. */
-  async findByRepAndDate(salesRepId: string, date: Date): Promise<Booking[]> {
+  async findByRepAndDate(salesRepId: string, day: InstantWindow): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const dayStart = new Date(date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
       const result = await conn.query(
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE OwnerId = '${escapeSoql(salesRepId)}' ` +
-          `AND Scheduled_Start__c >= ${dayStart.toISOString()} AND Scheduled_Start__c <= ${dayEnd.toISOString()} ` +
+          `AND Scheduled_Start__c >= ${day.start.toISOString()} AND Scheduled_Start__c <= ${day.end.toISOString()} ` +
           `AND Status__c IN ('Requested', 'Confirmed', 'InProgress') ` +
           `ORDER BY Scheduled_Start__c ASC`,
       );

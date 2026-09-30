@@ -12,7 +12,9 @@ import { Label } from "@/components/ui/label";
 import { VehicleCard } from "@/components/VehicleCard";
 import { QrCheckInCode } from "@/components/QrCheckInCode";
 import { downloadBookingIcs } from "@/lib/ics";
-import type { BookingDto } from "@tdm/types";
+import { useShoppingLocation } from "@/context/location-context";
+import { useRegional } from "@/hooks/use-regional";
+import { SLOT_DURATION_MINUTES, zonedDateTimeToUtc, type BookingDto } from "@tdm/types";
 
 function addToCalendar(booking: BookingDto) {
   downloadBookingIcs({
@@ -23,10 +25,6 @@ function addToCalendar(booking: BookingDto) {
     start: booking.slot.start,
     end: booking.slot.end,
   });
-}
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
@@ -48,7 +46,11 @@ export function MyBookingsPage() {
   const { data: recommendations } = useQuery({ queryKey: ["recommendations"], queryFn: () => getRecommendations(3) });
   const [cancellingId, setCancellingId] = React.useState<string | null>(null);
   const [reschedulingId, setReschedulingId] = React.useState<string | null>(null);
-  const [rescheduleDate, setRescheduleDate] = React.useState(todayIsoDate());
+  const regional = useRegional();
+  const { branches } = useShoppingLocation();
+  // A drive happens at its branch: its times are shown, and a new one picked, on that wall clock.
+  const zoneOf = (booking: BookingDto) => branches.find((b) => b.id === booking.branchId)?.timeZone ?? regional.timeZone;
+  const [rescheduleDate, setRescheduleDate] = React.useState("");
   const [rescheduleTime, setRescheduleTime] = React.useState(TIME_SLOTS[0]);
   const [rescheduleError, setRescheduleError] = React.useState<string | null>(null);
   const [qrBookingId, setQrBookingId] = React.useState<string | null>(null);
@@ -78,20 +80,20 @@ export function MyBookingsPage() {
     },
   });
 
-  const startReschedule = (bookingId: string) => {
-    setReschedulingId(bookingId);
-    setRescheduleDate(todayIsoDate());
+  const startReschedule = (booking: BookingDto) => {
+    setReschedulingId(booking.id);
+    setRescheduleDate(regional.today(zoneOf(booking)));
     setRescheduleTime(TIME_SLOTS[0]);
     setRescheduleError(null);
   };
 
-  const submitReschedule = (bookingId: string) => {
+  const submitReschedule = (booking: BookingDto) => {
     setRescheduleError(null);
-    const [hh, mm] = rescheduleTime.split(":").map(Number);
-    const start = new Date(`${rescheduleDate}T00:00:00`);
-    start.setHours(hh, mm, 0, 0);
-    const end = new Date(start.getTime() + 30 * 60 * 1000);
-    rescheduleMutation.mutate({ id: bookingId, start: start.toISOString(), end: end.toISOString() });
+    const timeZone = zoneOf(booking);
+    if (!timeZone || !rescheduleDate) return;
+    const start = zonedDateTimeToUtc(rescheduleDate, rescheduleTime, timeZone);
+    const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
+    rescheduleMutation.mutate({ id: booking.id, start: start.toISOString(), end: end.toISOString() });
   };
 
   return (
@@ -144,7 +146,7 @@ export function MyBookingsPage() {
           <Card key={booking.id}>
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">
-                {new Date(booking.slot.start).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} ·{" "}
+                {regional.dateTime(booking.slot.start, zoneOf(booking))} ·{" "}
                 {booking.driveType === "Home" ? "Home Test Drive" : "Showroom"}
               </CardTitle>
               <Badge variant={STATUS_VARIANT[booking.status] ?? "secondary"}>{booking.status}</Badge>
@@ -164,7 +166,7 @@ export function MyBookingsPage() {
             )}
             {qrBookingId === booking.id && (
               <CardContent className="border-b py-4">
-                <QrCheckInCode bookingId={booking.id} />
+                <QrCheckInCode bookingId={booking.id} timeZone={zoneOf(booking)} />
               </CardContent>
             )}
             <CardContent className="flex items-center justify-between">
@@ -187,7 +189,7 @@ export function MyBookingsPage() {
                     </>
                   ) : (
                     <>
-                      <Button size="sm" variant="outline" onClick={() => startReschedule(booking.id)}>
+                      <Button size="sm" variant="outline" onClick={() => startReschedule(booking)}>
                         Reschedule
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => setCancellingId(booking.id)}>
@@ -206,7 +208,7 @@ export function MyBookingsPage() {
                     <Input
                       id={`reschedule-date-${booking.id}`}
                       type="date"
-                      min={todayIsoDate()}
+                      min={regional.today(zoneOf(booking))}
                       value={rescheduleDate}
                       onChange={(e) => setRescheduleDate(e.target.value)}
                     />
@@ -224,7 +226,7 @@ export function MyBookingsPage() {
                       ))}
                     </select>
                   </div>
-                  <Button size="sm" disabled={rescheduleMutation.isPending} onClick={() => submitReschedule(booking.id)}>
+                  <Button size="sm" disabled={rescheduleMutation.isPending || !zoneOf(booking) || !rescheduleDate} onClick={() => submitReschedule(booking)}>
                     {rescheduleMutation.isPending ? "Saving…" : "Confirm New Slot"}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => { setReschedulingId(null); setRescheduleError(null); }}>

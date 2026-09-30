@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { getSystemHealth } from "@/api/admin";
+import { useAdminRegional } from "@/hooks/use-regional";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -17,6 +18,7 @@ const STATUS_BADGE: Record<string, "success" | "warning" | "destructive"> = {
 };
 
 export function AdminSystemHealthPage() {
+  const regional = useAdminRegional();
   const { data, isLoading, isError, dataUpdatedAt } = useQuery({
     queryKey: ["system-health"],
     queryFn: getSystemHealth,
@@ -49,7 +51,7 @@ export function AdminSystemHealthPage() {
                 {STATUS_ICON[data.status]}
                 <div>
                   <p className="font-medium">Overall status: {data.status === "ok" ? "All systems operational" : data.status === "degraded" ? "Degraded" : "Outage detected"}</p>
-                  <p className="text-xs text-muted-foreground">Last checked {new Date(dataUpdatedAt).toLocaleTimeString("en-IN")}</p>
+                  <p className="text-xs text-muted-foreground">Last checked {regional.dateTime(dataUpdatedAt)}</p>
                 </div>
               </div>
               <Badge variant={STATUS_BADGE[data.status]}>{data.status.toUpperCase()}</Badge>

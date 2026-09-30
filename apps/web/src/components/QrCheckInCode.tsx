@@ -2,13 +2,17 @@ import * as React from "react";
 import QRCode from "qrcode";
 import { useQuery } from "@tanstack/react-query";
 import { getCheckInToken } from "@/api/bookings";
+import { useRegional } from "@/hooks/use-regional";
 
 interface QrCheckInCodeProps {
   bookingId: string;
+  /** The booking's branch zone — the expiry reads on the showroom's clock. */
+  timeZone?: string;
 }
 
 /** Renders the customer's signed check-in token as a scannable QR code — staff scans (or types) it at check-in. */
-export function QrCheckInCode({ bookingId }: QrCheckInCodeProps) {
+export function QrCheckInCode({ bookingId, timeZone }: QrCheckInCodeProps) {
+  const regional = useRegional();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["check-in-token", bookingId],
     queryFn: () => getCheckInToken(bookingId),
@@ -33,7 +37,7 @@ export function QrCheckInCode({ bookingId }: QrCheckInCodeProps) {
         <div className="h-60 w-60 animate-pulse rounded-md bg-muted" />
       )}
       <p className="text-xs text-muted-foreground">
-        Show this to a staff member at check-in. Valid until {new Date(data.expiresAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}.
+        Show this to a staff member at check-in. Valid until {regional.dateTime(data.expiresAt, timeZone)}.
       </p>
     </div>
   );

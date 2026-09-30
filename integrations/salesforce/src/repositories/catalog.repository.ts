@@ -9,7 +9,9 @@ import {
   VehicleLocationFilter,
   VehicleVariantRepository,
 } from "@tdm/domain";
+import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "../connection-source";
+import { orgRegionalDefaults } from "../org-defaults";
 import { branchRecordToDomain, branchToRecord, variantRecordToDomain, vehicleRecordToDomain, vehicleToFullRecord } from "../mappers";
 import { BRANCH_FIELDS, dealershipCondition, escapeSoql, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
 
@@ -18,9 +20,12 @@ export class SalesforceVehicleRepository implements VehicleRepository {
 
   async findById(id: string): Promise<Vehicle | null> {
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`);
+      const [result, currency] = await Promise.all([
+        conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`),
+        this.currency(conn),
+      ]);
       const record = result.records[0];
-      return record ? vehicleRecordToDomain(record) : null;
+      return record ? vehicleRecordToDomain(record, currency) : null;
     });
   }
 
@@ -31,16 +36,17 @@ export class SalesforceVehicleRepository implements VehicleRepository {
       const pageSize = criteria.pageSize ?? 20;
       const offset = (page - 1) * pageSize;
 
-      const [itemsResult, countResult] = await Promise.all([
+      const [itemsResult, countResult, currency] = await Promise.all([
         conn.query(
           `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c ${where} ORDER BY Is_Featured__c DESC, CreatedDate DESC ` +
             `LIMIT ${pageSize} OFFSET ${offset}`,
         ),
         conn.query(`SELECT COUNT() FROM Vehicle__c ${where}`),
+        this.currency(conn),
       ]);
 
       return {
-        items: itemsResult.records.map(vehicleRecordToDomain),
+        items: itemsResult.records.map((r) => vehicleRecordToDomain(r, currency)),
         total: (countResult as any).totalSize,
       };
     });
@@ -54,10 +60,11 @@ export class SalesforceVehicleRepository implements VehicleRepository {
     };
     const where = [`${fieldByKind[kind]} = true`, ...this.locationClauses(filter)].join(" AND ");
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
-        `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE ${where} ORDER BY CreatedDate DESC LIMIT ${limit}`,
-      );
-      return result.records.map(vehicleRecordToDomain);
+      const [result, currency] = await Promise.all([
+        conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE ${where} ORDER BY CreatedDate DESC LIMIT ${limit}`),
+        this.currency(conn),
+      ]);
+      return result.records.map((r) => vehicleRecordToDomain(r, currency));
     });
   }
 
@@ -73,7 +80,8 @@ export class SalesforceVehicleRepository implements VehicleRepository {
           `AND Dealership__c = '${escapeSoql(dealershipId)}' AND Id != '${escapeSoql(vehicleId)}' ` +
           `ORDER BY Is_Featured__c DESC LIMIT ${limit}`,
       );
-      return result.records.map(vehicleRecordToDomain);
+      const currency = await this.currency(conn);
+      return result.records.map((r) => vehicleRecordToDomain(r, currency));
     });
   }
 
@@ -126,6 +134,11 @@ export class SalesforceVehicleRepository implements VehicleRepository {
     const dealership = dealershipCondition("Dealership__c", filter.dealershipIds);
     if (dealership) clauses.push(dealership);
     return clauses;
+  }
+
+  /** Prices are stored in the org's currency. */
+  private async currency(conn: Connection): Promise<string> {
+    return (await orgRegionalDefaults(this.connectionProvider, conn)).currencyCode;
   }
 }
 
@@ -185,7 +198,8 @@ export class SalesforceVehicleVariantRepository implements VehicleVariantReposit
       const result = await conn.query(
         `SELECT ${VEHICLE_VARIANT_FIELDS} FROM Vehicle_Variant__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' ORDER BY Display_Order__c ASC`,
       );
-      return result.records.map(variantRecordToDomain);
+      const currency = await this.currency(conn);
+      return result.records.map((r) => variantRecordToDomain(r, currency));
     });
   }
 
@@ -195,7 +209,13 @@ export class SalesforceVehicleVariantRepository implements VehicleVariantReposit
         `SELECT ${VEHICLE_VARIANT_FIELDS} FROM Vehicle_Variant__c WHERE Id = '${escapeSoql(id)}' LIMIT 1`,
       );
       const record = result.records[0];
-      return record ? variantRecordToDomain(record) : null;
+      return record ? variantRecordToDomain(record, await this.currency(conn)) : null;
     });
   }
+
+  /** Prices are stored in the org's currency. */
+  private async currency(conn: Connection): Promise<string> {
+    return (await orgRegionalDefaults(this.connectionProvider, conn)).currencyCode;
+  }
 }
+

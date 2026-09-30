@@ -10,6 +10,8 @@ export interface BranchDto {
   phone?: string;
   operatingHours?: string;
   managerName?: string;
+  /** IANA zone of the branch's dealership — its bookings' times are shown in it. */
+  timeZone: string;
 }
 
 export async function listBranches(): Promise<BranchDto[]> {

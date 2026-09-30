@@ -5,6 +5,7 @@ import { StaffAuthGuard } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
 import { CurrentStaffAccess } from "./current-staff-access.decorator";
 import type { StaffAccess } from "./staff-access";
+import { RegionalSettingsService } from "../config/regional-settings.service";
 
 /**
  * Small reference-data endpoints (dealerships, branches, sales reps) used to populate admin
@@ -19,6 +20,7 @@ export class AdminLookupsController {
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(DEALERSHIP_REPOSITORY) private readonly dealerships: DealershipRepository,
+    private readonly regional: RegionalSettingsService,
   ) {}
 
   @Get("sales-reps")
@@ -39,15 +41,23 @@ export class AdminLookupsController {
     });
   }
 
+  /** The company-wide locale, zone and currency — how the console formats values not tied to one dealership. */
+  @Get("regional")
+  getRegional() {
+    return this.regional.resolve(undefined);
+  }
+
   @Get("dealerships")
   async listDealerships(@CurrentStaffAccess() access: StaffAccess) {
     const { dealershipIds } = access.dealershipScope();
-    const dealerships = await this.dealerships.findAll();
-    return dealerships
-      .filter((d) => d.isActive && (!dealershipIds || dealershipIds.includes(d.id)))
-      .map((d) => {
-        const props = d.toProps();
-        return { id: props.id, name: props.name };
-      });
+    const dealerships = (await this.dealerships.findAll()).filter(
+      (d) => d.isActive && (!dealershipIds || dealershipIds.includes(d.id)),
+    );
+    // Each dealership's zone, so the console shows a booking's time where it takes place.
+    const zones = await this.regional.timeZonesOf(dealerships.map((d) => d.id));
+    return dealerships.map((d) => {
+      const props = d.toProps();
+      return { id: props.id, name: props.name, timeZone: zones.get(d.id)! };
+    });
   }
 }

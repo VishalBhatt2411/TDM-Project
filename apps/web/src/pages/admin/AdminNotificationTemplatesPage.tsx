@@ -2,6 +2,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listNotificationTemplates, revertNotificationTemplate, updateNotificationTemplate } from "@/api/admin";
 import type { ConfigScopeParams, NotificationTemplateDto } from "@/api/admin";
+import { useAdminRegional } from "@/hooks/use-regional";
 import { ConfigScopePicker } from "@/components/admin/ConfigScopePicker";
 import { errorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 function TemplateRow({ template, dealershipId }: { template: NotificationTemplateDto; dealershipId?: string }) {
+  const regional = useAdminRegional();
   const queryClient = useQueryClient();
   const [subject, setSubject] = React.useState(template.subject ?? "");
   const [note, setNote] = React.useState(template.note ?? "");
@@ -80,7 +82,7 @@ function TemplateRow({ template, dealershipId }: { template: NotificationTemplat
           <p className="text-sm text-destructive">{errorMessage(saveMutation.error ?? revertMutation.error)}</p>
         )}
         {template.updatedAt && (
-          <p className="text-xs text-muted-foreground">Last updated {new Date(template.updatedAt).toLocaleString("en-IN")}</p>
+          <p className="text-xs text-muted-foreground">Last updated {regional.dateTime(template.updatedAt)}</p>
         )}
       </CardContent>
     </Card>

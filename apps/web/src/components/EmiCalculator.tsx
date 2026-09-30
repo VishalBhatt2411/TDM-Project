@@ -5,10 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-
-function formatInr(amount: number): string {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
-}
+import { useRegional } from "@/hooks/use-regional";
 
 const TENURE_MIN = 6;
 const TENURE_MAX = 84;
@@ -26,7 +23,10 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
-export function EmiCalculator({ vehiclePrice }: { vehiclePrice: number }) {
+/** `currency` is the vehicle price's — the estimate is in the same money. */
+export function EmiCalculator({ vehiclePrice, currency }: { vehiclePrice: number; currency: string }) {
+  const regional = useRegional();
+  const formatMoney = (amount: number) => regional.money(amount, currency);
   const [downPaymentInput, setDownPaymentInput] = React.useState(String(Math.round(vehiclePrice * 0.2)));
   const [tenureInput, setTenureInput] = React.useState("60");
   const [rateInput, setRateInput] = React.useState("9.5");
@@ -145,15 +145,15 @@ export function EmiCalculator({ vehiclePrice }: { vehiclePrice: number }) {
           >
             <div>
               <p className="text-xs text-muted-foreground">Monthly EMI</p>
-              <p className="text-lg font-bold text-foreground">{formatInr(data.monthlyPayment)}</p>
+              <p className="text-lg font-bold text-foreground">{formatMoney(data.monthlyPayment)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Interest</p>
-              <p className="text-lg font-semibold">{formatInr(data.totalInterest)}</p>
+              <p className="text-lg font-semibold">{formatMoney(data.totalInterest)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Payment</p>
-              <p className="text-lg font-semibold">{formatInr(data.totalPayment)}</p>
+              <p className="text-lg font-semibold">{formatMoney(data.totalPayment)}</p>
             </div>
           </div>
         )}

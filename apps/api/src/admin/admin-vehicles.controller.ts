@@ -16,6 +16,7 @@ import {
 import { BRANCH_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
 import { ParseRecordIdPipe } from "../common/record-id";
 import { vehicleToDto } from "../vehicles/vehicles.service";
+import { RegionalSettingsService } from "../config/regional-settings.service";
 import { StaffAuthGuard } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
@@ -164,7 +165,8 @@ class CreateVehicleDto {
 /** Every field optional — a PATCH only touches the fields the client actually sent. */
 class UpdateVehicleDto extends PartialType(CreateVehicleDto) {}
 
-function toVehicleProps(dto: CreateVehicleDto) {
+/** `currency` is the one the data provider stores prices in — see ProviderRegionalDefaults. */
+function toVehicleProps(dto: CreateVehicleDto, currency: string) {
   return {
     make: dto.make,
     model: dto.model,
@@ -175,8 +177,8 @@ function toVehicleProps(dto: CreateVehicleDto) {
     fuelType: dto.fuelType as FuelType,
     transmission: dto.transmission as Transmission,
     color: dto.color,
-    price: Money.create(dto.price, "INR"),
-    priceMax: dto.priceMax != null ? Money.create(dto.priceMax, "INR") : undefined,
+    price: Money.create(dto.price, currency),
+    priceMax: dto.priceMax != null ? Money.create(dto.priceMax, currency) : undefined,
     odometer: dto.odometer ?? 0,
     status: (dto.status ?? "Available") as VehicleStatus,
     branchId: dto.branchId,
@@ -222,7 +224,7 @@ const CLEARABLE_FIELDS = new Set<keyof VehicleProps>([
  * Maps only the keys present on a partial update, so omitted rich content (gallery,
  * spec sheet, FAQs, ...) is preserved rather than reset to the create-time defaults.
  */
-function toVehiclePatch(dto: UpdateVehicleDto): Partial<VehicleProps> {
+function toVehiclePatch(dto: UpdateVehicleDto, currency: string): Partial<VehicleProps> {
   const patch: Partial<VehicleProps> = {};
   const assign = <K extends keyof VehicleProps>(key: K, value: VehicleProps[K]) => {
     patch[key] = value;
@@ -236,10 +238,10 @@ function toVehiclePatch(dto: UpdateVehicleDto): Partial<VehicleProps> {
     }
     switch (key) {
       case "price":
-        assign("price", Money.create(value as number, "INR"));
+        assign("price", Money.create(value as number, currency));
         break;
       case "priceMax":
-        assign("priceMax", Money.create(value as number, "INR"));
+        assign("priceMax", Money.create(value as number, currency));
         break;
       default:
         assign(key, value as VehicleProps[typeof key]);
@@ -255,12 +257,13 @@ export class AdminVehiclesController {
   constructor(
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
+    private readonly regional: RegionalSettingsService,
   ) {}
 
   @Post()
   async create(@Body() dto: CreateVehicleDto, @CurrentStaffAccess() access: StaffAccess) {
     const branch = await this.requireBranch(dto.branchId, access);
-    const vehicle = Vehicle.create({ ...toVehicleProps(dto), dealershipId: branch.dealershipId });
+    const vehicle = Vehicle.create({ ...toVehicleProps(dto, (await this.regional.resolve(branch.dealershipId)).currencyCode), dealershipId: branch.dealershipId });
     const saved = await this.vehicles.save(vehicle);
     return vehicleToDto(saved);
   }
@@ -272,7 +275,7 @@ export class AdminVehiclesController {
     @CurrentStaffAccess() access: StaffAccess,
   ) {
     const existing = await this.requireVehicle(id, access);
-    const { branchId, ...patch } = toVehiclePatch(dto);
+    const { branchId, ...patch } = toVehiclePatch(dto, (await this.regional.resolve(existing.dealershipId)).currencyCode);
     existing.updateDetails(patch);
     if (branchId && branchId !== existing.branchId) {
       const branch = await this.requireBranch(branchId, access);

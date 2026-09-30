@@ -6,12 +6,17 @@ import {
   BrandingRepository,
   DataProviderOutdatedError,
   EMPTY_BRAND_LAYER,
+  ProviderRegionalDefaults,
+  RegionalSettings,
+  RegionalSettingsRepository,
   SiteContent,
+  parseRegionalSettings,
   parseSiteContent,
 } from "@tdm/domain";
 import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "../connection-source";
 import { brandingFromRecord, brandingToRecord } from "../mappers";
+import { orgRegionalDefaults } from "../org-defaults";
 import { BRANDING_FIELDS, escapeSoql, toEighteenCharId, withConnection } from "../soql";
 import { isContentDocumentId, CONTENT_TYPE_BY_EXTENSION, EXTENSION_BY_CONTENT_TYPE, readAll } from "../files";
 
@@ -110,6 +115,89 @@ export class SalesforceBrandingRepository implements BrandingRepository {
         throw err;
       }
     });
+  }
+}
+
+const REGIONAL_FIELD_BY_KEY: Record<keyof RegionalSettings, string> = {
+  locale: "Locale__c",
+  timeZone: "Time_Zone__c",
+  phoneCountryCode: "Phone_Country_Code__c",
+};
+const REGIONAL_FIELDS = Object.values(REGIONAL_FIELD_BY_KEY).join(", ");
+const REGIONAL_FEATURE = "regional settings";
+
+/** Values are editable straight in Salesforce, so each invalid one is skipped (inherited) rather than breaking scheduling. */
+function regionalFromRecord(record: any, object: string): RegionalSettings {
+  const settings: RegionalSettings = {};
+  for (const [key, field] of Object.entries(REGIONAL_FIELD_BY_KEY) as [keyof RegionalSettings, string][]) {
+    try {
+      Object.assign(settings, parseRegionalSettings({ [key]: record[field] }));
+    } catch (err) {
+      warn("regional_setting_invalid", { object, recordId: record.Id, field, reason: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return settings;
+}
+
+function regionalToRecord(settings: RegionalSettings): Record<string, unknown> {
+  return Object.fromEntries(
+    (Object.entries(REGIONAL_FIELD_BY_KEY) as [keyof RegionalSettings, string][]).map(([key, field]) => [field, settings[key] ?? null]),
+  );
+}
+
+/** Customers are company-wide, so a stored phone without "+" reads back with the company's calling code. */
+export async function companyPhoneCountryCode(conn: Connection): Promise<string | undefined> {
+  try {
+    const record = (
+      await conn.query(`SELECT Id, Phone_Country_Code__c FROM Company_Profile__c WHERE Singleton_Key__c = '${COMPANY_SINGLETON_KEY}' LIMIT 1`)
+    ).records[0];
+    return record ? regionalFromRecord(record, "Company_Profile__c").phoneCountryCode : undefined;
+  } catch (err) {
+    if (isMissingMetadata(err)) return undefined;
+    throw err;
+  }
+}
+
+/** Regional settings on Dealership__c (per dealership) and the Company_Profile__c singleton, over the org's own defaults. */
+export class SalesforceRegionalSettingsRepository implements RegionalSettingsRepository {
+  constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
+
+  async findLayer(dealershipId?: string): Promise<RegionalSettings | null> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const object = dealershipId ? "Dealership__c" : "Company_Profile__c";
+      const where = dealershipId
+        ? `Id = '${escapeSoql(dealershipId)}'`
+        : `Singleton_Key__c = '${COMPANY_SINGLETON_KEY}'`;
+      try {
+        const record = (await conn.query(`SELECT Id, ${REGIONAL_FIELDS} FROM ${object} WHERE ${where} LIMIT 1`)).records[0];
+        if (record) return regionalFromRecord(record, object);
+        return dealershipId ? null : {};
+      } catch (err) {
+        if (!isMissingMetadata(err)) throw err;
+        warn("regional_metadata_missing", { object });
+        if (!dealershipId) return {};
+        const exists = await conn.query(`SELECT Id FROM Dealership__c WHERE ${where} LIMIT 1`);
+        return exists.records[0] ? {} : null;
+      }
+    });
+  }
+
+  async saveLayer(settings: RegionalSettings, dealershipId?: string): Promise<void> {
+    await withConnection(this.connectionProvider, async (conn) => {
+      try {
+        const id = dealershipId ?? (await ensureCompanyProfileId(conn));
+        const object = dealershipId ? "Dealership__c" : "Company_Profile__c";
+        const result = await conn.sobject(object).update({ Id: id, ...regionalToRecord(settings) });
+        assertSaved(result, `${object} ${id}`);
+      } catch (err) {
+        if (isMissingMetadata(err)) throw new DataProviderOutdatedError(REGIONAL_FEATURE);
+        throw err;
+      }
+    });
+  }
+
+  async findProviderDefaults(): Promise<ProviderRegionalDefaults> {
+    return withConnection(this.connectionProvider, (conn) => orgRegionalDefaults(this.connectionProvider, conn));
   }
 }
 

@@ -1,4 +1,5 @@
 import { adminApiClient } from "@/lib/admin-api-client";
+import type { RegionalSettingsDto } from "@/api/config";
 import type { BookingDto, BookingStatus, ComplianceStatusDto, LicenseAiAssessment, Paginated, VehicleDto } from "@tdm/types";
 
 export type StaffRole = "Company_Admin" | "Dealer_Admin" | "Manager" | "Sales_Rep";
@@ -151,6 +152,8 @@ export interface BranchLookupDto {
 export interface DealershipLookupDto {
   id: string;
   name: string;
+  /** IANA zone the dealership operates in — its bookings' times are shown in it. */
+  timeZone: string;
 }
 
 export async function listSalesRepsLookup(): Promise<SalesRepLookupDto[]> {
@@ -495,6 +498,40 @@ export async function uploadBrandImage(
   input: { kind: BrandImageKind; contentType: string; dataBase64: string },
 ): Promise<{ assetId: string; url: string }> {
   const { data } = await adminApiClient.post<{ assetId: string; url: string }>("/admin/branding/images", input, { params: scope });
+  return data;
+}
+
+/** The company-wide regional settings — how the console formats values not tied to one dealership. */
+export async function getAdminRegional(): Promise<RegionalSettingsDto> {
+  const { data } = await adminApiClient.get<RegionalSettingsDto>("/admin/lookups/regional");
+  return data;
+}
+
+/** One scope's own regional settings; an unset field inherits. */
+export interface RegionalSettingsLayerDto {
+  locale?: string;
+  timeZone?: string;
+  phoneCountryCode?: string;
+}
+
+export interface RegionalSettingsEditorDto {
+  own: RegionalSettingsLayerDto;
+  /** The company layer when editing a dealership; null company-wide. */
+  inherited: RegionalSettingsLayerDto | null;
+  /** The data provider org's own settings — what a field unset everywhere falls back to. */
+  providerDefaults: { locale: string; timeZone: string; currencyCode: string; country?: string };
+  effective: RegionalSettingsDto;
+  schema: { maxLength: { locale: number; timeZone: number }; timeZones: string[] };
+}
+
+export async function getRegionalSettings(scope: ConfigScopeParams): Promise<RegionalSettingsEditorDto> {
+  const { data } = await adminApiClient.get<RegionalSettingsEditorDto>("/admin/regional-settings", { params: scope });
+  return data;
+}
+
+/** Replaces the whole layer at this scope — anything omitted inherits again. */
+export async function saveRegionalSettings(scope: ConfigScopeParams, layer: RegionalSettingsLayerDto): Promise<RegionalSettingsEditorDto> {
+  const { data } = await adminApiClient.put<RegionalSettingsEditorDto>("/admin/regional-settings", layer, { params: scope });
   return data;
 }
 

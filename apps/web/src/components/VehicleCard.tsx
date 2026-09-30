@@ -7,10 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { PlaceholderVehicleImage } from "@/components/PlaceholderVehicleImage";
 import { cn } from "@/lib/utils";
-
-function formatInr(amount: number): string {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
-}
+import { useRegional } from "@/hooks/use-regional";
 
 interface VehicleCardProps {
   vehicle: VehicleDto;
@@ -20,6 +17,7 @@ interface VehicleCardProps {
 }
 
 export function VehicleCard({ vehicle, index = 0, isWishlisted, onToggleWishlist }: VehicleCardProps) {
+  const regional = useRegional();
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
       <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
@@ -62,9 +60,9 @@ export function VehicleCard({ vehicle, index = 0, isWishlisted, onToggleWishlist
         </CardHeader>
         <CardContent className="flex-1 space-y-2">
           <p className="text-lg font-bold text-foreground">
-            {formatInr(vehicle.price.amount)}
+            {regional.money(vehicle.price.amount, vehicle.price.currency)}
             {vehicle.priceMax && vehicle.priceMax.amount !== vehicle.price.amount && (
-              <span className="text-sm font-normal text-muted-foreground"> – {formatInr(vehicle.priceMax.amount)}</span>
+              <span className="text-sm font-normal text-muted-foreground"> – {regional.money(vehicle.priceMax.amount, vehicle.priceMax.currency)}</span>
             )}
           </p>
           <div className="flex gap-4 text-xs text-muted-foreground">

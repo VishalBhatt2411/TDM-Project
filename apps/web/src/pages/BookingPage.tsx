@@ -7,11 +7,19 @@ import { useShoppingLocation } from "@/context/location-context";
 import { createBooking, createPublicBooking, isBookingConflictError } from "@/api/bookings";
 import { useAuth } from "@/context/auth-context";
 import { useDealershipConfig } from "@/hooks/use-dealership-config";
+import { useRegional } from "@/hooks/use-regional";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { STANDARD_TIME_SLOTS, type DriveType, type PurchaseTimeline } from "@tdm/types";
+import {
+  SLOT_DURATION_MINUTES,
+  STANDARD_TIME_SLOTS,
+  addIsoDays,
+  zonedDateTimeToUtc,
+  type DriveType,
+  type PurchaseTimeline,
+} from "@tdm/types";
 
 export const TIME_SLOTS = STANDARD_TIME_SLOTS;
 
@@ -43,11 +51,9 @@ interface FormValues {
   additionalNotes: string;
 }
 
-function todayIsoDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
+/** Loose shape check only — the server normalizes the number and prefixes the calling code. */
+const PHONE_PATTERN = /^\+?[\d\s().-]{6,24}$/;
+const INTERNATIONAL_PHONE_PATTERN = /^\+[\d\s().-]{6,24}$/;
 
 export function BookingPage() {
   const { vehicleId } = useParams<{ vehicleId: string }>();
@@ -58,6 +64,7 @@ export function BookingPage() {
   const { data: dealership } = useDealershipConfig();
   const { data: variants } = useQuery({ queryKey: ["vehicle-variants", vehicleId], queryFn: () => getVehicleVariants(vehicleId!), enabled: !!vehicleId });
   const { branches, isReady: branchesReady } = useShoppingLocation();
+  const regional = useRegional();
   // A vehicle is test-driven at the branch that stocks it — not a customer choice.
   const branch = vehicle ? branches.find((b) => b.id === vehicle.branchId) : undefined;
 
@@ -77,7 +84,7 @@ export function BookingPage() {
       isExistingCustomer: false,
       pickupRequired: false,
       purchaseTimeline: "Just_Exploring",
-      preferredDate: todayIsoDate(),
+      preferredDate: "",
       preferredTimeSlot: TIME_SLOTS[0],
     },
   });
@@ -92,15 +99,21 @@ export function BookingPage() {
     queryFn: () => getVehicleAvailability(vehicleId!, preferredDate),
     enabled: !!vehicleId && !!preferredDate,
   });
+  // Slots are on the showroom's wall clock, wherever the customer is browsing from.
+  const timeZone = availability?.timeZone ?? branch?.timeZone;
+  // Bookings open from tomorrow, in the showroom's calendar.
+  const earliestDate = timeZone ? addIsoDays(regional.today(timeZone), 1) : undefined;
+  const phoneCountryCode = availability?.phoneCountryCode;
+
+  React.useEffect(() => {
+    if (earliestDate && !getValues("preferredDate")) setValue("preferredDate", earliestDate);
+  }, [earliestDate, getValues, setValue]);
+
   const bookedTimes = React.useMemo(() => {
     if (!availability) return null;
-    const available = new Set(
-      availability.availableSlots.map((slot) =>
-        new Date(slot.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }),
-      ),
-    );
+    const available = new Set(availability.availableSlots.map((slot) => regional.wallTime(slot.start, availability.timeZone)));
     return new Set(TIME_SLOTS.filter((t) => !available.has(t)));
-  }, [availability]);
+  }, [availability, regional]);
 
   // A logged-in customer's name/email/phone are already known server-side — this only
   // pre-fills them for a fallback guest submission if `profile` hasn't resolved yet by
@@ -110,7 +123,7 @@ export function BookingPage() {
     setValue("firstName", profile.firstName);
     setValue("lastName", profile.lastName);
     setValue("email", profile.email);
-    setValue("mobileNumber", profile.phone.replace(/^\+91/, ""));
+    setValue("mobileNumber", profile.phone);
   }, [profile, setValue]);
 
   // Most customers live near the showroom they book at — pre-fill, but never overwrite what they typed.
@@ -136,10 +149,12 @@ export function BookingPage() {
 
   const onSubmit = async (values: FormValues) => {
     setServerError(null);
-    const [hh, mm] = values.preferredTimeSlot.split(":").map(Number);
-    const start = new Date(`${values.preferredDate}T00:00:00`);
-    start.setHours(hh, mm, 0, 0);
-    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    if (!timeZone) {
+      setServerError("This showroom's schedule couldn't be loaded. Please try again.");
+      return;
+    }
+    const start = zonedDateTimeToUtc(values.preferredDate, values.preferredTimeSlot, timeZone);
+    const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
 
     const commonFields = {
       vehicleId: vehicle.id,
@@ -149,7 +164,7 @@ export function BookingPage() {
       slot: { start: start.toISOString(), end: end.toISOString() },
       homeAddress:
         values.driveType === "Home"
-          ? { line1: values.homeAddress, city: values.city, state: values.state, postalCode: "", country: "India" }
+          ? { line1: values.homeAddress, city: values.city, state: values.state, postalCode: "", country: branch?.address.country ?? "" }
           : undefined,
       city: values.city,
       state: values.state,
@@ -248,18 +263,31 @@ export function BookingPage() {
                     <div className="space-y-1.5">
                       <Label htmlFor="mobileNumber">Mobile Number</Label>
                       <div className="flex">
-                        <span className="flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                          +91
-                        </span>
+                        {phoneCountryCode && (
+                          <span className="flex items-center rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                            +{phoneCountryCode}
+                          </span>
+                        )}
                         <Input
                           id="mobileNumber"
-                          className="rounded-l-none"
-                          maxLength={10}
-                          placeholder="9876543210"
-                          {...register("mobileNumber", { required: true, pattern: /^[6-9]\d{9}$/ })}
+                          type="tel"
+                          autoComplete="tel"
+                          className={phoneCountryCode ? "rounded-l-none" : undefined}
+                          maxLength={24}
+                          placeholder={phoneCountryCode ? undefined : "+ country code and number"}
+                          {...register("mobileNumber", {
+                            required: true,
+                            pattern: phoneCountryCode ? PHONE_PATTERN : INTERNATIONAL_PHONE_PATTERN,
+                          })}
                         />
                       </div>
-                      {errors.mobileNumber && <p className="text-xs text-destructive">Enter a valid 10-digit mobile number</p>}
+                      {errors.mobileNumber && (
+                        <p className="text-xs text-destructive">
+                          {phoneCountryCode
+                            ? "Enter a valid mobile number"
+                            : "Enter your number in international format, starting with + and the country code"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </>
@@ -342,7 +370,7 @@ export function BookingPage() {
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="preferredDate">Preferred Date</Label>
-                  <Input id="preferredDate" type="date" min={todayIsoDate()} {...register("preferredDate", { required: true })} />
+                  <Input id="preferredDate" type="date" min={earliestDate} {...register("preferredDate", { required: true })} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="preferredTimeSlot">Preferred Time Slot</Label>
@@ -394,7 +422,7 @@ export function BookingPage() {
 
             {serverError && <p className="text-sm text-destructive">{serverError}</p>}
 
-            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || !branch || (isAuthenticated && !profile)}>
+            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || !branch || !timeZone || (isAuthenticated && !profile)}>
               {isSubmitting ? "Booking…" : "Confirm Test Drive Booking"}
             </Button>
           </form>

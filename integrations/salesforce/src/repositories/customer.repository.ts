@@ -1,7 +1,9 @@
 import { Customer, CustomerRepository } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
-import { contactToCustomer, customerToContactRecord } from "../mappers";
-import { CONTACT_FIELDS, withConnection } from "../soql";
+import { Connection } from "jsforce";
+import { contactPhoneNeedsCountryCode, contactToCustomer, customerToContactRecord } from "../mappers";
+import { CONTACT_FIELDS, escapeSoql, withConnection } from "../soql";
+import { companyPhoneCountryCode } from "./branding.repository";
 
 export class SalesforceCustomerRepository implements CustomerRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
@@ -12,7 +14,7 @@ export class SalesforceCustomerRepository implements CustomerRepository {
         `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c = '${escapeSoql(id)}' LIMIT 1`,
       );
       const record = result.records[0];
-      return record ? contactToCustomer(record) : null;
+      return record ? toCustomer(conn, record) : null;
     });
   }
 
@@ -28,7 +30,7 @@ export class SalesforceCustomerRepository implements CustomerRepository {
         `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Email = '${escapeSoql(email.toLowerCase())}' AND Portal_User_Id__c != null LIMIT 1`,
       );
       const record = result.records[0];
-      return record ? contactToCustomer(record) : null;
+      return record ? toCustomer(conn, record) : null;
     });
   }
 
@@ -47,6 +49,7 @@ export class SalesforceCustomerRepository implements CustomerRepository {
   }
 }
 
-function escapeSoql(value: string): string {
-  return value.replace(/'/g, "\\'");
+/** The company calling code is only looked up for a stored phone that lost its "+". */
+async function toCustomer(conn: Connection, record: any): Promise<Customer> {
+  return contactToCustomer(record, contactPhoneNeedsCountryCode(record) ? await companyPhoneCountryCode(conn) : undefined);
 }

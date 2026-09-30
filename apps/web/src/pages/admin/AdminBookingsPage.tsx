@@ -13,7 +13,9 @@ import {
   rescheduleBookingAsStaff,
   setBookingStaffNotes,
   startDriveAsStaff,
+  type SalesRepLookupDto,
 } from "@/api/admin";
+import { useAdminRegional, useDealershipTimeZones } from "@/hooks/use-regional";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QrScanner } from "@/components/admin/QrScanner";
 import { ComplianceReviewPanel } from "@/components/admin/ComplianceReviewPanel";
-import type { BookingDto, BookingStatus } from "@tdm/types";
+import { SLOT_DURATION_MINUTES, zonedDateTimeToUtc, type BookingDto, type BookingStatus } from "@tdm/types";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
   Requested: "warning",
@@ -36,10 +38,6 @@ const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "se
 
 const STATUSES: BookingStatus[] = ["Requested", "Confirmed", "Waitlisted", "InProgress", "Completed", "Cancelled", "NoShow"];
 const CANCELLABLE_STATUSES = new Set(["Requested", "Confirmed"]);
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function AdminBookingsPage() {
   const { hasPermission } = useAdminAuth();
@@ -57,6 +55,8 @@ export function AdminBookingsPage() {
         : listMyAssignedBookings({ status: statusFilter, pageSize: 50 }),
   });
   const { data: reps } = useQuery({ queryKey: ["sales-reps-lookup"], queryFn: listSalesRepsLookup });
+  const regional = useAdminRegional();
+  const zones = useDealershipTimeZones();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [scopeKey] });
 
@@ -109,7 +109,7 @@ export function AdminBookingsPage() {
             <Card key={booking.id}>
               <CardHeader className="flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium">
-                  {new Date(booking.slot.start).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} ·{" "}
+                  {regional.dateTime(booking.slot.start, zones.get(booking.dealershipId))} ·{" "}
                   {booking.driveType === "Home" ? "Home" : "Showroom"}
                 </CardTitle>
                 <Badge variant={STATUS_VARIANT[booking.status] ?? "secondary"}>{booking.status}</Badge>
@@ -153,7 +153,7 @@ function BookingActionsPanel({
   onChanged,
 }: {
   booking: BookingDto & { staffNotes?: string };
-  reps: { id: string; name: string }[];
+  reps: SalesRepLookupDto[];
   onChanged: () => void;
 }) {
   const [notes, setNotes] = React.useState(booking.staffNotes ?? "");
@@ -162,7 +162,10 @@ function BookingActionsPanel({
   const [showQrScanner, setShowQrScanner] = React.useState(false);
   const [showCompliance, setShowCompliance] = React.useState(false);
   const [odometer, setOdometer] = React.useState("");
-  const [rescheduleDate, setRescheduleDate] = React.useState(todayIsoDate());
+  const regional = useAdminRegional();
+  // The booking happens at its dealership: dates and times are picked on that wall clock.
+  const timeZone = useDealershipTimeZones().get(booking.dealershipId) ?? regional.timeZone;
+  const [rescheduleDate, setRescheduleDate] = React.useState(() => regional.today(timeZone));
   const [rescheduleTime, setRescheduleTime] = React.useState("10:00");
   const [cancelReason, setCancelReason] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -179,10 +182,9 @@ function BookingActionsPanel({
   });
 
   const submitReschedule = () => {
-    const [hh, mm] = rescheduleTime.split(":").map(Number);
-    const start = new Date(`${rescheduleDate}T00:00:00`);
-    start.setHours(hh, mm, 0, 0);
-    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    if (!timeZone) return;
+    const start = zonedDateTimeToUtc(rescheduleDate, rescheduleTime, timeZone);
+    const end = new Date(start.getTime() + SLOT_DURATION_MINUTES * 60_000);
     run.mutate(() => rescheduleBookingAsStaff(booking.id, { start: start.toISOString(), end: end.toISOString() }));
   };
 
@@ -298,13 +300,13 @@ function BookingActionsPanel({
             <Input
               id={`admin-reschedule-date-${booking.id}`}
               type="date"
-              min={todayIsoDate()}
+              min={regional.today(timeZone)}
               value={rescheduleDate}
               onChange={(e) => setRescheduleDate(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`admin-reschedule-time-${booking.id}`}>New Time</Label>
+            <Label htmlFor={`admin-reschedule-time-${booking.id}`}>New Time{timeZone ? ` (${timeZone})` : ""}</Label>
             <Input
               id={`admin-reschedule-time-${booking.id}`}
               type="time"
@@ -312,7 +314,7 @@ function BookingActionsPanel({
               onChange={(e) => setRescheduleTime(e.target.value)}
             />
           </div>
-          <Button size="sm" disabled={run.isPending} onClick={submitReschedule}>
+          <Button size="sm" disabled={run.isPending || !timeZone || !rescheduleDate || !rescheduleTime} onClick={submitReschedule}>
             Confirm New Slot
           </Button>
           <Button size="sm" variant="outline" onClick={() => setShowReschedule(false)}>

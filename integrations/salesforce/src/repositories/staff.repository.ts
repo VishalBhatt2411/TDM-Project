@@ -1,5 +1,6 @@
 import {
   DealershipScope,
+  InstantWindow,
   InvalidValueError,
   SalesRepRepository,
   SalesRepresentative,
@@ -117,18 +118,14 @@ export class SalesforceSalesRepRepository implements SalesRepRepository {
   }
 
   /** Day load is counted in one aggregate query rather than one booking query per rep. */
-  async findLeastLoadedForBranch(branchId: string, onDate: Date): Promise<SalesRepresentative | null> {
+  async findLeastLoadedForBranch(branchId: string, day: InstantWindow): Promise<SalesRepresentative | null> {
     const reps = await this.findByBranch(branchId);
     if (reps.length === 0) return null;
 
-    const dayStart = new Date(onDate);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(onDate);
-    dayEnd.setHours(23, 59, 59, 999);
     const loadByRep = await withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
         `SELECT OwnerId o, COUNT(Id) cnt FROM Booking__c WHERE OwnerId IN ${soqlIdList(reps.map((r) => r.id))} ` +
-          `AND Scheduled_Start__c >= ${dayStart.toISOString()} AND Scheduled_Start__c <= ${dayEnd.toISOString()} ` +
+          `AND Scheduled_Start__c >= ${day.start.toISOString()} AND Scheduled_Start__c <= ${day.end.toISOString()} ` +
           `AND Status__c IN ${LOAD_STATUSES} GROUP BY OwnerId`,
       );
       return new Map<string, number>((result.records as any[]).map((r) => [r.o, r.cnt]));

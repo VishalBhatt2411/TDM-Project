@@ -497,6 +497,21 @@
         <editable>false</editable>
     </fieldPermissions>
     <fieldPermissions>
+        <field>Dealership__c.Locale__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Dealership__c.Time_Zone__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Dealership__c.Phone_Country_Code__c</field>
+        <readable>true</readable>
+        <editable>false</editable>
+    </fieldPermissions>
+    <fieldPermissions>
         <field>Booking__c.Dealership__c</field>
         <readable>true</readable>
         <editable>false</editable>

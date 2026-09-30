@@ -3,6 +3,7 @@ import { Booking, ComplianceRecord, DriveFeedback } from "./entities/booking";
 import { Customer } from "./entities/customer";
 import { Dealership } from "./entities/dealership";
 import { BrandLayer } from "./entities/site-content";
+import { ProviderRegionalDefaults, RegionalSettings } from "./entities/regional-settings";
 import { StaffAssignment, StaffRole } from "./entities/staff-assignment";
 import { VehicleAllocation, WishlistItem } from "./entities/inventory";
 import { SalesOpportunity } from "./entities/sales-opportunity";
@@ -74,12 +75,18 @@ export interface DealershipRepository {
   findById(id: string): Promise<Dealership | null>;
 }
 
+/** An inclusive span of instants — e.g. one calendar day in a dealership's time zone. */
+export interface InstantWindow {
+  start: Date;
+  end: Date;
+}
+
 /** Assignable reps are users with an active Sales Rep staff assignment — see StaffAssignment. */
 export interface SalesRepRepository {
   findById(id: string): Promise<SalesRepresentative | null>;
   findByBranch(branchId: string): Promise<SalesRepresentative[]>;
-  /** The branch's rep with the fewest slot-occupying bookings that day, skipping reps already at their daily cap. */
-  findLeastLoadedForBranch(branchId: string, onDate: Date): Promise<SalesRepresentative | null>;
+  /** The branch's rep with the fewest slot-occupying bookings within `day` (see zonedDayWindow), skipping reps already at their daily cap. */
+  findLeastLoadedForBranch(branchId: string, day: InstantWindow): Promise<SalesRepresentative | null>;
   /** Active reps across the scoped dealerships — used by the admin console's assignment dropdown. */
   findAllActive(scope?: DealershipScope): Promise<SalesRepresentative[]>;
 }
@@ -132,7 +139,8 @@ export interface BookingRepository {
   /** Bookings for the same vehicle whose status is Confirmed/InProgress, used for conflict detection. */
   findActiveByVehicle(vehicleId: string): Promise<Booking[]>;
   findWaitlistedForVehicle(vehicleId: string): Promise<Booking[]>;
-  findByRepAndDate(salesRepId: string, date: Date): Promise<Booking[]>;
+  /** A rep's slot-occupying bookings starting within `day` (see zonedDayWindow). */
+  findByRepAndDate(salesRepId: string, day: InstantWindow): Promise<Booking[]>;
   /** Returns the persisted aggregate — on first save this carries the provider-assigned id. */
   save(booking: Booking): Promise<Booking>;
   /** Upserts by booking — a booking has at most one compliance record, so a resubmission or staff confirmation updates it in place rather than creating a duplicate. */
@@ -321,6 +329,19 @@ export interface BrandingRepository {
   findLayer(dealershipId?: string): Promise<BrandLayer | null>;
   /** Replaces the whole layer at that scope. */
   saveLayer(layer: BrandLayer, dealershipId?: string): Promise<void>;
+}
+
+/**
+ * Regional settings per scope: each dealership's (Dealership__c-level) and the company-wide
+ * one they inherit unset fields from — see resolveRegionalSettings.
+ */
+export interface RegionalSettingsRepository {
+  /** Null when the dealership doesn't exist; company-wide returns empty settings until some are saved. */
+  findLayer(dealershipId?: string): Promise<RegionalSettings | null>;
+  /** Replaces every regional field at that scope. */
+  saveLayer(settings: RegionalSettings, dealershipId?: string): Promise<void>;
+  /** The data provider org's own locale, time zone and currency — the fallback for anything unset. */
+  findProviderDefaults(): Promise<ProviderRegionalDefaults>;
 }
 
 export type BrandAssetKind = "logo" | "hero";

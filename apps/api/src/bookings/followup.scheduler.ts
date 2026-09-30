@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { BookingRepository, CustomerRepository, VehicleRepository } from "@tdm/domain";
+import { addIsoDays, zonedIsoDate } from "@tdm/types";
 import { FollowUpLogRepository, OrganizationRepository } from "@tdm/postgres-adapter";
 import {
   BOOKING_REPOSITORY,
@@ -11,8 +12,10 @@ import {
 } from "../infrastructure/tokens";
 import { runForEachTenant } from "../tenancy/tenant-context";
 import { NotificationsService } from "../notifications/notifications.service";
+import { RegionalSettingsService } from "../config/regional-settings.service";
 
 const FOLLOW_UP_INTERVALS_DAYS = [3, 7, 14];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Once a day, checks completed test drives with no resulting sales opportunity and
@@ -30,6 +33,7 @@ export class FollowUpScheduler {
     @Inject(FOLLOW_UP_LOG_REPOSITORY) private readonly followUpLog: FollowUpLogRepository,
     @Inject(ORGANIZATION_REPOSITORY) private readonly organizations: OrganizationRepository,
     private readonly notifications: NotificationsService,
+    private readonly regional: RegionalSettingsService,
   ) {}
 
   @Cron("0 10 * * *")
@@ -48,11 +52,17 @@ export class FollowUpScheduler {
   }
 
   private async processInterval(days: number, now: Date): Promise<void> {
-    const target = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    const start = startOfDay(target);
-    const end = endOfDay(target);
+    // "N days ago" is a calendar day where each booking's dealership is. Scan a window that
+    // covers that day in every zone, then keep the bookings on exactly that local date.
+    const start = new Date(now.getTime() - (days + 2) * DAY_MS);
+    const end = new Date(now.getTime() - (days - 2) * DAY_MS);
+    const scanned = await this.bookings.findCompletedWithoutOpportunity(start, end);
+    const zones = await this.regional.timeZonesOf(scanned.map((b) => b.dealershipId));
+    const candidates = scanned.filter((b) => {
+      const timeZone = zones.get(b.dealershipId)!;
+      return zonedIsoDate(b.slot.start, timeZone) === addIsoDays(zonedIsoDate(now, timeZone), -days);
+    });
 
-    const candidates = await this.bookings.findCompletedWithoutOpportunity(start, end);
     for (const booking of candidates) {
       if (await this.followUpLog.wasSent(booking.id, days)) continue;
 
@@ -74,16 +84,4 @@ export class FollowUpScheduler {
       this.logger.log(`Sent ${days}-day follow-up for booking ${booking.id}`);
     }
   }
-}
-
-function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
 }

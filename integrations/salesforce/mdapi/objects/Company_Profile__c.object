@@ -77,6 +77,27 @@
         <visibleLines>6</visibleLines>
     </fields>
     <fields>
+        <fullName>Locale__c</fullName>
+        <label>Locale</label>
+        <type>Text</type>
+        <length>35</length>
+        <description>BCP 47 locale with a region, e.g. en-IN — number and date formatting on the customer site and in emails. Blank inherits the Salesforce org&apos;s default. Validated by the TDM admin console.</description>
+    </fields>
+    <fields>
+        <fullName>Time_Zone__c</fullName>
+        <label>Time Zone</label>
+        <type>Text</type>
+        <length>64</length>
+        <description>IANA time zone, e.g. Asia/Kolkata — test-drive slot times and every displayed time. Blank inherits the Salesforce org&apos;s default. Validated by the TDM admin console.</description>
+    </fields>
+    <fields>
+        <fullName>Phone_Country_Code__c</fullName>
+        <label>Phone Country Code</label>
+        <type>Text</type>
+        <length>3</length>
+        <description>Calling code digits without +, e.g. 91 — prefixed to a customer phone number entered without one. Blank inherits the Salesforce org&apos;s default; when nothing sets it, customers enter numbers in international format.</description>
+    </fields>
+    <fields>
         <fullName>Site_Content__c</fullName>
         <label>Site Content</label>
         <type>LongTextArea</type>

@@ -111,6 +111,13 @@ export interface BookingEmailContext {
   branchName: string;
   branchAddress: string;
   salesRepName?: string;
+  /** Where the dealership is: the date/time is written in its language conventions and wall clock. */
+  locale: string;
+  timeZone: string;
+}
+
+function formatWhen(instant: Date, ctx: BookingEmailContext): string {
+  return instant.toLocaleString(ctx.locale, { dateStyle: "full", timeStyle: "short", timeZone: ctx.timeZone });
 }
 
 export function bookingConfirmationEmail(dealership: BrandProfile, ctx: BookingEmailContext, override?: TemplateOverride): { subject: string; html: string } {
@@ -121,7 +128,7 @@ export function bookingConfirmationEmail(dealership: BrandProfile, ctx: BookingE
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
       ${ctx.salesRepName ? infoRow("Your Sales Contact", ctx.salesRepName) : ""}
@@ -157,7 +164,7 @@ export function waitlistedEmail(dealership: BrandProfile, ctx: BookingEmailConte
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Requested Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Requested Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Waitlist Position", `#${position}`)}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
@@ -177,7 +184,7 @@ export function waitlistPromotedEmail(dealership: BrandProfile, ctx: BookingEmai
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
       ${ctx.salesRepName ? infoRow("Your Sales Contact", ctx.salesRepName) : ""}
@@ -198,7 +205,7 @@ export function cancellationEmail(dealership: BrandProfile, ctx: BookingEmailCon
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Original Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Original Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Reason", reason || "Not specified")}
     </table>
     <p style="color:#374151;font-size:15px;">Changed your mind? You're welcome to book a new test drive anytime.</p>
@@ -217,8 +224,8 @@ export function rescheduleEmail(dealership: BrandProfile, ctx: BookingEmailConte
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Previous Time", previousStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
-      ${infoRow("New Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Previous Time", formatWhen(previousStart, ctx))}
+      ${infoRow("New Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
   `;
@@ -241,7 +248,7 @@ export function reminderEmail(
     <p style="color:#374151;font-size:15px;">Just a reminder — your test drive is <strong>${leadText}</strong>.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
-      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
     <p style="color:#374151;font-size:15px;">Please bring a valid driving license. We look forward to seeing you!</p>
@@ -327,7 +334,7 @@ export function salesRepAssignedEmail(
       ${infoRow("Customer", ctx.customerName)}
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Date &amp; Time", ctx.scheduledStart.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" }))}
+      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>

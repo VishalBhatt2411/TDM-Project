@@ -77,7 +77,7 @@ export interface CreatePublicBookingRequest extends CreateBookingRequest {
   firstName: string;
   lastName: string;
   email: string;
-  /** 10-digit Indian mobile number, no country code — server prefixes +91. */
+  /** "+<code><number>", or a national number the server prefixes with the dealership's calling code. */
   mobileNumber: string;
 }
 

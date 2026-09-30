@@ -6,6 +6,7 @@ import { getBranding, saveBranding, uploadBrandImage } from "@/api/admin";
 import type { BrandImageKind, BrandLayerDto, BrandingEditorDto, BrandingFieldsDto, ConfigScopeParams } from "@/api/admin";
 import { brandAssetUrl } from "@/api/config";
 import { ConfigScopePicker } from "@/components/admin/ConfigScopePicker";
+import { RegionalSettingsCard } from "@/components/admin/RegionalSettingsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -723,6 +724,12 @@ export function AdminBrandingPage() {
             </div>
           </aside>
         </form>
+      )}
+
+      {scope && (
+        <div className="mt-6 lg:max-w-[calc(100%-23.5rem)]">
+          <RegionalSettingsCard key={scope.dealershipId ?? "company"} scope={scope} />
+        </div>
       )}
     </div>
   );

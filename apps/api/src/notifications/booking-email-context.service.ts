@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Booking, BranchRepository, CustomerRepository, SalesRepRepository, VehicleRepository } from "@tdm/domain";
 import { BRANCH_REPOSITORY, CUSTOMER_REPOSITORY, SALES_REP_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
+import { RegionalSettingsService } from "../config/regional-settings.service";
 import { BookingEmailContext } from "./email-templates";
 
 /** Assembles the shared template context (vehicle/branch/rep/customer labels) every booking email needs. */
@@ -11,14 +12,16 @@ export class BookingEmailContextService {
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
+    private readonly regional: RegionalSettingsService,
   ) {}
 
   async build(booking: Booking, customerNameOverride?: string): Promise<BookingEmailContext | null> {
-    const [vehicle, branch, rep, customer] = await Promise.all([
+    const [vehicle, branch, rep, customer, regional] = await Promise.all([
       this.vehicles.findById(booking.vehicleId),
       this.branches.findById(booking.branchId),
       booking.salesRepId ? this.salesReps.findById(booking.salesRepId) : Promise.resolve(null),
       customerNameOverride ? Promise.resolve(null) : this.customers.findById(booking.customerId),
+      this.regional.resolve(booking.dealershipId),
     ]);
     if (!vehicle || !branch) return null;
 
@@ -34,6 +37,8 @@ export class BookingEmailContextService {
       branchName: branchProps.name,
       branchAddress: branchProps.address.line1,
       salesRepName: rep ? rep.toProps().name : undefined,
+      locale: regional.locale,
+      timeZone: regional.timeZone,
     };
   }
 }

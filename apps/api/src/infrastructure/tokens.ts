@@ -9,6 +9,7 @@ export const BRANCH_REPOSITORY = Symbol("BranchRepository");
 export const DEALERSHIP_REPOSITORY = Symbol("DealershipRepository");
 export const BRANDING_REPOSITORY = Symbol("BrandingRepository");
 export const BRAND_ASSET_REPOSITORY = Symbol("BrandAssetRepository");
+export const REGIONAL_SETTINGS_REPOSITORY = Symbol("RegionalSettingsRepository");
 export const SALES_REP_REPOSITORY = Symbol("SalesRepRepository");
 export const STAFF_ASSIGNMENT_REPOSITORY = Symbol("StaffAssignmentRepository");
 /** Users of the business-data provider who can be given staff access — see StaffDirectory. */

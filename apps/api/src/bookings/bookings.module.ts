@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { DealershipConfigModule } from "../config/config.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { BookingsController } from "./bookings.controller";
 import { BookingsService } from "./bookings.service";
@@ -9,7 +10,7 @@ import { FollowUpScheduler } from "./followup.scheduler";
 import { QrCheckinService } from "./qr-checkin.service";
 
 @Module({
-  imports: [AuthModule, NotificationsModule],
+  imports: [AuthModule, NotificationsModule, DealershipConfigModule],
   controllers: [BookingsController],
   providers: [BookingsService, BookingMutationService, ReminderScheduler, FollowUpScheduler, QrCheckinService],
   exports: [BookingMutationService, QrCheckinService],

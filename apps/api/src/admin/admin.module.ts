@@ -24,6 +24,8 @@ import { ConfigScopeResolver } from "./config-scope";
 import { AdminBrandingController } from "./admin-branding.controller";
 import { AdminBrandingService } from "./admin-branding.service";
 import { DealershipConfigModule } from "../config/config.module";
+import { AdminRegionalSettingsController } from "./admin-regional-settings.controller";
+import { AdminRegionalSettingsService } from "./admin-regional-settings.service";
 
 @Module({
   imports: [AuthModule, NotificationsModule, BookingsModule, StaffAuthModule, ComplianceModule, DealershipConfigModule],
@@ -41,7 +43,8 @@ import { DealershipConfigModule } from "../config/config.module";
     NotificationTemplatesController,
     AdminComplianceController,
     AdminBrandingController,
+    AdminRegionalSettingsController,
   ],
-  providers: [AdminAuthService, AdminUsersService, AdminBookingsService, AdminComplianceService, AdminBrandingService, ConfigScopeResolver],
+  providers: [AdminAuthService, AdminUsersService, AdminBookingsService, AdminComplianceService, AdminBrandingService, AdminRegionalSettingsService, ConfigScopeResolver],
 })
 export class AdminModule {}

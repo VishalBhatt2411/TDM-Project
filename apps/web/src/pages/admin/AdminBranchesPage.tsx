@@ -14,7 +14,7 @@ const EMPTY_FORM: BranchInput = {
   city: "",
   state: "",
   postalCode: "",
-  country: "India",
+  country: "",
   phone: "",
   email: "",
   operatingHours: "",

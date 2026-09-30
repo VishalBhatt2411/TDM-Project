@@ -13,10 +13,7 @@ import { EmiCalculator } from "@/components/EmiCalculator";
 import { useAuth } from "@/context/auth-context";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { cn } from "@/lib/utils";
-
-function formatInr(amount: number): string {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
-}
+import { useRegional } from "@/hooks/use-regional";
 
 const AVAILABILITY_LABEL: Record<string, string> = {
   In_Stock: "In Stock",
@@ -44,6 +41,7 @@ function HighlightList({ title, items }: { title: string; items: string[] }) {
 
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const regional = useRegional();
   const { data: vehicle, isLoading, isError } = useQuery({
     queryKey: ["vehicle", id],
     queryFn: () => getVehicle(id!),
@@ -92,9 +90,9 @@ export function VehicleDetailPage() {
             {vehicle.year} {vehicle.make} {vehicle.model}
           </h1>
           <p className="mt-2 text-2xl font-semibold">
-            {formatInr(vehicle.price.amount)}
+            {regional.money(vehicle.price.amount, vehicle.price.currency)}
             {vehicle.priceMax && vehicle.priceMax.amount !== vehicle.price.amount && (
-              <span className="text-base font-normal text-muted-foreground"> – {formatInr(vehicle.priceMax.amount)} (ex-showroom)</span>
+              <span className="text-base font-normal text-muted-foreground"> – {regional.money(vehicle.priceMax.amount, vehicle.priceMax.currency)} (ex-showroom)</span>
             )}
           </p>
           {vehicle.description && <p className="mt-4 text-muted-foreground">{vehicle.description}</p>}
@@ -171,7 +169,7 @@ export function VehicleDetailPage() {
                         <td className="p-3 font-medium">
                           {v.name} {v.isDefault && <Badge variant="secondary" className="ml-1">Popular</Badge>}
                         </td>
-                        <td className="p-3">{formatInr(v.price.amount)}</td>
+                        <td className="p-3">{regional.money(v.price.amount, v.price.currency)}</td>
                         <td className="p-3">{v.engine}</td>
                         <td className="p-3">{v.fuelType}</td>
                         <td className="p-3">{v.transmission}</td>
@@ -192,7 +190,7 @@ export function VehicleDetailPage() {
 
           {/* EMI Calculator */}
           <div className="mt-8">
-            <EmiCalculator vehiclePrice={vehicle.price.amount} />
+            <EmiCalculator vehiclePrice={vehicle.price.amount} currency={vehicle.price.currency} />
           </div>
 
           {/* FAQs */}

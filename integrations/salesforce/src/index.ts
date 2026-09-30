@@ -14,3 +14,4 @@ export * from "./repositories/staff.repository";
 export * from "./repositories/asset.repository";
 export * from "./repositories/config.repository";
 export * from "./repositories/branding.repository";
+export * from "./org-defaults";

@@ -122,8 +122,11 @@ export class CreatePublicBookingDto extends CreateBookingDto {
   @IsEmail()
   email!: string;
 
-  /** 10-digit Indian mobile number, no country code (server prefixes +91). */
-  @Matches(/^[6-9]\d{9}$/, { message: "Enter a valid 10-digit Indian mobile number." })
+  /**
+   * International ("+<code><number>") or national — the server prefixes the dealership's
+   * calling code to a national number, and rejects one when the dealership has none set.
+   */
+  @Matches(/^\+?[\d\s().-]{6,24}$/, { message: "Enter a valid mobile number." })
   mobileNumber!: string;
 }
 

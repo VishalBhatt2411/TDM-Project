@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useAdminRegional } from "@/hooks/use-regional";
 
 const BODY_TYPES = ["Sedan", "SUV", "Hatchback", "Coupe", "Convertible", "Truck", "Van", "Wagon", "MPV", "Pickup", "Luxury"];
 const FUEL_TYPES = ["Petrol", "Diesel", "Electric", "Hybrid", "Plugin_Hybrid", "CNG"];
@@ -95,6 +96,9 @@ function VehicleForm({
 }) {
   const [form, setForm] = React.useState(initial);
   const set = (patch: Partial<AdminVehicleInput>) => setForm((f) => ({ ...f, ...patch }));
+  // Prices are stored in the data provider's currency — the server stamps it, this only labels it.
+  const { currencyCode } = useAdminRegional();
+  const currencySuffix = currencyCode ? ` (${currencyCode})` : "";
 
   return (
     <form
@@ -164,11 +168,11 @@ function VehicleForm({
       </div>
       <div className="grid grid-cols-4 gap-3">
         <div className="space-y-1.5">
-          <Label>Price (₹)</Label>
+          <Label>Price{currencySuffix}</Label>
           <Input type="number" value={form.price} onChange={(e) => set({ price: Number(e.target.value) })} required />
         </div>
         <div className="space-y-1.5">
-          <Label>Price Max (₹)</Label>
+          <Label>Price Max{currencySuffix}</Label>
           <Input type="number" value={form.priceMax ?? ""} onChange={(e) => set({ priceMax: e.target.value ? Number(e.target.value) : undefined })} />
         </div>
         <div className="space-y-1.5">
@@ -235,6 +239,7 @@ function VehicleForm({
 
 export function AdminVehiclesPage() {
   const queryClient = useQueryClient();
+  const regional = useAdminRegional();
   const { data: vehicles, isLoading } = useQuery({ queryKey: ["admin-vehicles"], queryFn: listAdminVehicles });
   const { data: branches } = useQuery({ queryKey: ["branches-lookup"], queryFn: listBranchesLookup });
   const [showCreateForm, setShowCreateForm] = React.useState(false);
@@ -318,7 +323,7 @@ export function AdminVehiclesPage() {
                       {vehicle.isFeatured && <Badge variant="accent">Featured</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {vehicle.bodyType} · {vehicle.fuelType} · ₹{vehicle.price.amount.toLocaleString("en-IN")} · VIN {vehicle.vin}
+                      {vehicle.bodyType} · {vehicle.fuelType} · {regional.money(vehicle.price.amount, vehicle.price.currency)} · VIN {vehicle.vin}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">

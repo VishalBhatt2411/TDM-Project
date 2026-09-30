@@ -114,13 +114,13 @@ export class AuthService {
     firstName: string;
     lastName: string;
     email: string;
-    mobileNumber: string;
+    phone: PhoneNumber;
   }): Promise<Customer> {
     const customer = Customer.register({
       id: randomUUID(),
       name: PersonName.create(input.firstName, input.lastName),
       email: Email.create(input.email),
-      phone: PhoneNumber.create(`+91${input.mobileNumber}`),
+      phone: input.phone,
     });
     customer.verifyEmail();
     customer.verifyPhone();

@@ -125,4 +125,8 @@ export interface VehicleAvailabilityResponse {
   vehicleId: string;
   date: string;
   availableSlots: { start: string; end: string }[];
+  /** IANA zone of the vehicle's dealership — `date` and slot wall-clock times are in it. */
+  timeZone: string;
+  /** Calling code a national phone number is prefixed with when booking; absent means enter "+<code>...". */
+  phoneCountryCode?: string;
 }

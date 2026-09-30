@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { BookingRepository, CustomerRepository } from "@tdm/domain";
+import { Booking, BookingRepository, CustomerRepository } from "@tdm/domain";
+import { zonedIsoDate } from "@tdm/types";
 import { OrganizationRepository, ReminderLogRepository, ReminderType } from "@tdm/postgres-adapter";
 import { BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, ORGANIZATION_REPOSITORY, REMINDER_LOG_REPOSITORY } from "../infrastructure/tokens";
 import { runForEachTenant } from "../tenancy/tenant-context";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
+import { RegionalSettingsService } from "../config/regional-settings.service";
 
 /**
  * Sends 24h / 2h / day-of test-drive reminders. Runs every 15 minutes and scans a
@@ -25,6 +27,7 @@ export class ReminderScheduler {
     @Inject(ORGANIZATION_REPOSITORY) private readonly organizations: OrganizationRepository,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
+    private readonly regional: RegionalSettingsService,
   ) {}
 
   @Cron("*/15 * * * *")
@@ -35,18 +38,27 @@ export class ReminderScheduler {
       async () => {
         await this.processWindow("24h", addHours(now, 23), addHours(now, 25));
         await this.processWindow("2h", addHours(now, 1.5), addHours(now, 2.5));
-        await this.processWindow("day_of", startOfDay(now), endOfDay(now));
+        // Later today where each booking's dealership is: scan the next 24h, keep same-local-date slots.
+        await this.processWindow("day_of", now, addHours(now, 24), (bookings) => this.onLocalDateOf(now, bookings));
       },
       this.logger,
       "reminder_job_failed",
     );
   }
 
-  private async processWindow(type: ReminderType, start: Date, end: Date): Promise<void> {
-    const candidates = await this.bookings.findByStatusWithinWindow("Confirmed", start, end);
-    const alsoRequested = await this.bookings.findByStatusWithinWindow("Requested", start, end);
+  private async processWindow(
+    type: ReminderType,
+    start: Date,
+    end: Date,
+    keep?: (bookings: Booking[]) => Promise<Booking[]>,
+  ): Promise<void> {
+    const [candidates, alsoRequested] = await Promise.all([
+      this.bookings.findByStatusWithinWindow("Confirmed", start, end),
+      this.bookings.findByStatusWithinWindow("Requested", start, end),
+    ]);
+    const due = keep ? await keep([...candidates, ...alsoRequested]) : [...candidates, ...alsoRequested];
 
-    for (const booking of [...candidates, ...alsoRequested]) {
+    for (const booking of due) {
       if (await this.reminderLog.wasSent(booking.id, type)) continue;
       if (type === "day_of" && booking.slot.start.getTime() < Date.now()) continue; // already started/passed
 
@@ -59,20 +71,17 @@ export class ReminderScheduler {
       }
     }
   }
+
+  /** Bookings whose slot falls on the same calendar date as `instant` in their dealership's zone. */
+  private async onLocalDateOf(instant: Date, bookings: Booking[]): Promise<Booking[]> {
+    const zones = await this.regional.timeZonesOf(bookings.map((b) => b.dealershipId));
+    return bookings.filter((b) => {
+      const timeZone = zones.get(b.dealershipId)!;
+      return zonedIsoDate(b.slot.start, timeZone) === zonedIsoDate(instant, timeZone);
+    });
+  }
 }
 
 function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
-}
-
-function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
 }
