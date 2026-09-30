@@ -37,6 +37,8 @@ export interface BookingSchedule {
   minNoticeMinutes?: number;
   /** How long before the start a customer may still cancel or reschedule; staff aren't bound by it. */
   cancellationCutoffMinutes?: number;
+  /** How long before the start check-in (and the customer's QR code) opens; it closes when the slot ends. */
+  checkInOpensMinutes?: number;
   /** Days after a completed drive without a sale that the customer is sent a follow-up. */
   followUpDays?: number[];
   closures?: Closure[];
@@ -48,6 +50,7 @@ export interface ResolvedBookingSchedule {
   breaks: TimeWindow[];
   minNoticeMinutes: number;
   cancellationCutoffMinutes: number;
+  checkInOpensMinutes: number;
   followUpDays: number[];
   /** Every scope's closures and the data provider's holidays, by date. */
   closures: Closure[];
@@ -70,6 +73,8 @@ export const MAX_BREAKS = 5;
 export const NOTICE_MINUTES_RANGE = { min: 0, max: 30 * 24 * 60, step: 15 } as const;
 /** Up to 7 days, in quarter hours; 0 lets a customer change a booking until it starts. */
 export const CANCELLATION_CUTOFF_RANGE = { min: 0, max: 7 * 24 * 60, step: 15 } as const;
+/** Up to a day early, in quarter hours; 0 opens check-in at the slot's start. */
+export const CHECK_IN_OPENS_RANGE = { min: 0, max: 24 * 60, step: 15 } as const;
 export const FOLLOW_UP_DAYS_RANGE = { min: 1, max: 365, maxCount: 10 } as const;
 export const MAX_CLOSURES = 100;
 export const MAX_CLOSURE_NAME = 80;
@@ -79,6 +84,7 @@ export const MAX_CLOSURE_NAME = 80;
  * overrides them in the admin console. They're behaviour defaults, not any tenant's business data.
  */
 export const DEFAULT_CANCELLATION_CUTOFF_MINUTES = 2 * 60;
+export const DEFAULT_CHECK_IN_OPENS_MINUTES = 60;
 export const DEFAULT_FOLLOW_UP_DAYS: readonly number[] = [3, 7, 14];
 
 /** Every field a schedule layer can set. */
@@ -88,6 +94,7 @@ export const BOOKING_SCHEDULE_FIELDS = [
   "breaks",
   "minNoticeMinutes",
   "cancellationCutoffMinutes",
+  "checkInOpensMinutes",
   "followUpDays",
   "closures",
 ] as const satisfies readonly (keyof BookingSchedule)[];
@@ -245,6 +252,9 @@ export function parseBookingSchedule(raw: unknown): BookingSchedule {
   if (raw.cancellationCutoffMinutes !== undefined && raw.cancellationCutoffMinutes !== null) {
     schedule.cancellationCutoffMinutes = parseStepMinutes(raw.cancellationCutoffMinutes, "cancellationCutoffMinutes", CANCELLATION_CUTOFF_RANGE);
   }
+  if (raw.checkInOpensMinutes !== undefined && raw.checkInOpensMinutes !== null) {
+    schedule.checkInOpensMinutes = parseStepMinutes(raw.checkInOpensMinutes, "checkInOpensMinutes", CHECK_IN_OPENS_RANGE);
+  }
   if (raw.followUpDays !== undefined && raw.followUpDays !== null) schedule.followUpDays = parseFollowUpDays(raw.followUpDays);
   if (raw.closures !== undefined && raw.closures !== null) schedule.closures = parseClosures(raw.closures);
   return schedule;
@@ -267,6 +277,7 @@ export function resolveBookingSchedule(
     breaks: pick("breaks") ?? [],
     minNoticeMinutes: pick("minNoticeMinutes") ?? NOTICE_MINUTES_RANGE.min,
     cancellationCutoffMinutes: pick("cancellationCutoffMinutes") ?? DEFAULT_CANCELLATION_CUTOFF_MINUTES,
+    checkInOpensMinutes: pick("checkInOpensMinutes") ?? DEFAULT_CHECK_IN_OPENS_MINUTES,
     followUpDays: pick("followUpDays") ?? [...DEFAULT_FOLLOW_UP_DAYS],
     closures: [...layers.flatMap((layer) => layer.closures ?? []), ...providerClosures].sort((a, b) => a.date.localeCompare(b.date)),
   };

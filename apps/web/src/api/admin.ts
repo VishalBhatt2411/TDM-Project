@@ -623,6 +623,8 @@ export interface BookingScheduleLayerDto {
   minNoticeMinutes?: number;
   /** How long before a drive a customer can still cancel or reschedule it; staff may until it starts. */
   cancellationCutoffMinutes?: number;
+  /** How long before a drive check-in (and the customer's QR code) opens; it closes when the slot ends. */
+  checkInOpensMinutes?: number;
   /** Days after a completed drive with no sale to send a follow-up; an empty list sends none. */
   followUpDays?: number[];
   /** This scope's own closures — they add to the company's and the org's holidays. */
@@ -652,6 +654,7 @@ export interface BookingScheduleEditorDto {
     slotMinutes: { min: number; max: number; step: number };
     minNoticeMinutes: { min: number; max: number; step: number };
     cancellationCutoffMinutes: { min: number; max: number; step: number };
+    checkInOpensMinutes: { min: number; max: number; step: number };
     followUpDays: { min: number; max: number; maxCount: number };
     maxBreaks: number;
     maxClosures: number;

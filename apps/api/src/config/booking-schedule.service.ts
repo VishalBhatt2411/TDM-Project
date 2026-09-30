@@ -118,6 +118,11 @@ export class BookingScheduleService {
     return audience === "customer" ? (await this.resolve(dealershipId)).cancellationCutoffMinutes : 0;
   }
 
+  /** How long before a drive check-in opens at this dealership. */
+  async checkInOpensMinutes(dealershipId: string): Promise<number> {
+    return (await this.resolve(dealershipId)).checkInOpensMinutes;
+  }
+
   /** Drops cached schedules after an edit: one dealership's, or — for a company-wide edit — all of the organization's. */
   invalidate(organizationId: string, dealershipId?: string): void {
     this.cache.invalidate(organizationId, dealershipId);

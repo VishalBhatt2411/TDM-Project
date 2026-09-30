@@ -32,6 +32,7 @@ interface ScheduleForm {
   slotMinutes: string;
   notice: DurationValue;
   cutoff: DurationValue;
+  checkIn: DurationValue;
   ownFollowUps: boolean;
   /** Comma-separated days after the drive. */
   followUpDays: string;
@@ -70,6 +71,7 @@ function toForm(view: BookingScheduleEditorDto): ScheduleForm {
     slotMinutes: own.slotMinutes ? String(own.slotMinutes) : "",
     notice: durationValueOf(own.minNoticeMinutes, fallback.minNoticeMinutes),
     cutoff: durationValueOf(own.cancellationCutoffMinutes, fallback.cancellationCutoffMinutes),
+    checkIn: durationValueOf(own.checkInOpensMinutes, fallback.checkInOpensMinutes),
     ownFollowUps: !!own.followUpDays,
     followUpDays: (own.followUpDays ?? fallback.followUpDays).join(", "),
     closures: (own.closures ?? []).map(closureFormOf),
@@ -87,6 +89,7 @@ function toLayer(form: ScheduleForm): BookingScheduleLayerDto {
     ...(form.slotMinutes ? { slotMinutes: Number(form.slotMinutes) } : {}),
     ...(form.notice.value.trim() ? { minNoticeMinutes: durationMinutes(form.notice) } : {}),
     ...(form.cutoff.value.trim() ? { cancellationCutoffMinutes: durationMinutes(form.cutoff) } : {}),
+    ...(form.checkIn.value.trim() ? { checkInOpensMinutes: durationMinutes(form.checkIn) } : {}),
     ...(form.ownFollowUps ? { followUpDays: followUpDaysOf(form.followUpDays).map(Number) } : {}),
     ...(form.closures.length ? { closures: form.closures.map(closureDtoOf) } : {}),
     ...(form.ownHours
@@ -122,6 +125,7 @@ function windowError(window: { start: string; end: string }): string | undefined
 function validate(form: ScheduleForm, schema: BookingScheduleEditorDto["schema"]) {
   const notice = durationError(form.notice, schema.minNoticeMinutes);
   const cutoff = durationError(form.cutoff, schema.cancellationCutoffMinutes);
+  const checkIn = durationError(form.checkIn, schema.checkInOpensMinutes);
   const followUps = followUpError(form, schema.followUpDays);
   const closures = closureErrors(form.closures, schema.maxClosureName);
   const days: Record<string, string> = {};
@@ -145,11 +149,12 @@ function validate(form: ScheduleForm, schema: BookingScheduleEditorDto["schema"]
   return {
     notice,
     cutoff,
+    checkIn,
     followUps,
     days,
     breaks,
     closures,
-    has: !!(notice || cutoff || followUps) || Object.keys(days).length + Object.keys(breaks).length + Object.keys(closures).length > 0,
+    has: !!(notice || cutoff || checkIn || followUps) || Object.keys(days).length + Object.keys(breaks).length + Object.keys(closures).length > 0,
   };
 }
 
@@ -395,6 +400,21 @@ export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
                 }
               />
 
+              <DurationField
+                id="schedule-check-in"
+                label="Check-in opens"
+                value={form.checkIn}
+                onChange={(checkIn) => update({ checkIn })}
+                fallbackMinutes={fallback.checkInOpensMinutes}
+                error={errors.checkIn}
+                hint={
+                  <>
+                    How long before the drive customers can check in or get their QR code
+                    {form.checkIn.value.trim() ? "" : blankHint(fallback.checkInOpensMinutes)}. Check-in closes when the slot ends.
+                  </>
+                }
+              />
+
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3">
                   <Label htmlFor="schedule-follow-ups">Follow-up emails</Label>
@@ -445,6 +465,7 @@ export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
                   slotMinutes: "",
                   notice: { ...form.notice, value: "" },
                   cutoff: { ...form.cutoff, value: "" },
+                  checkIn: { ...form.checkIn, value: "" },
                   ownFollowUps: false,
                   closures: [],
                   ownHours: false,

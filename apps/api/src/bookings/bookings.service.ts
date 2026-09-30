@@ -184,7 +184,10 @@ export class BookingsService {
       throw new ForbiddenException("A check-in code is only available for a confirmed booking.");
     }
     await this.featureFlags.assertEnabled("qr_check_in", { dealershipId: booking.dealershipId, branchId: booking.branchId });
-    return this.qrCheckin.issueToken(booking.id);
+    const opensMinutes = await this.schedule.checkInOpensMinutes(booking.dealershipId);
+    // A code is only handed out while it could actually be used, and dies with the slot.
+    booking.assertCanCheckIn(opensMinutes);
+    return this.qrCheckin.issueToken(booking.id, booking.checkInWindow(opensMinutes).closesAt);
   }
 
   async cancel(customerId: string, bookingId: string, dto: CancelBookingDto): Promise<BookingDto> {

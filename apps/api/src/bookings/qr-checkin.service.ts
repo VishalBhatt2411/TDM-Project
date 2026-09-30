@@ -12,9 +12,11 @@ export interface CheckInToken {
 export class QrCheckinService {
   constructor(private readonly jwtService: JwtService) {}
 
-  issueToken(bookingId: string): CheckInToken {
-    const token = this.jwtService.sign({ sub: bookingId, scope: AUTH_SCOPE.CHECKIN }, { expiresIn: CHECKIN_TOKEN_TTL_SECONDS });
-    return { token, expiresAt: new Date(Date.now() + CHECKIN_TOKEN_TTL_SECONDS * 1000).toISOString() };
+  /** A code valid until `notAfter` (the slot's end) or the token TTL, whichever is sooner. */
+  issueToken(bookingId: string, notAfter: Date, now: Date = new Date()): CheckInToken {
+    const expiresInSeconds = Math.min(CHECKIN_TOKEN_TTL_SECONDS, Math.floor((notAfter.getTime() - now.getTime()) / 1000));
+    const token = this.jwtService.sign({ sub: bookingId, scope: AUTH_SCOPE.CHECKIN }, { expiresIn: expiresInSeconds });
+    return { token, expiresAt: new Date(now.getTime() + expiresInSeconds * 1000).toISOString() };
   }
 
   verifyToken(token: string, bookingId: string): void {

@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { useQuery } from "@tanstack/react-query";
 import { getCheckInToken } from "@/api/bookings";
 import { useRegional } from "@/hooks/use-regional";
+import { errorMessage } from "@/lib/api-error";
 
 interface QrCheckInCodeProps {
   bookingId: string;
@@ -13,9 +14,11 @@ interface QrCheckInCodeProps {
 /** Renders the customer's signed check-in token as a scannable QR code — staff scans (or types) it at check-in. */
 export function QrCheckInCode({ bookingId, timeZone }: QrCheckInCodeProps) {
   const regional = useRegional();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["check-in-token", bookingId],
     queryFn: () => getCheckInToken(bookingId),
+    // A refusal (outside the check-in window) won't change on retry.
+    retry: false,
   });
   const [dataUrl, setDataUrl] = React.useState<string | null>(null);
 
@@ -26,7 +29,7 @@ export function QrCheckInCode({ bookingId, timeZone }: QrCheckInCodeProps) {
 
   if (isLoading) return <div className="mx-auto h-60 w-60 animate-pulse rounded-md bg-muted" />;
   if (isError || !data) {
-    return <p className="text-center text-sm text-destructive">Couldn't generate a check-in code. Please try again.</p>;
+    return <p className="text-center text-sm text-destructive">{errorMessage(error) ?? "Couldn't generate a check-in code. Please try again."}</p>;
   }
 
   return (

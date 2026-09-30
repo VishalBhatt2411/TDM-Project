@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Put, Query, UseGuards } fro
 import { ArrayMaxSize, IsArray, IsInt, IsObject, IsOptional } from "class-validator";
 import {
   CANCELLATION_CUTOFF_RANGE,
+  CHECK_IN_OPENS_RANGE,
   FOLLOW_UP_DAYS_RANGE,
   MAX_BREAKS,
   MAX_CLOSURES,
@@ -28,11 +29,12 @@ class SaveBookingScheduleDto {
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_BREAKS) breaks?: unknown[];
   @IsOptional() @IsInt() minNoticeMinutes?: number;
   @IsOptional() @IsInt() cancellationCutoffMinutes?: number;
+  @IsOptional() @IsInt() checkInOpensMinutes?: number;
   @IsOptional() @IsArray() @ArrayMaxSize(FOLLOW_UP_DAYS_RANGE.maxCount) followUpDays?: unknown[];
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_CLOSURES) closures?: unknown[];
 }
 
-/** Slot length, opening hours, breaks, closures, notice, cancellation cutoff and follow-ups for test-drive bookings, company-wide or per dealership (never per branch). */
+/** Slot length, opening hours, breaks, closures, notice, cancellation cutoff, check-in window and follow-ups for test-drive bookings, company-wide or per dealership (never per branch). */
 @Controller("admin/booking-schedule")
 @UseGuards(StaffAuthGuard, PermissionGuard)
 @RequirePermission(PERMISSIONS.MANAGE_CONFIG)
@@ -65,6 +67,7 @@ export class AdminBookingScheduleController {
       slotMinutes: SLOT_MINUTES_RANGE,
       minNoticeMinutes: NOTICE_MINUTES_RANGE,
       cancellationCutoffMinutes: CANCELLATION_CUTOFF_RANGE,
+      checkInOpensMinutes: CHECK_IN_OPENS_RANGE,
       followUpDays: FOLLOW_UP_DAYS_RANGE,
       maxBreaks: MAX_BREAKS,
       maxClosures: MAX_CLOSURES,

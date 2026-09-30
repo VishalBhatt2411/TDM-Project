@@ -134,7 +134,7 @@ export class AdminBookingsService {
       this.qrCheckin.verifyToken(dto.qrToken, bookingId);
     }
 
-    booking.checkIn(dto.method);
+    booking.checkIn(dto.method, await this.schedule.checkInOpensMinutes(booking.dealershipId));
     const saved = await this.bookings.save(booking);
     await this.logAction(staff, "BOOKING_CHECKED_IN", saved, { method: dto.method });
     return adminBookingToDto(saved);

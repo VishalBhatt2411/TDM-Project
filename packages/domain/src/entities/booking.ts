@@ -201,13 +201,32 @@ export class Booking {
     });
   }
 
-  checkIn(method: CheckInMethod, asOf: Date = new Date()): void {
+  /** When check-in opens — `opensMinutes` (the dealership's policy) before the start — and closes, at the slot's end. */
+  checkInWindow(opensMinutes: number): { opensAt: Date; closesAt: Date } {
+    return { opensAt: new Date(this.props.slot.start.getTime() - opensMinutes * 60_000), closesAt: this.props.slot.end };
+  }
+
+  /** Throws unless a confirmed, not-yet-checked-in booking is inside its check-in window. */
+  assertCanCheckIn(opensMinutes: number, asOf: Date = new Date()): void {
     if (this.props.status !== "Confirmed") {
       throw new IllegalBookingStateError(`Cannot check in a booking with status "${this.props.status}".`);
     }
     if (this.props.checkInTimestamp) {
       throw new IllegalBookingStateError("This booking has already been checked in.");
     }
+    const { opensAt, closesAt } = this.checkInWindow(opensMinutes);
+    if (asOf < opensAt) {
+      throw new IllegalBookingStateError(
+        opensMinutes > 0
+          ? `Check-in opens ${durationText(opensMinutes)} before the drive starts.`
+          : "Check-in opens when the drive starts.",
+      );
+    }
+    if (asOf >= closesAt) throw new IllegalBookingStateError("This drive's time slot has ended — reschedule it instead.");
+  }
+
+  checkIn(method: CheckInMethod, opensMinutes: number, asOf: Date = new Date()): void {
+    this.assertCanCheckIn(opensMinutes, asOf);
     this.props.checkInMethod = method;
     this.props.checkInTimestamp = asOf;
   }
