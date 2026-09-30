@@ -1,6 +1,15 @@
 import { BadRequestException, Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
 import { ArrayMaxSize, IsArray, IsInt, IsObject, IsOptional } from "class-validator";
-import { MAX_BREAKS, NOTICE_MINUTES_RANGE, SLOT_MINUTES_RANGE, WEEKDAYS } from "@tdm/domain";
+import {
+  CANCELLATION_CUTOFF_RANGE,
+  FOLLOW_UP_DAYS_RANGE,
+  MAX_BREAKS,
+  MAX_CLOSURES,
+  MAX_CLOSURE_NAME,
+  NOTICE_MINUTES_RANGE,
+  SLOT_MINUTES_RANGE,
+  WEEKDAYS,
+} from "@tdm/domain";
 import { StaffAuthGuard } from "./staff-auth.guard";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
 import { PermissionGuard } from "./permission.guard";
@@ -18,9 +27,12 @@ class SaveBookingScheduleDto {
   @IsOptional() @IsObject() weeklyHours?: Record<string, unknown>;
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_BREAKS) breaks?: unknown[];
   @IsOptional() @IsInt() minNoticeMinutes?: number;
+  @IsOptional() @IsInt() cancellationCutoffMinutes?: number;
+  @IsOptional() @IsArray() @ArrayMaxSize(FOLLOW_UP_DAYS_RANGE.maxCount) followUpDays?: unknown[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_CLOSURES) closures?: unknown[];
 }
 
-/** Slot length, opening hours, breaks and minimum notice for test-drive bookings, company-wide or per dealership (never per branch). */
+/** Slot length, opening hours, breaks, closures, notice, cancellation cutoff and follow-ups for test-drive bookings, company-wide or per dealership (never per branch). */
 @Controller("admin/booking-schedule")
 @UseGuards(StaffAuthGuard, PermissionGuard)
 @RequirePermission(PERMISSIONS.MANAGE_CONFIG)
@@ -49,7 +61,16 @@ export class AdminBookingScheduleController {
 
   /** What the editor needs to offer valid choices without duplicating the server's rules. */
   private schema() {
-    return { slotMinutes: SLOT_MINUTES_RANGE, minNoticeMinutes: NOTICE_MINUTES_RANGE, maxBreaks: MAX_BREAKS, weekdays: WEEKDAYS };
+    return {
+      slotMinutes: SLOT_MINUTES_RANGE,
+      minNoticeMinutes: NOTICE_MINUTES_RANGE,
+      cancellationCutoffMinutes: CANCELLATION_CUTOFF_RANGE,
+      followUpDays: FOLLOW_UP_DAYS_RANGE,
+      maxBreaks: MAX_BREAKS,
+      maxClosures: MAX_CLOSURES,
+      maxClosureName: MAX_CLOSURE_NAME,
+      weekdays: WEEKDAYS,
+    };
   }
 
   private async resolveDealership(access: StaffAccess, query: ConfigScopeQueryDto): Promise<string | undefined> {

@@ -4,6 +4,7 @@ import {
   BrandAssetRepository,
   BookingSchedule,
   BookingScheduleRepository,
+  Closure,
   BrandLayer,
   BrandingRepository,
   DataProviderOutdatedError,
@@ -20,7 +21,7 @@ import {
 import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "../connection-source";
 import { brandingFromRecord, brandingToRecord } from "../mappers";
-import { orgBusinessHours, orgRegionalDefaults } from "../org-defaults";
+import { orgBusinessHours, orgHolidays, orgRegionalDefaults } from "../org-defaults";
 import { BRANDING_FIELDS, escapeSoql, toEighteenCharId, withConnection } from "../soql";
 import { isContentDocumentId, CONTENT_TYPE_BY_EXTENSION, EXTENSION_BY_CONTENT_TYPE, readAll } from "../files";
 
@@ -219,7 +220,7 @@ function scheduleFromRecord(record: any, object: string): BookingSchedule {
   }
 }
 
-/** Booking schedules as Booking_Schedule__c JSON on Dealership__c and the Company_Profile__c singleton, over the org's default BusinessHours. */
+/** Booking schedules as Booking_Schedule__c JSON on Dealership__c and the Company_Profile__c singleton, over the org's default BusinessHours and Holidays. */
 export class SalesforceBookingScheduleRepository implements BookingScheduleRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
 
@@ -258,6 +259,10 @@ export class SalesforceBookingScheduleRepository implements BookingScheduleRepos
 
   async findProviderHours(): Promise<WeeklyHours> {
     return withConnection(this.connectionProvider, (conn) => orgBusinessHours(this.connectionProvider, conn));
+  }
+
+  async findProviderClosures(): Promise<Closure[]> {
+    return withConnection(this.connectionProvider, (conn) => orgHolidays(this.connectionProvider, conn));
   }
 }
 

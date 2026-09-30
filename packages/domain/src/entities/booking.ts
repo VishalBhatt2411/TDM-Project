@@ -1,4 +1,5 @@
 import { CancellationWindowExpiredError, IllegalBookingStateError } from "../errors";
+import { durationText } from "./booking-schedule";
 import { Address, TimeSlot } from "../value-objects";
 
 export type DriveType = "Dealership" | "Home";
@@ -51,9 +52,6 @@ export interface BookingProps {
   /** Internal, staff-only notes (visible to the assigned rep and management, never the customer). */
   staffNotes?: string;
 }
-
-/** How long before the scheduled start a customer may still cancel/reschedule for free. */
-const CANCELLATION_CUTOFF_HOURS = 2;
 
 /** Sentinel id for a Booking that has been requested but not yet assigned an id by the repository. */
 export const UNASSIGNED_ID = "__unassigned__";
@@ -159,11 +157,13 @@ export class Booking {
     this.props.salesRepId = salesRepId;
   }
 
-  private assertWithinCancellationWindow(asOf: Date): void {
-    const cutoffMs = CANCELLATION_CUTOFF_HOURS * 60 * 60 * 1000;
-    if (this.props.slot.start.getTime() - asOf.getTime() < cutoffMs) {
+  /** `cutoffMinutes` is the dealership's policy for who is changing it — 0 for staff. */
+  private assertWithinCancellationWindow(cutoffMinutes: number, asOf: Date): void {
+    if (this.props.slot.start.getTime() - asOf.getTime() < cutoffMinutes * 60_000) {
       throw new CancellationWindowExpiredError(
-        `Bookings can only be changed at least ${CANCELLATION_CUTOFF_HOURS} hours before the scheduled start.`,
+        cutoffMinutes > 0
+          ? `Bookings can only be changed at least ${durationText(cutoffMinutes)} before the scheduled start.`
+          : "This drive has already started, so it can't be changed.",
       );
     }
   }
@@ -174,16 +174,16 @@ export class Booking {
     }
   }
 
-  cancel(reason: string, asOf: Date = new Date()): void {
+  cancel(reason: string, cutoffMinutes: number, asOf: Date = new Date()): void {
     this.assertActive();
-    this.assertWithinCancellationWindow(asOf);
+    this.assertWithinCancellationWindow(cutoffMinutes, asOf);
     this.props.status = "Cancelled";
     this.props.cancellationReason = reason;
   }
 
-  reschedule(newSlot: TimeSlot, newBookingId: string, asOf: Date = new Date()): Booking {
+  reschedule(newSlot: TimeSlot, newBookingId: string, cutoffMinutes: number, asOf: Date = new Date()): Booking {
     this.assertActive();
-    this.assertWithinCancellationWindow(asOf);
+    this.assertWithinCancellationWindow(cutoffMinutes, asOf);
     this.props.status = "Cancelled";
     this.props.cancellationReason = "Rescheduled";
     return Booking.restore({

@@ -4,6 +4,7 @@ import {
   BOOKING_SCHEDULE_FIELDS,
   BookingSchedule,
   BookingScheduleRepository,
+  Closure,
   ResolvedBookingSchedule,
   WeeklyHours,
   parseBookingSchedule,
@@ -19,6 +20,8 @@ export interface BookingScheduleEditorView {
   inherited: BookingSchedule | null;
   /** What opening hours fall back to when no layer sets them — the data provider org's default business hours. */
   providerHours: WeeklyHours;
+  /** The data provider org's holidays — closures every scope gets on top of its own. */
+  providerClosures: Closure[];
   /** What each field this scope leaves unset resolves to — the layers below it. */
   fallback: ResolvedBookingSchedule;
   /** What this scope actually uses once every layer is applied. */
@@ -35,18 +38,20 @@ export class AdminBookingScheduleService {
   ) {}
 
   async view(dealershipId: string | undefined): Promise<BookingScheduleEditorView> {
-    const [own, inherited, providerHours] = await Promise.all([
+    const [own, inherited, providerHours, providerClosures] = await Promise.all([
       this.findLayer(dealershipId),
       dealershipId ? this.findLayer(undefined) : Promise.resolve(null),
       this.schedules.findProviderHours(),
+      this.schedules.findProviderClosures(),
     ]);
     const below = inherited ? [inherited] : [];
     return {
       own,
       inherited,
       providerHours,
-      fallback: resolveBookingSchedule(below, providerHours),
-      effective: resolveBookingSchedule([own, ...below], providerHours),
+      providerClosures,
+      fallback: resolveBookingSchedule(below, providerHours, providerClosures),
+      effective: resolveBookingSchedule([own, ...below], providerHours, providerClosures),
     };
   }
 

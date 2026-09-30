@@ -565,6 +565,20 @@ export interface BookingScheduleLayerDto {
   breaks?: TimeWindowDto[];
   /** How far ahead a customer must book; staff may book any slot that hasn't started. */
   minNoticeMinutes?: number;
+  /** How long before a drive a customer can still cancel or reschedule it; staff may until it starts. */
+  cancellationCutoffMinutes?: number;
+  /** Days after a completed drive with no sale to send a follow-up; an empty list sends none. */
+  followUpDays?: number[];
+  /** This scope's own closures — they add to the company's and the org's holidays. */
+  closures?: ClosureDto[];
+}
+
+/** A date with no slots — all day, or between `start` and `end` on the showroom's clock. */
+export interface ClosureDto {
+  date: string;
+  name?: string;
+  start?: string;
+  end?: string;
 }
 
 export interface BookingScheduleEditorDto {
@@ -573,13 +587,19 @@ export interface BookingScheduleEditorDto {
   inherited: BookingScheduleLayerDto | null;
   /** The connected org's default business hours — what opening hours fall back to. */
   providerHours: WeeklyHoursDto;
+  /** The connected org's holidays — closures every scope gets. */
+  providerClosures: ClosureDto[];
   /** What each field this scope leaves unset resolves to. */
   fallback: Required<BookingScheduleLayerDto>;
   effective: Required<BookingScheduleLayerDto>;
   schema: {
     slotMinutes: { min: number; max: number; step: number };
     minNoticeMinutes: { min: number; max: number; step: number };
+    cancellationCutoffMinutes: { min: number; max: number; step: number };
+    followUpDays: { min: number; max: number; maxCount: number };
     maxBreaks: number;
+    maxClosures: number;
+    maxClosureName: number;
     weekdays: string[];
   };
 }

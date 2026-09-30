@@ -6,6 +6,7 @@ import {
   ResolvedBookingSchedule,
   TimeSlot,
   WEEKDAYS,
+  durationText,
   resolveBookingSchedule,
   slotTimesFor,
 } from "@tdm/domain";
@@ -23,28 +24,13 @@ export interface DaySlot {
 }
 
 /**
- * Who is booking: a customer must give the schedule's minimum notice; staff (booking a walk-in,
- * or moving a booking for a customer) may take any slot that hasn't started yet.
+ * Who is booking or changing a booking: a customer must give the schedule's minimum notice and
+ * respect its cancellation cutoff; staff (a walk-in, or a change on a customer's behalf) may use
+ * any slot, or change any booking, that hasn't started yet.
  */
 export type BookingAudience = "customer" | "staff";
 
 type DayAvailability = Pick<VehicleAvailabilityResponse, "timeZone" | "slots" | "isOpen" | "earliestDate">;
-
-function durationLabel(minutes: number): string {
-  const units: [number, string][] = [
-    [24 * 60, "day"],
-    [60, "hour"],
-    [1, "minute"],
-  ];
-  const parts: string[] = [];
-  let rest = minutes;
-  for (const [size, name] of units) {
-    const count = Math.floor(rest / size);
-    if (count) parts.push(`${count} ${name}${count > 1 ? "s" : ""}`);
-    rest %= size;
-  }
-  return parts.join(" ");
-}
 
 /**
  * Resolves when a dealership takes test drives — its own schedule, else the company's, else
@@ -67,13 +53,14 @@ export class BookingScheduleService {
     if (!organizationId) throw new NotFoundException("Unknown dealership.");
 
     return this.cache.getOrLoad(organizationId, dealershipId, async () => {
-      const [own, company, providerHours] = await Promise.all([
+      const [own, company, providerHours, providerClosures] = await Promise.all([
         dealershipId ? this.schedules.findLayer(dealershipId) : Promise.resolve(null),
         this.schedules.findLayer(),
         this.schedules.findProviderHours(),
+        this.schedules.findProviderClosures(),
       ]);
       const layers = [own, company].filter((layer): layer is BookingSchedule => !!layer);
-      return resolveBookingSchedule(layers, providerHours);
+      return resolveBookingSchedule(layers, providerHours, providerClosures);
     });
   }
 
@@ -122,8 +109,13 @@ export class BookingScheduleService {
 
     if (slot.start < now) throw new BadRequestException("That time has already passed — pick a later one.");
     if (slot.start < this.bookableFrom(schedule, audience, now)) {
-      throw new BadRequestException(`Test drives here need to be booked at least ${durationLabel(schedule.minNoticeMinutes)} ahead.`);
+      throw new BadRequestException(`Test drives here need to be booked at least ${durationText(schedule.minNoticeMinutes)} ahead.`);
     }
+  }
+
+  /** How long before a drive `audience` may still cancel or reschedule it — staff may until it starts. */
+  async cancellationCutoffMinutes(dealershipId: string, audience: BookingAudience): Promise<number> {
+    return audience === "customer" ? (await this.resolve(dealershipId)).cancellationCutoffMinutes : 0;
   }
 
   /** Drops cached schedules after an edit: one dealership's, or — for a company-wide edit — all of the organization's. */

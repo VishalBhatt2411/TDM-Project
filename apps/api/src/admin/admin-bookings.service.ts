@@ -188,7 +188,7 @@ export class AdminBookingsService {
     const booking = await this.requireBooking(bookingId);
     await this.access.assertCanActOn(staff, booking);
 
-    const cancelled = await this.mutations.cancelBooking(booking, dto.reason, staff.staffUserId);
+    const cancelled = await this.mutations.cancelBooking(booking, dto.reason, staff.staffUserId, "staff");
     return adminBookingToDto(cancelled);
   }
 

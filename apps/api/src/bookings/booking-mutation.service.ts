@@ -37,12 +37,15 @@ export class BookingMutationService {
     private readonly schedule: BookingScheduleService,
   ) {}
 
-  async cancelBooking(booking: Booking, reason: string, actorId: string): Promise<Booking> {
-    const emailCtx = await this.emailContext.build(booking);
+  async cancelBooking(booking: Booking, reason: string, actorId: string, audience: BookingAudience): Promise<Booking> {
+    const [emailCtx, cutoffMinutes] = await Promise.all([
+      this.emailContext.build(booking),
+      this.schedule.cancellationCutoffMinutes(booking.dealershipId, audience),
+    ]);
     const freesSlot = SLOT_OCCUPYING_STATUSES.has(booking.status);
 
-    // Throws CancellationWindowExpiredError (-> 400) if past the policy cutoff.
-    booking.cancel(reason);
+    // Throws CancellationWindowExpiredError (-> 400) if past the dealership's cutoff.
+    booking.cancel(reason, cutoffMinutes);
     await this.bookings.save(booking);
 
     await this.auditLog.append({
@@ -78,12 +81,15 @@ export class BookingMutationService {
     const previousStart = booking.slot.start;
     const freesSlot = SLOT_OCCUPYING_STATUSES.has(booking.status);
     const newSlot = TimeSlot.create(newSlotInput.start, newSlotInput.end);
-    await this.schedule.assertBookable(booking.dealershipId, newSlot, audience);
+    const [, cutoffMinutes] = await Promise.all([
+      this.schedule.assertBookable(booking.dealershipId, newSlot, audience),
+      this.schedule.cancellationCutoffMinutes(booking.dealershipId, audience),
+    ]);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
     await conflictChecker.assertNoConflict(booking.vehicleId, newSlot);
 
-    // Throws CancellationWindowExpiredError (-> 400) if past the policy cutoff.
+    // Throws CancellationWindowExpiredError (-> 400) if past the dealership's cutoff.
     // UNASSIGNED_ID, not a client-generated id — the repository only creates a new
     // Salesforce record (vs. attempting to update a nonexistent one) when it sees
     // this exact sentinel, then returns the booking with the provider-assigned id.
@@ -91,7 +97,7 @@ export class BookingMutationService {
     // but we persist the replacement FIRST. If creating it fails (conflict, validation,
     // a Salesforce hiccup), the original booking must still be safely in place; nothing
     // has been cancelled yet. Only once the new booking exists do we cancel the old one.
-    const newBooking = booking.reschedule(newSlot, UNASSIGNED_ID);
+    const newBooking = booking.reschedule(newSlot, UNASSIGNED_ID, cutoffMinutes);
     const saved = await this.bookings.save(newBooking);
     await this.bookings.save(booking);
 

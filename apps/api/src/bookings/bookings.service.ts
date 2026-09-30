@@ -186,7 +186,7 @@ export class BookingsService {
 
   async cancel(customerId: string, bookingId: string, dto: CancelBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
-    const cancelled = await this.mutations.cancelBooking(booking, dto.reason, customerId);
+    const cancelled = await this.mutations.cancelBooking(booking, dto.reason, customerId, "customer");
     return bookingToDto(cancelled);
   }
 

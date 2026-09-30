@@ -4,7 +4,7 @@ import { Customer } from "./entities/customer";
 import { Dealership } from "./entities/dealership";
 import { BrandLayer } from "./entities/site-content";
 import { ProviderRegionalDefaults, RegionalSettings } from "./entities/regional-settings";
-import { BookingSchedule, WeeklyHours } from "./entities/booking-schedule";
+import { BookingSchedule, Closure, WeeklyHours } from "./entities/booking-schedule";
 import { StaffAssignment, StaffRole } from "./entities/staff-assignment";
 import { VehicleAllocation, WishlistItem } from "./entities/inventory";
 import { SalesOpportunity } from "./entities/sales-opportunity";
@@ -356,6 +356,8 @@ export interface BookingScheduleRepository {
   saveLayer(schedule: BookingSchedule, dealershipId?: string): Promise<void>;
   /** The data provider org's default business hours — the fallback when no scope sets opening hours. */
   findProviderHours(): Promise<WeeklyHours>;
+  /** The data provider org's holidays — closures every scope inherits on top of its own. */
+  findProviderClosures(): Promise<Closure[]>;
 }
 
 export type BrandAssetKind = "logo" | "hero";
