@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   Vehicle,
   VehicleLocationFilter,
+  RETIRED_VEHICLE_STATUSES,
   VehicleRepository,
   VehicleVariant,
   VehicleVariantRepository,
@@ -87,7 +88,11 @@ export class VehiclesService {
 
   async search(query: VehicleSearchQueryDto): Promise<Paginated<VehicleDto>> {
     // The host scope is applied last so a query parameter can never widen it.
-    const { items, total } = await this.vehicles.search({ ...query, ...TenantContext.hostDealershipScope() });
+    const { items, total } = await this.vehicles.search({
+      ...query,
+      excludeStatuses: RETIRED_VEHICLE_STATUSES,
+      ...TenantContext.hostDealershipScope(),
+    });
     return {
       items: items.map(vehicleToDto),
       total,

@@ -90,6 +90,13 @@ export class SalesforceBookingRepository implements BookingRepository {
     });
   }
 
+  async hasAnyForVehicle(vehicleId: string): Promise<boolean> {
+    return withConnection(this.connectionProvider, async (conn) => {
+      const result = await conn.query(`SELECT Id FROM Booking__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' LIMIT 1`);
+      return result.records.length > 0;
+    });
+  }
+
   async findWaitlistedForVehicle(vehicleId: string): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {

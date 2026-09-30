@@ -41,6 +41,7 @@ export interface VehicleSearchCriteria extends VehicleLocationFilter {
   minPrice?: number;
   maxPrice?: number;
   status?: VehicleStatus;
+  excludeStatuses?: readonly VehicleStatus[];
   page?: number;
   pageSize?: number;
 }
@@ -144,6 +145,8 @@ export interface BookingRepository {
   findAll(filter: BookingListFilter): Promise<{ items: Booking[]; total: number }>;
   /** Bookings for the same vehicle whose status is Confirmed/InProgress, used for conflict detection. */
   findActiveByVehicle(vehicleId: string): Promise<Booking[]>;
+  /** Whether any booking, in any status, references the vehicle — booking history pins a vehicle in the catalog. */
+  hasAnyForVehicle(vehicleId: string): Promise<boolean>;
   findWaitlistedForVehicle(vehicleId: string): Promise<Booking[]>;
   /** A rep's slot-occupying bookings starting within `day` (see zonedDayWindow). */
   findByRepAndDate(salesRepId: string, day: InstantWindow): Promise<Booking[]>;

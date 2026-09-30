@@ -120,6 +120,9 @@ export class SalesforceVehicleRepository implements VehicleRepository {
     if (criteria.fuelType) clauses.push(`Fuel_Type__c = '${escapeSoql(criteria.fuelType)}'`);
     if (criteria.transmission) clauses.push(`Transmission__c = '${escapeSoql(criteria.transmission)}'`);
     if (criteria.status) clauses.push(`Status__c = '${escapeSoql(criteria.status)}'`);
+    if (criteria.excludeStatuses?.length) {
+      clauses.push(`Status__c NOT IN (${criteria.excludeStatuses.map((s) => `'${escapeSoql(s)}'`).join(", ")})`);
+    }
     if (criteria.minPrice != null) clauses.push(`Price__c >= ${criteria.minPrice}`);
     if (criteria.maxPrice != null) clauses.push(`Price__c <= ${criteria.maxPrice}`);
     clauses.push(...this.locationClauses(criteria));

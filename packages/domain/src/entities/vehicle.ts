@@ -16,6 +16,8 @@ export type BodyType =
 export type FuelType = "Petrol" | "Diesel" | "Electric" | "Hybrid" | "Plugin_Hybrid" | "CNG";
 export type Transmission = "Manual" | "Automatic" | "CVT" | "DCT";
 export type VehicleStatus = "Available" | "Reserved" | "In_Drive" | "Maintenance" | "Sold";
+/** Statuses that take a vehicle out of the customer catalog while keeping it (and its booking history) on record. */
+export const RETIRED_VEHICLE_STATUSES: readonly VehicleStatus[] = ["Sold"];
 export type AvailabilityStatus = "In_Stock" | "Limited_Stock" | "On_Request" | "Coming_Soon";
 
 export interface VehicleColor {

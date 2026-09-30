@@ -12,6 +12,7 @@ import {
   updateVehicle,
 } from "@/api/admin";
 import type { AdminVehicleInput } from "@/api/admin";
+import { errorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -282,6 +283,12 @@ export function AdminVehiclesPage() {
           {showCreateForm ? "Cancel" : "Add Vehicle"}
         </Button>
       </div>
+
+      {deleteMutation.error && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {errorMessage(deleteMutation.error) ?? "Couldn't remove the vehicle."}
+        </p>
+      )}
 
       {showCreateForm && (
         <Card className="mb-6">

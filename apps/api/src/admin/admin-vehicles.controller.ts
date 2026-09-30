@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { PartialType } from "@nestjs/swagger";
 import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Min } from "class-validator";
 import {
   AvailabilityStatus,
   BodyType,
+  BookingRepository,
   Branch,
   BranchRepository,
   FuelType,
@@ -13,7 +14,7 @@ import {
   VehicleRepository,
   VehicleStatus,
 } from "@tdm/domain";
-import { BRANCH_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
+import { BOOKING_REPOSITORY, BRANCH_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
 import { ParseRecordIdPipe } from "../common/record-id";
 import { vehicleToDto } from "../vehicles/vehicles.service";
 import { RegionalSettingsService } from "../config/regional-settings.service";
@@ -257,6 +258,7 @@ export class AdminVehiclesController {
   constructor(
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
+    @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     private readonly regional: RegionalSettingsService,
   ) {}
 
@@ -288,6 +290,10 @@ export class AdminVehiclesController {
   @Delete(":id")
   async remove(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
     await this.requireVehicle(id, access);
+    // Bookings keep their vehicle for history and reporting, so a booked vehicle is retired, not deleted.
+    if (await this.bookings.hasAnyForVehicle(id)) {
+      throw new ConflictException("This vehicle has booking history and can't be deleted. Set its status to Sold to retire it instead.");
+    }
     await this.vehicles.delete(id);
     return { deleted: true };
   }

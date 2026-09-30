@@ -110,6 +110,8 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
     } catch (err: any) {
       if (err?.name === "invalid_grant" || err?.errorCode === "invalid_grant") {
         await this.options.onCredentialsRejected(organizationId);
+        // Revoked or expired: only an admin reconnect fixes it, so report it as such rather than a 500.
+        throw new TenantNotConnectedError(organizationId);
       }
       throw err;
     }
