@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getVehicle, getVehicleAvailability, getVehicleVariants } from "@/api/vehicles";
 import { TimeSlotSelect, findAvailableSlot, firstAvailableTime } from "@/components/TimeSlotSelect";
+import { useEarliestDate } from "@/hooks/use-slot-picker";
 import { useShoppingLocation } from "@/context/location-context";
 import { createBooking, createPublicBooking, isBookingConflictError } from "@/api/bookings";
 import { useAuth } from "@/context/auth-context";
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { addIsoDays, type DriveType, type PurchaseTimeline } from "@tdm/types";
+import type { DriveType, PurchaseTimeline } from "@tdm/types";
 
 const PURCHASE_TIMELINE_OPTIONS: { value: PurchaseTimeline; label: string }[] = [
   { value: "Immediate", label: "Immediately" },
@@ -94,13 +95,15 @@ export function BookingPage() {
   });
   // Slots are on the showroom's wall clock, wherever the customer is browsing from.
   const timeZone = availability?.timeZone ?? branch?.timeZone;
-  // Bookings open from tomorrow, in the showroom's calendar.
-  const earliestDate = timeZone ? addIsoDays(regional.today(timeZone), 1) : undefined;
+  const today = timeZone ? regional.today(timeZone) : undefined;
   const phoneCountryCode = availability?.phoneCountryCode;
 
+  // Start on today in the showroom's calendar; the dealership's notice then moves it to the first day with times left.
   React.useEffect(() => {
-    if (earliestDate && !getValues("preferredDate")) setValue("preferredDate", earliestDate);
-  }, [earliestDate, getValues, setValue]);
+    if (today && !getValues("preferredDate")) setValue("preferredDate", today);
+  }, [today, getValues, setValue]);
+  const setPreferredDate = React.useCallback((date: string) => setValue("preferredDate", date), [setValue]);
+  const earliestDate = useEarliestDate(preferredDate, availability, setPreferredDate, today);
 
   // Keep the picked time on a free slot of the dealership's schedule as the day changes.
   React.useEffect(() => {

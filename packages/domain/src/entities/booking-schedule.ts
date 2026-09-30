@@ -22,12 +22,15 @@ export interface BookingSchedule {
   weeklyHours?: WeeklyHours;
   /** Daily closures inside the opening hours (e.g. lunch) — no slot overlaps one. */
   breaks?: TimeWindow[];
+  /** How far ahead a customer must book: a slot starting sooner than this isn't offered. */
+  minNoticeMinutes?: number;
 }
 
 export interface ResolvedBookingSchedule {
   slotMinutes: number;
   weeklyHours: WeeklyHours;
   breaks: TimeWindow[];
+  minNoticeMinutes: number;
 }
 
 /** One bookable slot as the dealership's wall-clock start, and its length. */
@@ -43,8 +46,11 @@ export interface ScheduledSlotTime {
 export const DEFAULT_SLOT_MINUTES = 30;
 export const SLOT_MINUTES_RANGE = { min: 10, max: 240, step: 5 } as const;
 export const MAX_BREAKS = 5;
+/** Up to 30 days' notice, in quarter hours. With none set, only slots already started are closed. */
+export const NOTICE_MINUTES_RANGE = { min: 0, max: 30 * 24 * 60, step: 15 } as const;
 
-const SCHEDULE_KEYS = ["slotMinutes", "weeklyHours", "breaks"] as const;
+/** Every field a schedule layer can set. */
+export const BOOKING_SCHEDULE_FIELDS = ["slotMinutes", "weeklyHours", "breaks", "minNoticeMinutes"] as const satisfies readonly (keyof BookingSchedule)[];
 const WALL_TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const MINUTES_PER_DAY = 24 * 60;
 
@@ -88,6 +94,14 @@ function parseSlotMinutes(raw: unknown): number {
   return raw;
 }
 
+function parseNoticeMinutes(raw: unknown): number {
+  const { min, max, step } = NOTICE_MINUTES_RANGE;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < min || raw > max || raw % step !== 0) {
+    throw new InvalidValueError(`minNoticeMinutes must be a whole number of minutes from ${min} to ${max}, in steps of ${step}.`);
+  }
+  return raw;
+}
+
 function parseWeeklyHours(raw: unknown): WeeklyHours {
   if (!isPlainObject(raw)) throw new InvalidValueError("weeklyHours must be an object keyed by weekday.");
   rejectUnknownKeys(raw, WEEKDAYS, "weeklyHours");
@@ -118,11 +132,12 @@ function parseBreaks(raw: unknown): TimeWindow[] {
 export function parseBookingSchedule(raw: unknown): BookingSchedule {
   if (raw === undefined || raw === null) return {};
   if (!isPlainObject(raw)) throw new InvalidValueError("Booking schedule must be an object.");
-  rejectUnknownKeys(raw, SCHEDULE_KEYS, "Booking schedule");
+  rejectUnknownKeys(raw, BOOKING_SCHEDULE_FIELDS, "Booking schedule");
   const schedule: BookingSchedule = {};
   if (raw.slotMinutes !== undefined && raw.slotMinutes !== null) schedule.slotMinutes = parseSlotMinutes(raw.slotMinutes);
   if (raw.weeklyHours !== undefined && raw.weeklyHours !== null) schedule.weeklyHours = parseWeeklyHours(raw.weeklyHours);
   if (raw.breaks !== undefined && raw.breaks !== null) schedule.breaks = parseBreaks(raw.breaks);
+  if (raw.minNoticeMinutes !== undefined && raw.minNoticeMinutes !== null) schedule.minNoticeMinutes = parseNoticeMinutes(raw.minNoticeMinutes);
   return schedule;
 }
 
@@ -133,6 +148,7 @@ export function resolveBookingSchedule(layers: readonly BookingSchedule[], provi
     slotMinutes: pick("slotMinutes") ?? DEFAULT_SLOT_MINUTES,
     weeklyHours: pick("weeklyHours") ?? providerHours,
     breaks: pick("breaks") ?? [],
+    minNoticeMinutes: pick("minNoticeMinutes") ?? NOTICE_MINUTES_RANGE.min,
   };
 }
 

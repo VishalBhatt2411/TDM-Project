@@ -20,6 +20,24 @@ function useSlotPickerQuery(queryKey: readonly unknown[], load: () => Promise<Ve
   return { availability, isLoading: isLoading && enabled, time, setTime, slot: findAvailableSlot(availability, time) };
 }
 
+/**
+ * Keeps a picked date on or after the first one with slots still bookable (the server's
+ * `earliestDate`, which applies the dealership's notice) and returns it as the date picker's
+ * `min` — `fallbackMin` until the first answer arrives. `setDate` must be stable.
+ */
+export function useEarliestDate(
+  date: string,
+  availability: VehicleAvailabilityResponse | undefined,
+  setDate: (date: string) => void,
+  fallbackMin?: string,
+): string | undefined {
+  const earliestDate = availability?.earliestDate;
+  React.useEffect(() => {
+    if (earliestDate && date && date < earliestDate) setDate(earliestDate);
+  }, [date, earliestDate, setDate]);
+  return earliestDate ?? fallbackMin;
+}
+
 /** A vehicle's slots on `date`, from the customer site. */
 export function useSlotPicker(vehicleId: string | undefined, date: string) {
   return useSlotPickerQuery(["vehicle-availability", vehicleId, date], () => getVehicleAvailability(vehicleId!, date), !!vehicleId && !!date);

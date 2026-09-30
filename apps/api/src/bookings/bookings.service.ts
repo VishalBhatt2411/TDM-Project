@@ -192,7 +192,7 @@ export class BookingsService {
 
   async reschedule(customerId: string, bookingId: string, dto: RescheduleBookingDto): Promise<BookingDto> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
-    const saved = await this.mutations.rescheduleBooking(booking, dto.slot, customerId);
+    const saved = await this.mutations.rescheduleBooking(booking, dto.slot, customerId, "customer");
     return bookingToDto(saved);
   }
 
@@ -234,7 +234,7 @@ export class BookingsService {
   /**
    * A vehicle is test-driven at the branch that stocks it. The booking's dealership is derived
    * from that branch, never taken from the request, and must be one this host serves. The slot
-   * must be one of that dealership's scheduled slots — checked here, before any account is touched.
+   * must be one of that dealership's scheduled slots, far enough ahead — checked here, before any account is touched.
    */
   private async resolveBookingBranch(dto: CreateBookingDto): Promise<Branch> {
     const [vehicle, branch] = await Promise.all([this.vehicles.findById(dto.vehicleId), this.branches.findById(dto.branchId)]);
@@ -243,7 +243,7 @@ export class BookingsService {
       throw new BadRequestException("This vehicle can only be test-driven at the branch that stocks it.");
     }
     if (!branch || !branch.isActive) throw new NotFoundException("Branch not found.");
-    await this.schedule.assertBookable(branch.dealershipId, TimeSlot.create(dto.slot.start, dto.slot.end));
+    await this.schedule.assertBookable(branch.dealershipId, TimeSlot.create(dto.slot.start, dto.slot.end), "customer");
     return branch;
   }
 

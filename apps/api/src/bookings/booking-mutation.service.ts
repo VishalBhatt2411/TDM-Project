@@ -14,7 +14,7 @@ import {
 import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, SALES_REP_REPOSITORY } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
-import { BookingScheduleService } from "../config/booking-schedule.service";
+import { BookingAudience, BookingScheduleService } from "../config/booking-schedule.service";
 
 /** Statuses that occupy a vehicle's slot and therefore free one up when they end. */
 export const SLOT_OCCUPYING_STATUSES: ReadonlySet<BookingStatus> = new Set(["Requested", "Confirmed", "InProgress"]);
@@ -69,11 +69,16 @@ export class BookingMutationService {
     return booking;
   }
 
-  async rescheduleBooking(booking: Booking, newSlotInput: { start: string; end: string }, actorId: string): Promise<Booking> {
+  async rescheduleBooking(
+    booking: Booking,
+    newSlotInput: { start: string; end: string },
+    actorId: string,
+    audience: BookingAudience,
+  ): Promise<Booking> {
     const previousStart = booking.slot.start;
     const freesSlot = SLOT_OCCUPYING_STATUSES.has(booking.status);
     const newSlot = TimeSlot.create(newSlotInput.start, newSlotInput.end);
-    await this.schedule.assertBookable(booking.dealershipId, newSlot);
+    await this.schedule.assertBookable(booking.dealershipId, newSlot, audience);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
     await conflictChecker.assertNoConflict(booking.vehicleId, newSlot);

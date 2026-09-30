@@ -129,16 +129,16 @@ export class VehiclesService {
     return variants.map(variantToDto);
   }
 
-  /** Free/busy for the dealership's booking schedule (see BookingScheduleService) on a given date, as wall-clock times in the vehicle's dealership time zone — a slot is unavailable if it overlaps a Confirmed/InProgress booking for this vehicle. Branch is accepted for API-contract parity with the booking flow (a vehicle belongs to one branch) but isn't filtered on since conflicts are vehicle-scoped, not branch-scoped. */
+  /** Free/busy for the dealership's booking schedule (see BookingScheduleService) on a given date — only slots far enough ahead for a customer — as wall-clock times in the vehicle's dealership time zone — a slot is unavailable if it overlaps a Confirmed/InProgress booking for this vehicle. Branch is accepted for API-contract parity with the booking flow (a vehicle belongs to one branch) but isn't filtered on since conflicts are vehicle-scoped, not branch-scoped. */
   async getAvailability(vehicleId: string, date: string): Promise<VehicleAvailabilityResponse> {
     const vehicle = await this.requireVisible(vehicleId);
 
-    const [{ timeZone, slots }, { phoneCountryCode }] = await Promise.all([
-      this.schedule.vehicleDay({ id: vehicleId, dealershipId: vehicle.dealershipId }, date),
+    const [day, { phoneCountryCode }] = await Promise.all([
+      this.schedule.vehicleDay({ id: vehicleId, dealershipId: vehicle.dealershipId }, date, "customer"),
       this.regional.resolve(vehicle.dealershipId),
     ]);
 
-    return { vehicleId, date, slots, timeZone, ...(phoneCountryCode ? { phoneCountryCode } : {}) };
+    return { vehicleId, date, ...day, ...(phoneCountryCode ? { phoneCountryCode } : {}) };
   }
 
   /** A vehicle of another dealership is reported as missing on a dealer host — its existence isn't disclosed. */

@@ -196,7 +196,7 @@ export class AdminBookingsService {
     const booking = await this.requireBooking(bookingId);
     await this.access.assertCanActOn(staff, booking);
 
-    const saved = await this.mutations.rescheduleBooking(booking, dto.slot, staff.staffUserId);
+    const saved = await this.mutations.rescheduleBooking(booking, dto.slot, staff.staffUserId, "staff");
     return adminBookingToDto(saved);
   }
 
@@ -205,7 +205,7 @@ export class AdminBookingsService {
     const booking = await this.requireBooking(bookingId);
     await this.access.assertCanActOn(staff, booking);
     const { vehicleId, dealershipId } = booking.toProps();
-    return { vehicleId, date, ...(await this.schedule.vehicleDay({ id: vehicleId, dealershipId }, date)) };
+    return { vehicleId, date, ...(await this.schedule.vehicleDay({ id: vehicleId, dealershipId }, date, "staff")) };
   }
 
   private async requireBooking(bookingId: string): Promise<Booking> {

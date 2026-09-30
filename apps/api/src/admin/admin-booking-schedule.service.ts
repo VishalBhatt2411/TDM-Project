@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   AuditLogRepository,
+  BOOKING_SCHEDULE_FIELDS,
   BookingSchedule,
   BookingScheduleRepository,
   ResolvedBookingSchedule,
@@ -23,8 +24,6 @@ export interface BookingScheduleEditorView {
   /** What this scope actually uses once every layer is applied. */
   effective: ResolvedBookingSchedule;
 }
-
-const SCHEDULE_KEYS: readonly (keyof BookingSchedule)[] = ["slotMinutes", "weeklyHours", "breaks"];
 
 /** Edits one scope's booking schedule (a dealership's, or the company-wide one) — the scope is already verified by ConfigScopeResolver. */
 @Injectable()
@@ -65,7 +64,7 @@ export class AdminBookingScheduleService {
       entityId: dealershipId ?? "company",
       metadata: {
         dealershipId: dealershipId ?? null,
-        changedFields: SCHEDULE_KEYS.filter((key) => JSON.stringify(before[key]) !== JSON.stringify(schedule[key])),
+        changedFields: BOOKING_SCHEDULE_FIELDS.filter((key) => JSON.stringify(before[key]) !== JSON.stringify(schedule[key])),
       },
     });
     return this.view(dealershipId);

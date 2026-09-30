@@ -16,7 +16,7 @@ import {
   type SalesRepLookupDto,
 } from "@/api/admin";
 import { useAdminRegional, useDealershipTimeZones } from "@/hooks/use-regional";
-import { useStaffSlotPicker } from "@/hooks/use-slot-picker";
+import { useEarliestDate, useStaffSlotPicker } from "@/hooks/use-slot-picker";
 import { TimeSlotSelect } from "@/components/TimeSlotSelect";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { Badge } from "@/components/ui/badge";
@@ -169,6 +169,7 @@ function BookingActionsPanel({
   const timeZone = useDealershipTimeZones().get(booking.dealershipId) ?? regional.timeZone;
   const [rescheduleDate, setRescheduleDate] = React.useState(() => regional.today(timeZone));
   const reschedulePicker = useStaffSlotPicker(booking.id, rescheduleDate, showReschedule);
+  const rescheduleMin = useEarliestDate(rescheduleDate, reschedulePicker.availability, setRescheduleDate, regional.today(timeZone));
   const [cancelReason, setCancelReason] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
@@ -304,7 +305,7 @@ function BookingActionsPanel({
             <Input
               id={`admin-reschedule-date-${booking.id}`}
               type="date"
-              min={regional.today(timeZone)}
+              min={rescheduleMin}
               value={rescheduleDate}
               onChange={(e) => setRescheduleDate(e.target.value)}
             />

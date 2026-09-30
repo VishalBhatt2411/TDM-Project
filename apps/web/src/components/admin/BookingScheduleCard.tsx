@@ -17,9 +17,15 @@ interface DayForm {
   end: string;
 }
 
+type NoticeUnit = "minutes" | "hours" | "days";
+const NOTICE_UNITS: Record<NoticeUnit, number> = { minutes: 1, hours: 60, days: 24 * 60 };
+
 interface ScheduleForm {
   /** "" inherits. */
   slotMinutes: string;
+  /** "" inherits; otherwise a count of `noticeUnit`. */
+  notice: string;
+  noticeUnit: NoticeUnit;
   ownHours: boolean;
   hours: Record<string, DayForm>;
   ownBreaks: boolean;
@@ -49,10 +55,20 @@ function hoursForm(weekdays: string[], hours: WeeklyHoursDto): Record<string, Da
   );
 }
 
+/** The largest unit a notice is a whole number of — 1440 minutes reads as 1 day. */
+function noticeUnitOf(minutes: number): NoticeUnit {
+  if (minutes > 0 && minutes % NOTICE_UNITS.days === 0) return "days";
+  if (minutes > 0 && minutes % NOTICE_UNITS.hours === 0) return "hours";
+  return "minutes";
+}
+
 function toForm(view: BookingScheduleEditorDto): ScheduleForm {
   const { own, fallback, schema } = view;
+  const noticeUnit = noticeUnitOf(own.minNoticeMinutes ?? fallback.minNoticeMinutes);
   return {
     slotMinutes: own.slotMinutes ? String(own.slotMinutes) : "",
+    notice: own.minNoticeMinutes === undefined ? "" : String(own.minNoticeMinutes / NOTICE_UNITS[noticeUnit]),
+    noticeUnit,
     ownHours: !!own.weeklyHours,
     // Switching a section on starts from what the scope uses today, so nothing changes until edited.
     hours: hoursForm(schema.weekdays, own.weeklyHours ?? fallback.weeklyHours),
@@ -65,6 +81,7 @@ function toForm(view: BookingScheduleEditorDto): ScheduleForm {
 function toLayer(form: ScheduleForm): BookingScheduleLayerDto {
   return {
     ...(form.slotMinutes ? { slotMinutes: Number(form.slotMinutes) } : {}),
+    ...(form.notice.trim() ? { minNoticeMinutes: noticeMinutes(form) } : {}),
     ...(form.ownHours
       ? {
           weeklyHours: Object.fromEntries(
@@ -76,13 +93,26 @@ function toLayer(form: ScheduleForm): BookingScheduleLayerDto {
   };
 }
 
+const noticeMinutes = (form: ScheduleForm) => Number(form.notice) * NOTICE_UNITS[form.noticeUnit];
+
+function noticeError(form: ScheduleForm, range: BookingScheduleEditorDto["schema"]["minNoticeMinutes"]): string | undefined {
+  if (!form.notice.trim()) return undefined;
+  const minutes = noticeMinutes(form);
+  if (!Number.isFinite(minutes) || minutes < range.min || minutes > range.max) {
+    return `Enter from ${durationLabel(range.min) || "0"} to ${durationLabel(range.max)}.`;
+  }
+  if (!Number.isInteger(minutes) || minutes % range.step !== 0) return `Must be in steps of ${durationLabel(range.step)}.`;
+  return undefined;
+}
+
 function windowError(window: { start: string; end: string }): string | undefined {
   if (!window.start || !window.end) return "Enter both times.";
   if (minutesOf(window.end, true) <= minutesOf(window.start)) return "Must end after it starts (00:00 closes at midnight).";
   return undefined;
 }
 
-function validate(form: ScheduleForm) {
+function validate(form: ScheduleForm, schema: BookingScheduleEditorDto["schema"]) {
+  const notice = noticeError(form, schema.minNoticeMinutes);
   const days: Record<string, string> = {};
   if (form.ownHours) {
     for (const [day, d] of Object.entries(form.hours)) {
@@ -101,13 +131,14 @@ function validate(form: ScheduleForm) {
       if (minutesOf(sorted[k]!.start) < minutesOf(sorted[k - 1]!.end, true)) breaks[sorted[k]!.i] = "Overlaps another break.";
     }
   }
-  return { days, breaks, has: Object.keys(days).length + Object.keys(breaks).length > 0 };
+  return { notice, days, breaks, has: !!notice || Object.keys(days).length + Object.keys(breaks).length > 0 };
 }
 
 function durationLabel(minutes: number): string {
-  const h = Math.floor(minutes / 60);
+  const d = Math.floor(minutes / NOTICE_UNITS.days);
+  const h = Math.floor((minutes % NOTICE_UNITS.days) / 60);
   const m = minutes % 60;
-  return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ");
+  return [d ? `${d} d` : "", h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ");
 }
 
 /** Weekday names in the admin's locale — WEEKDAYS starts on Monday, as 2024-01-01 did. */
@@ -122,7 +153,7 @@ function windowLabel(window: TimeWindowDto | null): string {
 
 /**
  * When test drives can be booked for one scope (company-wide or a dealership): slot length,
- * opening hours per weekday and daily breaks. Each section inherits until switched on — a
+ * minimum notice, opening hours per weekday and daily breaks. Each section inherits until switched on — a
  * dealership from the company, the company from the connected org's default business hours.
  */
 export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
@@ -152,7 +183,7 @@ export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
 
   const { inherited, fallback, schema } = data;
   const source = inherited ? "company-wide" : "the connected org's default business hours";
-  const errors = validate(form);
+  const errors = validate(form, schema);
   const isDirty = JSON.stringify(toLayer(form)) !== JSON.stringify(toLayer(toForm(data)));
   const slotOptions: number[] = [];
   for (let m = schema.slotMinutes.min; m <= schema.slotMinutes.max; m += schema.slotMinutes.step) slotOptions.push(m);
@@ -191,19 +222,59 @@ export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
             if (!errors.has) save.mutate(toLayer(form));
           }}
         >
-          <div className="space-y-1.5 sm:max-w-xs">
-            <Label htmlFor="schedule-slot-minutes">Slot length</Label>
-            <select id="schedule-slot-minutes" className={SELECT_CLASS} value={form.slotMinutes} onChange={(e) => update({ slotMinutes: e.target.value })}>
-              <option value="">
-                {inherited ? "Inherit" : "Default"} ({durationLabel(fallback.slotMinutes)})
-              </option>
-              {slotOptions.map((m) => (
-                <option key={m} value={m}>
-                  {durationLabel(m)}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="schedule-slot-minutes">Slot length</Label>
+              <select id="schedule-slot-minutes" className={SELECT_CLASS} value={form.slotMinutes} onChange={(e) => update({ slotMinutes: e.target.value })}>
+                <option value="">
+                  {inherited ? "Inherit" : "Default"} ({durationLabel(fallback.slotMinutes)})
                 </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">Each booking takes one slot; slots run back to back from opening time.</p>
+                {slotOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {durationLabel(m)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">Each booking takes one slot; slots run back to back from opening time.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="schedule-notice">Minimum notice</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="schedule-notice"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  className="w-28"
+                  placeholder={durationLabel(fallback.minNoticeMinutes) || "None"}
+                  aria-invalid={!!errors.notice}
+                  value={form.notice}
+                  onChange={(e) => update({ notice: e.target.value })}
+                />
+                <select
+                  aria-label="Minimum notice unit"
+                  className={SELECT_CLASS}
+                  value={form.noticeUnit}
+                  onChange={(e) => update({ noticeUnit: e.target.value as NoticeUnit })}
+                >
+                  {(Object.keys(NOTICE_UNITS) as NoticeUnit[]).map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {errors.notice ? (
+                <p className="text-xs text-destructive">{errors.notice}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  How far ahead customers must book
+                  {form.notice.trim() ? "" : ` — blank ${inherited ? "inherits" : "uses the default"} (${durationLabel(fallback.minNoticeMinutes) || "none"})`}.
+                  Staff can book any slot that hasn't started.
+                </p>
+              )}
+            </div>
           </div>
 
           <section className="space-y-3">
@@ -316,7 +387,7 @@ export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
               variant="ghost"
               className="text-muted-foreground"
               disabled={save.isPending || !Object.keys(toLayer(form)).length}
-              onClick={() => update({ slotMinutes: "", ownHours: false, ownBreaks: false })}
+              onClick={() => update({ slotMinutes: "", notice: "", ownHours: false, ownBreaks: false })}
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Clear all
             </Button>

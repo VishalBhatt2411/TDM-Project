@@ -14,7 +14,7 @@ import { TimeSlotSelect } from "@/components/TimeSlotSelect";
 import { downloadBookingIcs } from "@/lib/ics";
 import { useShoppingLocation } from "@/context/location-context";
 import { useRegional } from "@/hooks/use-regional";
-import { useSlotPicker } from "@/hooks/use-slot-picker";
+import { useEarliestDate, useSlotPicker } from "@/hooks/use-slot-picker";
 import type { BookingDto } from "@tdm/types";
 
 function addToCalendar(booking: BookingDto) {
@@ -53,7 +53,14 @@ export function MyBookingsPage() {
   const zoneOf = (booking: BookingDto) => branches.find((b) => b.id === booking.branchId)?.timeZone ?? regional.timeZone;
   const [rescheduleDate, setRescheduleDate] = React.useState("");
   // Slots come from the vehicle's dealership schedule, less what's already booked.
-  const reschedulePicker = useSlotPicker(data?.find((b) => b.id === reschedulingId)?.vehicleId, reschedulingId ? rescheduleDate : "");
+  const rescheduling = data?.find((b) => b.id === reschedulingId);
+  const reschedulePicker = useSlotPicker(rescheduling?.vehicleId, reschedulingId ? rescheduleDate : "");
+  const rescheduleMin = useEarliestDate(
+    rescheduleDate,
+    reschedulePicker.availability,
+    setRescheduleDate,
+    rescheduling ? regional.today(zoneOf(rescheduling)) : undefined,
+  );
   const [rescheduleError, setRescheduleError] = React.useState<string | null>(null);
   const [qrBookingId, setQrBookingId] = React.useState<string | null>(null);
 
@@ -210,7 +217,7 @@ export function MyBookingsPage() {
                     <Input
                       id={`reschedule-date-${booking.id}`}
                       type="date"
-                      min={regional.today(zoneOf(booking))}
+                      min={rescheduleMin}
                       value={rescheduleDate}
                       onChange={(e) => setRescheduleDate(e.target.value)}
                     />

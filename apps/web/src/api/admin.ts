@@ -563,6 +563,8 @@ export interface BookingScheduleLayerDto {
   slotMinutes?: number;
   weeklyHours?: WeeklyHoursDto;
   breaks?: TimeWindowDto[];
+  /** How far ahead a customer must book; staff may book any slot that hasn't started. */
+  minNoticeMinutes?: number;
 }
 
 export interface BookingScheduleEditorDto {
@@ -574,7 +576,12 @@ export interface BookingScheduleEditorDto {
   /** What each field this scope leaves unset resolves to. */
   fallback: Required<BookingScheduleLayerDto>;
   effective: Required<BookingScheduleLayerDto>;
-  schema: { slotMinutes: { min: number; max: number; step: number }; maxBreaks: number; weekdays: string[] };
+  schema: {
+    slotMinutes: { min: number; max: number; step: number };
+    minNoticeMinutes: { min: number; max: number; step: number };
+    maxBreaks: number;
+    weekdays: string[];
+  };
 }
 
 export async function getBookingSchedule(scope: ConfigScopeParams): Promise<BookingScheduleEditorDto> {

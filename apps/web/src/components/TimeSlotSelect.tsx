@@ -36,7 +36,16 @@ export const TimeSlotSelect = React.forwardRef<HTMLSelectElement, TimeSlotSelect
   const regional = formatter ?? customerRegional;
   const slots = availability?.slots ?? [];
   const hasFree = slots.some((slot) => slot.available);
-  const placeholder = isLoading || !availability ? "Loading times…" : slots.length === 0 ? "Closed on this day" : hasFree ? null : "Fully booked";
+  const placeholder =
+    isLoading || !availability
+      ? "Loading times…"
+      : !availability.isOpen
+        ? "Closed on this day"
+        : slots.length === 0
+          ? "No times left on this day"
+          : hasFree
+            ? null
+            : "Fully booked";
 
   return (
     <select
