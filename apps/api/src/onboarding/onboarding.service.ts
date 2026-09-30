@@ -5,6 +5,7 @@ import {
   OrganizationRecord,
   OrganizationRepository,
   OrganizationSlugTakenError,
+  sha256Hex,
   StaffOAuthStateRepository,
   StaffUserRepository,
 } from "@tdm/postgres-adapter";
@@ -40,6 +41,11 @@ export interface OrganizationStatusDto {
   salesforceCallbackUrls: string[];
 }
 
+/** Returned once, at creation: the wizard presents it on every later step (see OnboardingTokenGuard). */
+export interface CreatedOrganizationDto extends OrganizationStatusDto {
+  onboardingToken: string;
+}
+
 @Injectable()
 export class OnboardingService {
   private readonly logger = new Logger(OnboardingService.name);
@@ -53,16 +59,24 @@ export class OnboardingService {
     @Inject(TENANT_METADATA_DEPLOYER) private readonly deployMetadata: TenantMetadataDeployer,
   ) {}
 
-  async createOrganization(dto: CreateOrganizationDto): Promise<OrganizationStatusDto> {
+  async createOrganization(dto: CreateOrganizationDto): Promise<CreatedOrganizationDto> {
+    // Only its hash is stored — the plaintext exists in this response and the creator's browser.
+    const onboardingToken = randomBytes(32).toString("hex");
     // The repository checks the shared company/dealer subdomain namespace atomically with the insert.
     try {
-      return toStatusDto(await this.organizations.create({ name: dto.name, slug: dto.slug }));
+      const org = await this.organizations.create({ name: dto.name, slug: dto.slug, onboardingTokenHash: sha256Hex(onboardingToken) });
+      this.logger.log(JSON.stringify({ event: "onboarding_organization_created", organizationId: org.id }));
+      return { ...toStatusDto(org), onboardingToken };
     } catch (err) {
       if (err instanceof OrganizationSlugTakenError) {
         throw new ConflictException(`The identifier "${dto.slug}" is already taken. Choose another.`);
       }
       throw err;
     }
+  }
+
+  holdsSetupToken(organizationId: string, token: string): Promise<boolean> {
+    return this.organizations.matchesOnboardingToken(organizationId, sha256Hex(token));
   }
 
   async saveSalesforceCredentials(organizationId: string, dto: SaveSalesforceCredentialsDto): Promise<OrganizationStatusDto> {

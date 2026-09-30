@@ -191,6 +191,9 @@ model Organization {
   connectionStatus     String    @default("pending") // "pending" | "connected" | "error"
   connectionError      String?
   metadataDeployedAt   DateTime?
+  // SHA-256 of the setup token issued once to the onboarding wizard that created this company —
+  // its public endpoints require the token, not just the organization id (see OnboardingTokenGuard).
+  onboardingTokenHash  String?
   // Bumped whenever the master encryption key is rotated, so a future migration
   // knows which key to decrypt sfConsumerSecretEnc/sfRefreshTokenEnc with.
   encryptionKeyVersion Int       @default(1)

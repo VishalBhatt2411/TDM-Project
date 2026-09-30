@@ -166,13 +166,13 @@ export class OrganizationRepository {
   }
 
   /** Creates the company together with its subdomain label, atomically — the label namespace is shared with dealer slugs. */
-  async create(input: { name: string; slug: string }): Promise<OrganizationRecord> {
+  async create(input: { name: string; slug: string; onboardingTokenHash: string }): Promise<OrganizationRecord> {
     const slug = input.slug.toLowerCase();
     try {
       const record = await this.prisma.$transaction(async (tx) => {
         if (await tx.tenantSubdomain.findUnique({ where: { label: slug } })) throw new OrganizationSlugTakenError(slug);
         return tx.organization.create({
-          data: { name: input.name, slug, subdomains: { create: { label: slug } } },
+          data: { name: input.name, slug, onboardingTokenHash: input.onboardingTokenHash, subdomains: { create: { label: slug } } },
         });
       });
       return toRecord(record);
@@ -180,6 +180,12 @@ export class OrganizationRepository {
       if (isUniqueViolation(err)) throw new OrganizationSlugTakenError(slug);
       throw err;
     }
+  }
+
+  /** Whether `tokenHash` is the onboarding setup token issued for this organization. */
+  async matchesOnboardingToken(id: string, tokenHash: string): Promise<boolean> {
+    const record = await this.prisma.organization.findFirst({ where: { id, onboardingTokenHash: tokenHash }, select: { id: true } });
+    return record !== null;
   }
 
   /**

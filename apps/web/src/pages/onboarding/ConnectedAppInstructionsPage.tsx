@@ -5,6 +5,7 @@ import { Check, Copy, Puzzle } from "lucide-react";
 import { getOrganizationStatus } from "@/api/onboarding";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { OnboardingUnavailable } from "@/components/onboarding/OnboardingUnavailable";
 
 function CopyableField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = React.useState(false);
@@ -47,13 +48,7 @@ export function ConnectedAppInstructionsPage() {
       </div>
     );
   }
-  if (isError || !org) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <p className="text-sm text-destructive">Couldn't find that organization. Start over from the beginning.</p>
-      </div>
-    );
-  }
+  if (isError || !org) return <OnboardingUnavailable />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">

@@ -2,7 +2,8 @@ import * as React from "react";
 import { useParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
-import { saveSalesforceCredentials, salesforceAuthorizeUrl } from "@/api/onboarding";
+import { getSalesforceAuthorizeUrl, hasOnboardingSession, saveSalesforceCredentials } from "@/api/onboarding";
+import { OnboardingUnavailable } from "@/components/onboarding/OnboardingUnavailable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,14 +16,19 @@ export function SalesforceCredentialsPage() {
   const [loginUrl, setLoginUrl] = React.useState("");
 
   const mutation = useMutation({
-    mutationFn: () =>
-      saveSalesforceCredentials(organizationId!, { consumerKey, consumerSecret, loginUrl: loginUrl.trim() || undefined }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      await saveSalesforceCredentials(organizationId!, { consumerKey, consumerSecret, loginUrl: loginUrl.trim() || undefined });
+      return getSalesforceAuthorizeUrl(organizationId!);
+    },
+    onSuccess: (authorizationUrl) => {
       // Full-page navigation, same convention as AdminLoginPage's "Login with Salesforce" —
       // this must leave the SPA entirely to reach Salesforce's hosted authorization page.
-      window.location.href = salesforceAuthorizeUrl(organizationId!);
+      window.location.href = authorizationUrl;
     },
   });
+  const errorMessage = (mutation.error as any)?.response?.data?.message;
+
+  if (!organizationId || !hasOnboardingSession(organizationId)) return <OnboardingUnavailable />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
@@ -63,6 +69,8 @@ export function SalesforceCredentialsPage() {
                 id="loginUrl"
                 value={loginUrl}
                 onChange={(e) => setLoginUrl(e.target.value)}
+                type="url"
+                pattern="https://.*"
                 placeholder="https://your-domain.my.salesforce.com"
               />
               <p className="text-xs text-muted-foreground">
@@ -72,7 +80,9 @@ export function SalesforceCredentialsPage() {
             </div>
             {mutation.isError && (
               <p className="text-sm text-destructive">
-                {(mutation.error as any)?.response?.data?.message ?? "Couldn't save these credentials. Double-check them and try again."}
+                {Array.isArray(errorMessage)
+                  ? errorMessage.join(" ")
+                  : (errorMessage ?? "Couldn't save these credentials. Double-check them and try again.")}
               </p>
             )}
             <Button type="submit" className="w-full" disabled={mutation.isPending}>

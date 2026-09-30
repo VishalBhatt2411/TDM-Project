@@ -4,6 +4,8 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { completeOnboarding, getOrganizationStatus } from "@/api/onboarding";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { OnboardingUnavailable } from "@/components/onboarding/OnboardingUnavailable";
+import { forgetOnboardingToken } from "@/lib/onboarding-session";
 
 /** Polls until the wizard's terminal states (connected+deployed, or a hard connection error) are reached. */
 function shouldKeepPolling(status?: { connectionStatus: string; metadataDeployedAt: string | null }): boolean {
@@ -16,7 +18,7 @@ export function OnboardingCallbackPage() {
   const { organizationId } = useParams<{ organizationId: string }>();
   const navigate = useNavigate();
 
-  const { data: org, isLoading } = useQuery({
+  const { data: org, isLoading, isError } = useQuery({
     queryKey: ["onboarding-status", organizationId],
     queryFn: () => getOrganizationStatus(organizationId!),
     enabled: !!organizationId,
@@ -25,7 +27,10 @@ export function OnboardingCallbackPage() {
 
   const completeMutation = useMutation({
     mutationFn: () => completeOnboarding(organizationId!),
+    onSuccess: () => forgetOnboardingToken(organizationId!),
   });
+
+  if (isError) return <OnboardingUnavailable />;
 
   if (isLoading || !org) {
     return (

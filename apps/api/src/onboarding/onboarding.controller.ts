@@ -1,10 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Response } from "express";
 import { OnboardingService } from "./onboarding.service";
 import { CreateOrganizationDto, SaveSalesforceCredentialsDto } from "./dto";
 import { env } from "../common/env";
 import { isValidOrganizationSlug } from "../tenancy/organization-slug";
+import { OnboardingTokenGuard } from "./onboarding-token.guard";
 
 // Mirrors AdminAuthController's OAuth callback validation — the `state` we hand out
 // is always 24 random bytes as hex (see OnboardingService.buildAuthorizationUrl).
@@ -23,8 +24,9 @@ function isValidOAuthState(value: unknown): value is string {
  * Self-service "Connect your Salesforce org" wizard — lets a new client company
  * onboard itself without any locally-authenticated Salesforce CLI session. Public
  * (unauthenticated) by design, same trust model as customer registration; guarded
- * by throttling and PKCE state validation rather than a login wall, since there is
- * no account to log into before an org exists.
+ * by throttling, PKCE state validation, and the setup token issued at creation
+ * (OnboardingTokenGuard) rather than a login wall, since there is no account to log
+ * into before an org exists.
  */
 @Controller("onboarding")
 export class OnboardingController {
@@ -37,15 +39,21 @@ export class OnboardingController {
   }
 
   @Post(":organizationId/salesforce-credentials")
+  @UseGuards(OnboardingTokenGuard)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   saveSalesforceCredentials(@Param("organizationId") organizationId: string, @Body() dto: SaveSalesforceCredentialsDto) {
     return this.onboarding.saveSalesforceCredentials(organizationId, dto);
   }
 
-  /** Full-page navigation target for the wizard's "Authorize with Salesforce" step — not an XHR call. */
-  @Get(":organizationId/salesforce/authorize")
-  async authorize(@Param("organizationId") organizationId: string, @Res() res: Response) {
-    res.redirect(await this.onboarding.buildAuthorizationUrl(organizationId));
+  /**
+   * Where the wizard's "Authorize with Salesforce" step navigates. An XHR (not a full-page
+   * GET) so the setup token travels in a header; the browser then leaves for this URL.
+   */
+  @Post(":organizationId/salesforce/authorize")
+  @UseGuards(OnboardingTokenGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async authorize(@Param("organizationId") organizationId: string) {
+    return { authorizationUrl: await this.onboarding.buildAuthorizationUrl(organizationId) };
   }
 
   @Get("salesforce/callback")
@@ -84,6 +92,7 @@ export class OnboardingController {
   }
 
   @Get(":organizationId/status")
+  @UseGuards(OnboardingTokenGuard)
   getStatus(@Param("organizationId") organizationId: string) {
     return this.onboarding.getStatus(organizationId);
   }
@@ -98,6 +107,7 @@ export class OnboardingController {
   }
 
   @Post(":organizationId/complete")
+  @UseGuards(OnboardingTokenGuard)
   complete(@Param("organizationId") organizationId: string) {
     return this.onboarding.completeOnboarding(organizationId);
   }
