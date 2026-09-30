@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { VehicleCard } from "@/components/VehicleCard";
+import { QueryError } from "@/components/ui/query-error";
+import { errorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/hooks/use-wishlist";
 import { useDealershipConfig } from "@/hooks/use-dealership-config";
@@ -38,7 +40,20 @@ export function WishlistPage() {
         </div>
       )}
 
-      {!wishlist.isLoading && wishlist.vehicles.length === 0 && (
+      {wishlist.error && (
+        <QueryError
+          error={wishlist.error}
+          subject="your wishlist"
+          onRetry={() => wishlist.refetch()}
+          isRetrying={wishlist.isRefetching}
+        />
+      )}
+
+      {wishlist.toggleError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">{errorMessage(wishlist.toggleError)}</p>
+      )}
+
+      {!wishlist.isLoading && !wishlist.error && wishlist.vehicles.length === 0 && (
         <div className="rounded-lg border border-dashed p-10 text-center">
           <Heart className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-muted-foreground">Nothing saved yet — tap the heart on any vehicle to add it here.</p>

@@ -42,6 +42,12 @@ export function useWishlist() {
     enabled,
     vehicles: query.data ?? [],
     isLoading: query.isLoading,
+    /** Why the list failed to load, if it did. */
+    error: query.error,
+    refetch: query.refetch,
+    isRefetching: query.isRefetching,
+    /** Why the last add/remove failed, if it did. */
+    toggleError: addMutation.error ?? removeMutation.error,
     wishlistedIds,
     toggle,
     isPending: addMutation.isPending || removeMutation.isPending,

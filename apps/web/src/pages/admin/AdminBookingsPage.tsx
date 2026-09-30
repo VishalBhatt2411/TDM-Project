@@ -21,6 +21,7 @@ import { useEarliestDate, useStaffSlotPicker } from "@/hooks/use-slot-picker";
 import { TimeSlotSelect } from "@/components/TimeSlotSelect";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { Badge } from "@/components/ui/badge";
+import { QueryError } from "@/components/ui/query-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,7 @@ export function AdminBookingsPage() {
   const canManageAll = hasPermission("manage_bookings");
   const scopeKey = canManageAll ? "admin-bookings" : "my-assigned-bookings";
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: [scopeKey, statusFilter],
     queryFn: () =>
       canManageAll
@@ -104,6 +105,8 @@ export function AdminBookingsPage() {
             <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
+      ) : error && !data ? (
+        <QueryError error={error} subject="bookings" onRetry={() => refetch()} isRetrying={isRefetching} />
       ) : data?.items.length === 0 ? (
         <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No bookings match this filter.</p>
       ) : (

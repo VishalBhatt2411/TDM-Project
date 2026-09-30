@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
+import { QueryError } from "@/components/ui/query-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VehicleCard } from "@/components/VehicleCard";
@@ -25,7 +26,7 @@ export function VehiclesPage() {
 
   const { t } = useTranslation();
   const { location, isReady, branches, setLocation } = useShoppingLocation();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["vehicles", bodyType, debouncedQ, location.city, location.branchId],
     queryFn: () => searchVehicles({ bodyType, q: debouncedQ || undefined, city: location.city, branchId: location.branchId }),
     enabled: isReady,
@@ -74,7 +75,7 @@ export function VehiclesPage() {
           ))}
         </div>
       )}
-      {isError && <p className="text-destructive">Couldn't load vehicles. Is the API running?</p>}
+      {error && !data && <QueryError error={error} subject="vehicles" onRetry={() => refetch()} isRetrying={isRefetching} />}
       {data && data.items.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           <p>{locationLabel ? t("location.noVehiclesHere", { location: locationLabel }) : "No vehicles match this filter yet."}</p>

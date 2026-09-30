@@ -5,6 +5,7 @@ import { isBookingConflictError, cancelBooking, listMyBookings, rescheduleBookin
 import { getDashboard, getRecommendations } from "@/api/customers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { QueryError } from "@/components/ui/query-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +44,7 @@ const CANCELLABLE_STATUSES = new Set(["Requested", "Confirmed"]);
 
 export function MyBookingsPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["my-bookings"], queryFn: listMyBookings });
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({ queryKey: ["my-bookings"], queryFn: listMyBookings });
   const { data: dashboard } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard });
   const features = useSiteFeatures();
   const { data: recommendations } = useQuery({
@@ -152,6 +153,7 @@ export function MyBookingsPage() {
           ))}
         </div>
       )}
+      {error && !data && <QueryError error={error} subject="your bookings" onRetry={() => refetch()} isRetrying={isRefetching} />}
       {data && data.length === 0 && (
         <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           No bookings yet — go find a vehicle to test drive.

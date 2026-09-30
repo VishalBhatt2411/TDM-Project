@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
+import { QueryError } from "@/components/ui/query-error";
 import { Link, useParams } from "react-router-dom";
 import { CircleDot, Heart, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
 import { getRelatedVehicles, getVehicle, getVehicleVariants } from "@/api/vehicles";
@@ -42,7 +44,7 @@ function HighlightList({ title, items }: { title: string; items: string[] }) {
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const regional = useRegional();
-  const { data: vehicle, isLoading, isError } = useQuery({
+  const { data: vehicle, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["vehicle", id],
     queryFn: () => getVehicle(id!),
     enabled: !!id,
@@ -67,7 +69,17 @@ export function VehicleDetailPage() {
       </div>
     );
   }
-  if (isError || !vehicle) return <p className="p-8 text-destructive">Vehicle not found.</p>;
+  if (!vehicle) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        {isAxiosError(error) && error.response?.status === 404 ? (
+          <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">This vehicle isn't available.</p>
+        ) : (
+          <QueryError error={error} subject="this vehicle" onRetry={() => refetch()} isRetrying={isRefetching} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">

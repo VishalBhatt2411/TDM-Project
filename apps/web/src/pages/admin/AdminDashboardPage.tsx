@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { getAdminDashboardSummary, getCustomerSegments, getFunnelInsight, listBranchesLookup } from "@/api/admin";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QueryError } from "@/components/ui/query-error";
 
 const FUNNEL_STAGES: { key: "requested" | "confirmed" | "completed" | "opportunitiesCreated"; label: string }[] = [
   { key: "requested", label: "Requested" },
@@ -47,19 +48,19 @@ export function AdminDashboardPage() {
 
   const { data: branches } = useQuery({ queryKey: ["branches-lookup"], queryFn: listBranchesLookup, enabled: canViewDashboard });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["admin-dashboard", branchId],
     queryFn: () => getAdminDashboardSummary(branchId || undefined),
     enabled: canViewDashboard,
   });
 
-  const { data: funnel } = useQuery({
+  const { data: funnel, error: funnelError, refetch: refetchFunnel } = useQuery({
     queryKey: ["admin-funnel", branchId],
     queryFn: () => getFunnelInsight(branchId || undefined),
     enabled: canViewDashboard,
   });
 
-  const { data: segments } = useQuery({
+  const { data: segments, error: segmentsError, refetch: refetchSegments } = useQuery({
     queryKey: ["admin-customer-segments", branchId],
     queryFn: () => getCustomerSegments(branchId || undefined),
     enabled: canViewDashboard,
@@ -67,6 +68,14 @@ export function AdminDashboardPage() {
 
   if (!canViewDashboard) {
     return <Navigate to="/admin/bookings" replace />;
+  }
+
+  if (error && !data) {
+    return (
+      <div className="p-8">
+        <QueryError error={error} subject="the dashboard" onRetry={() => refetch()} isRetrying={isRefetching} />
+      </div>
+    );
   }
 
   if (isLoading || !data) {
@@ -209,6 +218,10 @@ export function AdminDashboardPage() {
         </Card>
       </div>
 
+      {funnelError && !funnel && (
+        <QueryError className="mt-4" error={funnelError} subject="the booking funnel" onRetry={() => refetchFunnel()} />
+      )}
+
       {funnel && funnel.counts.requested > 0 && (
         <div className="mt-4">
           <Card>
@@ -237,6 +250,10 @@ export function AdminDashboardPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {segmentsError && !segments && (
+        <QueryError className="mt-4" error={segmentsError} subject="customer segments" onRetry={() => refetchSegments()} />
       )}
 
       {segments && (
