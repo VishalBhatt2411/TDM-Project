@@ -6,6 +6,7 @@ import {
   Vehicle,
   VehicleRepository,
   VehicleSearchCriteria,
+  VehicleLocationFilter,
   VehicleVariantRepository,
 } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
@@ -45,17 +46,16 @@ export class SalesforceVehicleRepository implements VehicleRepository {
     });
   }
 
-  async findFeatured(kind: "featured" | "bestSeller" | "newLaunch", limit = 8, scope?: DealershipScope): Promise<Vehicle[]> {
+  async findFeatured(kind: "featured" | "bestSeller" | "newLaunch", limit = 8, filter: VehicleLocationFilter = {}): Promise<Vehicle[]> {
     const fieldByKind: Record<typeof kind, string> = {
       featured: "Is_Featured__c",
       bestSeller: "Is_Best_Seller__c",
       newLaunch: "Is_New_Launch__c",
     };
-    const dealership = dealershipCondition("Dealership__c", scope?.dealershipIds);
+    const where = [`${fieldByKind[kind]} = true`, ...this.locationClauses(filter)].join(" AND ");
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE ${fieldByKind[kind]} = true${dealership ? ` AND ${dealership}` : ""} ` +
-          `ORDER BY CreatedDate DESC LIMIT ${limit}`,
+        `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE ${where} ORDER BY CreatedDate DESC LIMIT ${limit}`,
       );
       return result.records.map(vehicleRecordToDomain);
     });
@@ -111,13 +111,21 @@ export class SalesforceVehicleRepository implements VehicleRepository {
     if (criteria.bodyType) clauses.push(`Body_Type__c = '${escapeSoql(criteria.bodyType)}'`);
     if (criteria.fuelType) clauses.push(`Fuel_Type__c = '${escapeSoql(criteria.fuelType)}'`);
     if (criteria.transmission) clauses.push(`Transmission__c = '${escapeSoql(criteria.transmission)}'`);
-    if (criteria.branchId) clauses.push(`Branch__c = '${escapeSoql(criteria.branchId)}'`);
     if (criteria.status) clauses.push(`Status__c = '${escapeSoql(criteria.status)}'`);
     if (criteria.minPrice != null) clauses.push(`Price__c >= ${criteria.minPrice}`);
     if (criteria.maxPrice != null) clauses.push(`Price__c <= ${criteria.maxPrice}`);
-    const dealership = dealershipCondition("Dealership__c", criteria.dealershipIds);
-    if (dealership) clauses.push(dealership);
+    clauses.push(...this.locationClauses(criteria));
     return clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  }
+
+  private locationClauses(filter: VehicleLocationFilter): string[] {
+    const clauses: string[] = [];
+    // SOQL string comparison is case-insensitive, so "indore" matches "Indore".
+    if (filter.city) clauses.push(`Branch__r.City__c = '${escapeSoql(filter.city)}'`);
+    if (filter.branchId) clauses.push(`Branch__c = '${escapeSoql(filter.branchId)}'`);
+    const dealership = dealershipCondition("Dealership__c", filter.dealershipIds);
+    if (dealership) clauses.push(dealership);
+    return clauses;
   }
 }
 

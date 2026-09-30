@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { AssetRepository, BookingRepository, ComplianceRecord } from "@tdm/domain";
 import { ComplianceStatusDto } from "@tdm/types";
 import { ASSET_REPOSITORY, BOOKING_REPOSITORY } from "../infrastructure/tokens";
@@ -8,7 +8,7 @@ import { matchesImageSignature } from "./image-signature";
 
 const ASSET_URL_PREFIX = "/api/v1/assets/";
 
-function assetIdFromUrl(url: string | undefined): string | undefined {
+export function assetIdFromUrl(url: string | undefined): string | undefined {
   return url?.startsWith(ASSET_URL_PREFIX) ? url.slice(ASSET_URL_PREFIX.length) : undefined;
 }
 
@@ -33,6 +33,8 @@ export function complianceToDto(bookingId: string, record: ComplianceRecord | nu
 
 @Injectable()
 export class ComplianceService {
+  private readonly logger = new Logger(ComplianceService.name);
+
   constructor(
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(ASSET_REPOSITORY) private readonly assets: AssetRepository,
@@ -66,6 +68,15 @@ export class ComplianceService {
       throw new BadRequestException("The signature is not a valid JPEG, PNG or WebP image.");
     }
 
+    // Assets belong to the booking's compliance record, so a first submission persists a
+    // pending one before uploading; a failed upload leaves it incomplete and reusable.
+    const recordId = existing?.toProps().id ?? randomUUID();
+    if (!existing) {
+      await this.bookings.saveCompliance(
+        ComplianceRecord.create({ id: recordId, bookingId, otpVerified: false, licenseVerified: false, consentAccepted: false }),
+      );
+    }
+
     const [licenseAsset, signatureAsset] = await Promise.all([
       this.assets.save({
         contentType: dto.licenseImageContentType,
@@ -85,7 +96,7 @@ export class ComplianceService {
     // JWT for this account — a stronger identity check than a one-time-code would add
     // for this flow, since the JWT already proves ownership of the booking.
     const record = ComplianceRecord.create({
-      id: existing?.toProps().id ?? randomUUID(),
+      id: recordId,
       bookingId,
       otpVerified: true,
       licenseNumber: dto.licenseNumber,
@@ -105,7 +116,12 @@ export class ComplianceService {
       const staleIds = [assetIdFromUrl(previous.licenseImageUrl), assetIdFromUrl(previous.signatureImageUrl)].filter(
         (id): id is string => !!id,
       );
-      await this.assets.deleteMany(staleIds);
+      // The submission itself succeeded; an orphaned old file must not turn it into an error.
+      try {
+        await this.assets.deleteMany(staleIds);
+      } catch (error) {
+        this.logger.warn(JSON.stringify({ event: "compliance_stale_assets_delete_failed", bookingId, message: (error as Error).message }));
+      }
     }
 
     return complianceToDto(bookingId, record);

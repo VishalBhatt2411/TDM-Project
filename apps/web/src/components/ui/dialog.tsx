@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +9,10 @@ export interface DialogProps {
   children: React.ReactNode;
 }
 
-/** Minimal hand-rolled modal (matches this project's no-Radix UI convention) — a backdrop plus a centered panel, closable via backdrop click, Escape, or an explicit control. */
+/**
+ * Minimal hand-rolled modal (matches this project's no-Radix UI convention) — a backdrop plus a centered panel, closable via backdrop click, Escape, or an explicit control.
+ * Portaled to <body> so an ancestor with a transform/filter (e.g. the sticky header's backdrop blur) can't become its containing block and clip it.
+ */
 export function Dialog({ open, onOpenChange, children }: DialogProps) {
   React.useEffect(() => {
     if (!open) return;
@@ -21,7 +25,7 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-background/80 backdrop-blur-sm" onClick={() => onOpenChange(false)} aria-hidden="true" />
       <div
@@ -39,7 +43,8 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
         </button>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

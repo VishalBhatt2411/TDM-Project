@@ -19,8 +19,11 @@ export async function getVehicle(id: string): Promise<VehicleDto> {
   return data;
 }
 
-export async function getFeaturedVehicles(kind: "featured" | "bestSeller" | "newLaunch"): Promise<VehicleDto[]> {
-  const { data } = await apiClient.get<VehicleDto[]>("/vehicles/featured", { params: { kind } });
+export async function getFeaturedVehicles(
+  kind: "featured" | "bestSeller" | "newLaunch",
+  location: Pick<VehicleSearchQuery, "city" | "branchId"> = {},
+): Promise<VehicleDto[]> {
+  const { data } = await apiClient.get<VehicleDto[]>("/vehicles/featured", { params: { kind, ...location } });
   return data;
 }
 

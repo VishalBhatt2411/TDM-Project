@@ -6,8 +6,19 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { useDealershipConfig } from "@/hooks/use-dealership-config";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LocationPicker } from "@/components/LocationPicker";
+import { LocationProvider } from "@/context/location-context";
 
+/** The customer-facing shell; every page inside it shares the header's shopping location. */
 export function AppLayout() {
+  return (
+    <LocationProvider>
+      <AppShell />
+    </LocationProvider>
+  );
+}
+
+function AppShell() {
   const { isAuthenticated, logout } = useAuth();
   const { data: dealership } = useDealershipConfig();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -78,7 +89,8 @@ export function AppLayout() {
             )}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <LocationPicker />
             <LanguageSwitcher className="hidden sm:inline-flex" />
             {isAuthenticated ? (
               <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={logout}>

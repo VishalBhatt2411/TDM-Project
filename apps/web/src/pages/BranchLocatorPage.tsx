@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MapPin, Phone } from "lucide-react";
 import { listBranches } from "@/api/branches";
+import { useShoppingLocation } from "@/context/location-context";
 import { BranchMap } from "@/components/BranchMap";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,8 @@ import { Button } from "@/components/ui/button";
 export function BranchLocatorPage() {
   const { data: branches, isLoading, isError } = useQuery({ queryKey: ["branches"], queryFn: listBranches });
   const [selectedBranchId, setSelectedBranchId] = React.useState<string | undefined>(undefined);
+  const { setLocation } = useShoppingLocation();
+  const navigate = useNavigate();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -51,9 +54,18 @@ export function BranchLocatorPage() {
                     <p className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> {branch.phone}</p>
                   )}
                   {branch.operatingHours && <p>{branch.operatingHours}</p>}
-                  <Link to="/vehicles">
-                    <Button size="sm" variant="outline" className="mt-2">Book a Test Drive Here</Button>
-                  </Link>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLocation({ city: branch.address.city, branchId: branch.id });
+                      navigate("/vehicles");
+                    }}
+                  >
+                    Book a Test Drive Here
+                  </Button>
                 </CardContent>
               </Card>
             ))}

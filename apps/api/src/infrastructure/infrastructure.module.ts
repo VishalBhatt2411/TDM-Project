@@ -7,7 +7,6 @@ import {
   getPrismaClient,
   MagicLoginRepository,
   OrganizationRepository,
-  PostgresAssetRepository,
   PostgresAuditLogRepository,
   PostgresAuthRepository,
   PostgresFeatureFlagRepository,
@@ -20,6 +19,7 @@ import {
 import {
   deployTdmMetadata,
   SalesforceAnalyticsRepository,
+  SalesforceAssetRepository,
   SalesforceBookingRepository,
   SalesforceBranchRepository,
   SalesforceCustomerRepository,
@@ -159,7 +159,7 @@ const resolveSenderDisplayName = async (): Promise<string> => {
     { provide: STAFF_REFRESH_TOKEN_REPOSITORY, useValue: new StaffRefreshTokenRepository(prisma) },
     { provide: STAFF_OAUTH_STATE_REPOSITORY, useValue: new StaffOAuthStateRepository(prisma) },
     { provide: NOTIFICATION_TEMPLATE_REPOSITORY, useValue: new PostgresNotificationTemplateRepository(prisma) },
-    { provide: ASSET_REPOSITORY, useValue: new PostgresAssetRepository(prisma) },
+    { provide: ASSET_REPOSITORY, useValue: new SalesforceAssetRepository(connectionProvider) },
     { provide: ORGANIZATION_REPOSITORY, useValue: organizationRepository },
   ],
   exports: [

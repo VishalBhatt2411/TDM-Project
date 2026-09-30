@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   Booking,
   BookingConflictChecker,
   BookingConflictError,
   BookingRepository,
+  Branch,
   BranchRepository,
   CustomerRepository,
   DriveFeedback,
@@ -24,9 +25,11 @@ import {
   CUSTOMER_REPOSITORY,
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
+  VEHICLE_REPOSITORY,
 } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
+import { TenantContext } from "../tenancy/tenant-context";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
@@ -70,6 +73,7 @@ export class BookingsService {
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(SALES_OPPORTUNITY_REPOSITORY) private readonly opportunities: SalesOpportunityRepository,
+    @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     private readonly authService: AuthService,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
@@ -85,7 +89,8 @@ export class BookingsService {
     }
     customer.assertCanBook();
 
-    const booking = await this.createBookingInternal(customerId, dto);
+    const branch = await this.resolveBookingBranch(dto);
+    const booking = await this.createBookingInternal(customerId, dto, branch);
     await this.sendConfirmation(booking, customer.email.value, `${customer.name.firstName} ${customer.name.lastName}`);
     return { ...bookingToDto(booking), conflictChecked: true };
   }
@@ -97,6 +102,8 @@ export class BookingsService {
    * come back and manage their bookings — no password ever changes hands.
    */
   async createPublic(dto: CreatePublicBookingDto): Promise<BookingDto & { conflictChecked: true }> {
+    // Validated before any account is created or updated, so a bad request leaves no trace.
+    const branch = await this.resolveBookingBranch(dto);
     let customer = await this.customers.findByEmail(dto.email);
     let isNewAccount = false;
 
@@ -132,7 +139,7 @@ export class BookingsService {
       }
     }
 
-    const booking = await this.createBookingInternal(customer.id, dto);
+    const booking = await this.createBookingInternal(customer.id, dto, branch);
     const customerName = `${customer.name.firstName} ${customer.name.lastName}`;
 
     await this.sendConfirmation(booking, customer.email.value, customerName);
@@ -218,11 +225,22 @@ export class BookingsService {
     return { opportunityCreated: false };
   }
 
-  private async createBookingInternal(customerId: string, dto: CreateBookingDto): Promise<Booking> {
-    const slot = TimeSlot.create(dto.slot.start, dto.slot.end);
-    // The dealership is derived from the branch, never taken from the request.
-    const branch = await this.branches.findById(dto.branchId);
+  /**
+   * A vehicle is test-driven at the branch that stocks it. The booking's dealership is derived
+   * from that branch, never taken from the request, and must be one this host serves.
+   */
+  private async resolveBookingBranch(dto: CreateBookingDto): Promise<Branch> {
+    const [vehicle, branch] = await Promise.all([this.vehicles.findById(dto.vehicleId), this.branches.findById(dto.branchId)]);
+    if (!vehicle || !TenantContext.isVisibleOnHost(vehicle.dealershipId)) throw new NotFoundException("Vehicle not found.");
+    if (vehicle.branchId !== dto.branchId) {
+      throw new BadRequestException("This vehicle can only be test-driven at the branch that stocks it.");
+    }
     if (!branch || !branch.isActive) throw new NotFoundException("Branch not found.");
+    return branch;
+  }
+
+  private async createBookingInternal(customerId: string, dto: CreateBookingDto, branch: Branch): Promise<Booking> {
+    const slot = TimeSlot.create(dto.slot.start, dto.slot.end);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
     let joinWaitlist = false;

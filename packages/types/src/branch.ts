@@ -2,6 +2,7 @@ import type { Address, GeoCoordinates } from "./common";
 
 export interface BranchDto {
   id: string;
+  dealershipId: string;
   name: string;
   address: Address;
   geo?: GeoCoordinates;

@@ -96,6 +96,8 @@ export interface VehicleSearchQuery {
   transmission?: Transmission;
   minPrice?: number;
   maxPrice?: number;
+  /** Matches the city of the vehicle's branch. */
+  city?: string;
   branchId?: string;
   page?: number;
   pageSize?: number;

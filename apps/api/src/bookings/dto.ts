@@ -14,6 +14,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from "class-validator";
+import { IsRecordId } from "../common/record-id";
 
 class TimeSlotDto {
   @IsISO8601()
@@ -43,14 +44,15 @@ class AddressDto {
 const PURCHASE_TIMELINES = ["Immediate", "Within_1_Month", "Within_3_Months", "Within_6_Months", "Just_Exploring"];
 
 export class CreateBookingDto {
-  @IsString()
+  @IsRecordId()
   vehicleId!: string;
 
   @IsOptional()
-  @IsString()
+  @IsRecordId()
   preferredVariantId?: string;
 
-  @IsString()
+  /** Must be the vehicle's own branch (see BookingsService.createBookingInternal). */
+  @IsRecordId()
   branchId!: string;
 
   @IsIn(["Dealership", "Home"])

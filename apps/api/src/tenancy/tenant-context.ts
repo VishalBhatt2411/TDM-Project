@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { UnauthorizedException } from "@nestjs/common";
+import { DealershipScope } from "@tdm/domain";
 
 interface TenantStore {
   /** Tenant the request's host (dealer URL) resolved to, if any. */
@@ -35,6 +36,18 @@ export const TenantContext = {
 
   hostDealershipId(): string | undefined {
     return storage.getStore()?.hostDealershipId;
+  },
+
+  /** What a customer on this host may see: one dealership on a dealer host, every dealership on a company-wide host. */
+  hostDealershipScope(): DealershipScope {
+    const dealershipId = storage.getStore()?.hostDealershipId;
+    return dealershipId ? { dealershipIds: [dealershipId] } : {};
+  },
+
+  /** Whether a record owned by `dealershipId` is visible on this host (see hostDealershipScope). */
+  isVisibleOnHost(dealershipId: string): boolean {
+    const hostDealershipId = storage.getStore()?.hostDealershipId;
+    return !hostDealershipId || hostDealershipId === dealershipId;
   },
 
   /**

@@ -11,3 +11,4 @@ export * from "./repositories/opportunity.repository";
 export * from "./repositories/analytics.repository";
 export * from "./repositories/dealership.repository";
 export * from "./repositories/staff.repository";
+export * from "./repositories/asset.repository";

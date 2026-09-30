@@ -1,6 +1,7 @@
 import { Controller, Get, Inject } from "@nestjs/common";
 import { BranchRepository } from "@tdm/domain";
 import { BRANCH_REPOSITORY } from "../infrastructure/tokens";
+import { TenantContext } from "../tenancy/tenant-context";
 
 @Controller("branches")
 export class BranchesController {
@@ -8,11 +9,12 @@ export class BranchesController {
 
   @Get()
   async list() {
-    const branches = await this.branches.findAll();
+    const branches = await this.branches.findAll(TenantContext.hostDealershipScope());
     return branches.map((b) => {
       const props = b.toProps();
       return {
         id: props.id,
+        dealershipId: props.dealershipId,
         name: props.name,
         address: props.address,
         geo: props.geo,

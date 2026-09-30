@@ -12,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+// Base64 grows a file by a third; 5 MB stays within the API's 8,000,000-character cap.
+const MAX_LICENSE_PHOTO_BYTES = 5 * 1024 * 1024;
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,6 +50,7 @@ export function CompliancePage() {
     mutationFn: async () => {
       if (!licenseFile) throw new Error("Please upload a photo of your driving license.");
       if (!ALLOWED_IMAGE_TYPES.has(licenseFile.type)) throw new Error("License photo must be a JPEG, PNG, or WebP image.");
+      if (licenseFile.size > MAX_LICENSE_PHOTO_BYTES) throw new Error("License photo must be 5 MB or smaller.");
       const signatureBase64 = signaturePadRef.current?.toBase64();
       if (!signatureBase64) throw new Error("Please draw your signature.");
       if (!consentAccepted) throw new Error("Please accept the consent terms to continue.");

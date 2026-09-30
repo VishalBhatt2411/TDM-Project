@@ -10,6 +10,21 @@
     "adminConsole": "Admin Console",
     "bookATestDrive": "Book a Test Drive"
   },
+  "location": {
+    "change": "Change location (currently {{location}})",
+    "chooseCity": "Where are you shopping?",
+    "chooseBranch": "Choose a branch",
+    "description": "We'll show the vehicles you can test-drive near you. You can change this anytime from the header.",
+    "allCities": "All cities",
+    "allCitiesBack": "All cities",
+    "allBranches": "All branches",
+    "allBranchesIn": "All branches in {{city}}",
+    "branchCount_one": "{{count}} branch",
+    "branchCount_other": "{{count}} branches",
+    "noVehiclesHere": "No vehicles match this filter in {{location}} yet.",
+    "showAllCities": "Show all cities",
+    "showingIn": "Showing vehicles in {{location}}"
+  },
   "home": {
     "tagline": "Authorized Toyota Dealer",
     "heroTitle": "Experience the drive before you decide.",

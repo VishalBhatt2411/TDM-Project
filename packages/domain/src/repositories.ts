@@ -23,14 +23,20 @@ export interface DealershipScope {
   dealershipIds?: readonly string[];
 }
 
-export interface VehicleSearchCriteria extends DealershipScope {
+/** Where a customer is shopping — narrows a vehicle query to one city and/or branch. */
+export interface VehicleLocationFilter extends DealershipScope {
+  /** Matches the city of the vehicle's branch, case-insensitively. */
+  city?: string;
+  branchId?: string;
+}
+
+export interface VehicleSearchCriteria extends VehicleLocationFilter {
   q?: string;
   bodyType?: string;
   fuelType?: string;
   transmission?: string;
   minPrice?: number;
   maxPrice?: number;
-  branchId?: string;
   status?: VehicleStatus;
   page?: number;
   pageSize?: number;
@@ -39,7 +45,7 @@ export interface VehicleSearchCriteria extends DealershipScope {
 export interface VehicleRepository {
   findById(id: string): Promise<Vehicle | null>;
   search(criteria: VehicleSearchCriteria): Promise<{ items: Vehicle[]; total: number }>;
-  findFeatured(kind: "featured" | "bestSeller" | "newLaunch", limit?: number, scope?: DealershipScope): Promise<Vehicle[]>;
+  findFeatured(kind: "featured" | "bestSeller" | "newLaunch", limit?: number, filter?: VehicleLocationFilter): Promise<Vehicle[]>;
   /** Related vehicles always come from the same dealership as `vehicleId`. */
   findRelated(vehicleId: string, limit?: number): Promise<Vehicle[]>;
   /** Returns the persisted aggregate — on first save this carries the provider-assigned id. */
@@ -264,7 +270,10 @@ export interface StoredAsset {
   bookingId?: string;
 }
 
-/** In-house binary storage for compliance images (license photo, canvas signature) — see NOTIFICATION_TEMPLATE_REPOSITORY's sibling operational repositories. No external blob/CDN dependency. */
+/**
+ * Binary storage for compliance images (license photo, canvas signature). Assets belong to a
+ * booking's compliance submission — persist the booking's ComplianceRecord before saving its assets.
+ */
 export interface AssetRepository {
   save(input: { contentType: string; data: Buffer; purpose: AssetPurpose; bookingId?: string }): Promise<{ id: string }>;
   findById(id: string): Promise<StoredAsset | null>;

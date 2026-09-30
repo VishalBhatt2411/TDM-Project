@@ -10,6 +10,21 @@
     "adminConsole": "एडमिन कंसोल",
     "bookATestDrive": "टेस्ट ड्राइव बुक करें"
   },
+  "location": {
+    "change": "स्थान बदलें (अभी {{location}})",
+    "chooseCity": "आप कहाँ खरीदारी कर रहे हैं?",
+    "chooseBranch": "शाखा चुनें",
+    "description": "हम आपके पास टेस्ट ड्राइव के लिए उपलब्ध वाहन दिखाएँगे। आप इसे कभी भी हेडर से बदल सकते हैं।",
+    "allCities": "सभी शहर",
+    "allCitiesBack": "सभी शहर",
+    "allBranches": "सभी शाखाएँ",
+    "allBranchesIn": "{{city}} की सभी शाखाएँ",
+    "branchCount_one": "{{count}} शाखा",
+    "branchCount_other": "{{count}} शाखाएँ",
+    "noVehiclesHere": "{{location}} में इस फ़िल्टर से मेल खाने वाला कोई वाहन अभी नहीं है।",
+    "showAllCities": "सभी शहर दिखाएँ",
+    "showingIn": "{{location}} में वाहन दिखाए जा रहे हैं"
+  },
   "home": {
     "tagline": "अधिकृत टोयोटा डीलर",
     "heroTitle": "फैसला लेने से पहले ड्राइव का अनुभव करें।",

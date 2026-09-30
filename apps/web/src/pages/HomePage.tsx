@@ -8,9 +8,15 @@ import { getFeaturedVehicles } from "@/api/vehicles";
 import { VehicleCard } from "@/components/VehicleCard";
 import { Button } from "@/components/ui/button";
 import { useDealershipConfig } from "@/hooks/use-dealership-config";
+import { useShoppingLocation } from "@/context/location-context";
 
 function VehicleSection({ title, icon, kind }: { title: string; icon: ReactNode; kind: "featured" | "bestSeller" | "newLaunch" }) {
-  const { data, isLoading } = useQuery({ queryKey: ["featured-vehicles", kind], queryFn: () => getFeaturedVehicles(kind) });
+  const { location, isReady } = useShoppingLocation();
+  const { data, isLoading } = useQuery({
+    queryKey: ["featured-vehicles", kind, location.city, location.branchId],
+    queryFn: () => getFeaturedVehicles(kind, location),
+    enabled: isReady,
+  });
 
   if (!isLoading && (!data || data.length === 0)) return null;
 

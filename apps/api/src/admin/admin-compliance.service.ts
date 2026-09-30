@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { AssetRepository, AuditLogRepository, BookingRepository, CustomerRepository } from "@tdm/domain";
 import { ComplianceStatusDto, LicenseAiAssessment } from "@tdm/types";
-import { complianceToDto } from "../compliance/compliance.service";
+import { assetIdFromUrl, complianceToDto } from "../compliance/compliance.service";
 import { LicenseAiService } from "../compliance/license-ai.service";
 import { ASSET_REPOSITORY, AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, CUSTOMER_REPOSITORY } from "../infrastructure/tokens";
 import { BookingAccessPolicy } from "./booking-access.policy";
@@ -31,12 +31,13 @@ export class AdminComplianceService {
       throw new NotFoundException("No compliance submission exists for this booking yet.");
     }
     const props = record.toProps();
-    if (!props.licenseImageUrl) {
+    const licenseAssetId = assetIdFromUrl(props.licenseImageUrl);
+    if (!licenseAssetId) {
       throw new BadRequestException("No license image was submitted for this booking.");
     }
 
     const [asset, customer] = await Promise.all([
-      this.assets.findById(props.licenseImageUrl.split("/").pop() ?? ""),
+      this.assets.findById(licenseAssetId),
       this.customers.findById(booking.customerId),
     ]);
     if (!asset) {

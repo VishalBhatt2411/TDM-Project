@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
-import { EmiEstimateRequest } from "@tdm/types";
-import { VehicleAvailabilityQueryDto, VehicleSearchQueryDto } from "./dto";
+import {
+  CompareVehiclesDto,
+  EmiEstimateDto,
+  FeaturedVehiclesQueryDto,
+  VehicleAvailabilityQueryDto,
+  VehicleSearchQueryDto,
+} from "./dto";
+import { ParseRecordIdPipe } from "../common/record-id";
 import { VehiclesService } from "./vehicles.service";
-
-export class CompareVehiclesDto {
-  vehicleIds!: string[];
-}
 
 @Controller("vehicles")
 export class VehiclesController {
@@ -17,37 +19,38 @@ export class VehiclesController {
   }
 
   @Get("featured")
-  getFeatured(@Query("kind") kind: "featured" | "bestSeller" | "newLaunch" = "featured") {
-    return this.vehiclesService.getFeatured(kind);
+  getFeatured(@Query() query: FeaturedVehiclesQueryDto) {
+    const { kind, ...location } = query;
+    return this.vehiclesService.getFeatured(kind, location);
   }
 
   @Post("compare")
   compare(@Body() dto: CompareVehiclesDto) {
-    return this.vehiclesService.compare(dto.vehicleIds.slice(0, 4));
+    return this.vehiclesService.compare(dto.vehicleIds);
   }
 
   @Post("emi-estimate")
-  estimateEmi(@Body() dto: EmiEstimateRequest) {
+  estimateEmi(@Body() dto: EmiEstimateDto) {
     return this.vehiclesService.estimateEmi(dto);
   }
 
   @Get(":id")
-  getById(@Param("id") id: string) {
+  getById(@Param("id", ParseRecordIdPipe) id: string) {
     return this.vehiclesService.getById(id);
   }
 
   @Get(":id/variants")
-  getVariants(@Param("id") id: string) {
+  getVariants(@Param("id", ParseRecordIdPipe) id: string) {
     return this.vehiclesService.getVariants(id);
   }
 
   @Get(":id/related")
-  getRelated(@Param("id") id: string) {
+  getRelated(@Param("id", ParseRecordIdPipe) id: string) {
     return this.vehiclesService.getRelated(id);
   }
 
   @Get(":id/availability")
-  getAvailability(@Param("id") id: string, @Query() query: VehicleAvailabilityQueryDto) {
+  getAvailability(@Param("id", ParseRecordIdPipe) id: string, @Query() query: VehicleAvailabilityQueryDto) {
     return this.vehiclesService.getAvailability(id, query.date);
   }
 }

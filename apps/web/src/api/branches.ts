@@ -3,6 +3,7 @@ import { apiClient } from "@/lib/api-client";
 
 export interface BranchDto {
   id: string;
+  dealershipId: string;
   name: string;
   address: Address;
   geo?: GeoCoordinates;

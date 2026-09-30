@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getVehicle, getVehicleAvailability, getVehicleVariants } from "@/api/vehicles";
-import { listBranches } from "@/api/branches";
+import { useShoppingLocation } from "@/context/location-context";
 import { createBooking, createPublicBooking, isBookingConflictError } from "@/api/bookings";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,6 @@ interface FormValues {
   city: string;
   state: string;
   preferredVariantId: string;
-  branchId: string;
   driveType: DriveType;
   homeAddress: string;
   preferredDate: string;
@@ -54,9 +53,11 @@ export function BookingPage() {
   const navigate = useNavigate();
   const { isAuthenticated, profile } = useAuth();
 
-  const { data: vehicle } = useQuery({ queryKey: ["vehicle", vehicleId], queryFn: () => getVehicle(vehicleId!), enabled: !!vehicleId });
+  const { data: vehicle, isError: vehicleError } = useQuery({ queryKey: ["vehicle", vehicleId], queryFn: () => getVehicle(vehicleId!), enabled: !!vehicleId });
   const { data: variants } = useQuery({ queryKey: ["vehicle-variants", vehicleId], queryFn: () => getVehicleVariants(vehicleId!), enabled: !!vehicleId });
-  const { data: branches } = useQuery({ queryKey: ["branches"], queryFn: listBranches });
+  const { branches, isReady: branchesReady } = useShoppingLocation();
+  // A vehicle is test-driven at the branch that stocks it — not a customer choice.
+  const branch = vehicle ? branches.find((b) => b.id === vehicle.branchId) : undefined;
 
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [confirmedId, setConfirmedId] = React.useState<string | null>(null);
@@ -65,6 +66,7 @@ export function BookingPage() {
     register,
     handleSubmit,
     watch,
+    getValues,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -79,7 +81,6 @@ export function BookingPage() {
   });
 
   const driveType = watch("driveType");
-  const branchId = watch("branchId");
   const isExistingCustomer = watch("isExistingCustomer");
   const pickupRequired = watch("pickupRequired");
   const preferredDate = watch("preferredDate");
@@ -110,7 +111,24 @@ export function BookingPage() {
     setValue("mobileNumber", profile.phone.replace(/^\+91/, ""));
   }, [profile, setValue]);
 
-  if (!vehicle || !branches) {
+  // Most customers live near the showroom they book at — pre-fill, but never overwrite what they typed.
+  React.useEffect(() => {
+    if (!branch) return;
+    if (!getValues("city")) setValue("city", branch.address.city);
+    if (!getValues("state")) setValue("state", branch.address.state);
+  }, [branch, getValues, setValue]);
+
+  if (vehicleError) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <h1 className="text-xl font-semibold">This vehicle isn't available for booking</h1>
+        <p className="mt-2 text-muted-foreground">It may have been sold or moved. Browse the vehicles available near you instead.</p>
+        <Button className="mt-6" onClick={() => navigate("/vehicles")}>Explore Vehicles</Button>
+      </div>
+    );
+  }
+
+  if (!vehicle || !branchesReady) {
     return <p className="p-8 text-muted-foreground">Loading…</p>;
   }
 
@@ -124,7 +142,7 @@ export function BookingPage() {
     const commonFields = {
       vehicleId: vehicle.id,
       preferredVariantId: values.preferredVariantId || undefined,
-      branchId: values.branchId,
+      branchId: vehicle.branchId,
       driveType: values.driveType,
       slot: { start: start.toISOString(), end: end.toISOString() },
       homeAddress:
@@ -279,22 +297,19 @@ export function BookingPage() {
                   </select>
                 </div>
               )}
-              <div className="mt-3 space-y-1.5">
-                <Label htmlFor="branchId">Preferred Dealership</Label>
-                <select id="branchId" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...register("branchId", { required: true })}>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-                {(() => {
-                  const selectedBranch = branches.find((b) => b.id === branchId);
-                  return selectedBranch ? (
+              <div className="mt-3 rounded-md border bg-muted/30 px-3 py-2.5">
+                <p className="text-xs text-muted-foreground">Test drive at</p>
+                {branch ? (
+                  <>
+                    <p className="text-sm font-medium">{branch.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {selectedBranch.address.line1}, {selectedBranch.address.city} ·{" "}
+                      {branch.address.line1}, {branch.address.city} ·{" "}
                       <Link to="/branches" className="text-primary underline">View on map</Link>
                     </p>
-                  ) : null;
-                })()}
+                  </>
+                ) : (
+                  <p className="text-sm text-destructive">This vehicle's showroom isn't taking bookings right now.</p>
+                )}
               </div>
 
               <div className="mt-3 flex gap-2">
@@ -377,7 +392,7 @@ export function BookingPage() {
 
             {serverError && <p className="text-sm text-destructive">{serverError}</p>}
 
-            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || (isAuthenticated && !profile)}>
+            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || !branch || (isAuthenticated && !profile)}>
               {isSubmitting ? "Booking…" : "Confirm Test Drive Booking"}
             </Button>
           </form>

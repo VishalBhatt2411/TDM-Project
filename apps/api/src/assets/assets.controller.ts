@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, NotFoundException, Param, ParseUUIDPipe, Res, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, NotFoundException, Param, Res, UseGuards } from "@nestjs/common";
 import { Response } from "express";
 import { AssetRepository, BookingRepository } from "@tdm/domain";
 import { StaffAuthGuard } from "../admin/staff-auth.guard";
@@ -6,11 +6,12 @@ import type { AuthenticatedStaff } from "../admin/staff-auth.guard";
 import { CurrentStaff } from "../admin/current-staff.decorator";
 import { BookingAccessPolicy } from "../admin/booking-access.policy";
 import { ASSET_REPOSITORY, BOOKING_REPOSITORY } from "../infrastructure/tokens";
+import { ParseRecordIdPipe } from "../common/record-id";
 
 /**
- * Serves in-house-stored compliance images (license photo, canvas-drawn signature)
- * back to the admin console for staff review. Never exposed to customers — they
- * already hold the image locally at capture time. See schema.prisma UploadedAsset.
+ * Streams stored compliance images (license photo, canvas-drawn signature) back to the
+ * admin console for staff review. Never exposed to customers — they already hold the
+ * image locally at capture time.
  *
  * Every asset belongs to a booking; a staff member may only read it if they may act on
  * that booking (BookingAccessPolicy) — the asset id alone is never an authorization.
@@ -25,7 +26,7 @@ export class AssetsController {
   ) {}
 
   @Get(":id")
-  async getById(@Param("id", ParseUUIDPipe) id: string, @CurrentStaff() staff: AuthenticatedStaff, @Res() res: Response) {
+  async getById(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaff() staff: AuthenticatedStaff, @Res() res: Response) {
     const asset = await this.assets.findById(id);
     const booking = asset?.bookingId ? await this.bookings.findById(asset.bookingId) : null;
     if (!asset || !booking) {

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,7 @@ import { VehicleCard } from "@/components/VehicleCard";
 import { searchVehicles } from "@/api/vehicles";
 import { useAuth } from "@/context/auth-context";
 import { useWishlist } from "@/hooks/use-wishlist";
+import { useShoppingLocation } from "@/context/location-context";
 import type { BodyType } from "@tdm/types";
 
 const BODY_TYPES: BodyType[] = ["Sedan", "SUV", "Hatchback", "MPV", "Luxury", "Pickup"];
@@ -21,10 +23,16 @@ export function VehiclesPage() {
     return () => clearTimeout(timer);
   }, [q]);
 
+  const { t } = useTranslation();
+  const { location, isReady, branches, setLocation } = useShoppingLocation();
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["vehicles", bodyType, debouncedQ],
-    queryFn: () => searchVehicles({ bodyType, q: debouncedQ || undefined }),
+    queryKey: ["vehicles", bodyType, debouncedQ, location.city, location.branchId],
+    queryFn: () => searchVehicles({ bodyType, q: debouncedQ || undefined, city: location.city, branchId: location.branchId }),
+    enabled: isReady,
   });
+  const locationLabel = location.branchId
+    ? branches.find((b) => b.id === location.branchId)?.name ?? location.city
+    : location.city;
   const { isAuthenticated } = useAuth();
   const wishlist = useWishlist();
 
@@ -32,7 +40,9 @@ export function VehiclesPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Explore the Toyota Lineup</h1>
-        <p className="text-sm text-muted-foreground">Find the right vehicle and book a test drive in minutes.</p>
+        <p className="text-sm text-muted-foreground">
+          {locationLabel ? t("location.showingIn", { location: locationLabel }) : "Find the right vehicle and book a test drive in minutes."}
+        </p>
       </div>
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -57,7 +67,7 @@ export function VehiclesPage() {
         </div>
       </div>
 
-      {isLoading && (
+      {(isLoading || !isReady) && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="aspect-[3/4] animate-pulse rounded-lg bg-muted" />
@@ -66,9 +76,14 @@ export function VehiclesPage() {
       )}
       {isError && <p className="text-destructive">Couldn't load vehicles. Is the API running?</p>}
       {data && data.items.length === 0 && (
-        <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-          No vehicles match this filter yet.
-        </p>
+        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+          <p>{locationLabel ? t("location.noVehiclesHere", { location: locationLabel }) : "No vehicles match this filter yet."}</p>
+          {locationLabel && (
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => setLocation({})}>
+              {t("location.showAllCities")}
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
