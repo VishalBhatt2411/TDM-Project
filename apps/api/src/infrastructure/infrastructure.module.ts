@@ -88,16 +88,17 @@ const organizationRepository = new OrganizationRepository(prisma, env.encryption
 const connectionProvider = new TenantSalesforceConnectionProvider({
   resolveOrganizationId: () => TenantContext.currentOrganizationId(),
   loadCredentials: (organizationId) => organizationRepository.loadConnectionCredentials(organizationId),
-  onRefreshTokenRotated: async (organizationId, refreshToken) => {
-    await organizationRepository.saveRotatedRefreshToken(organizationId, refreshToken);
-    logger.log(JSON.stringify({ event: "salesforce_refresh_token_rotated", organizationId }));
+  onRefreshTokenRotated: async (organizationId, previousRefreshToken, refreshToken) => {
+    const saved = await organizationRepository.saveRotatedRefreshToken(organizationId, previousRefreshToken, refreshToken);
+    logger.log(JSON.stringify({ event: "salesforce_refresh_token_rotated", organizationId, saved }));
   },
-  onCredentialsRejected: async (organizationId) => {
-    await organizationRepository.recordConnectionError(
+  onCredentialsRejected: async (organizationId, rejectedRefreshToken) => {
+    const marked = await organizationRepository.recordRefreshTokenRejected(
       organizationId,
+      rejectedRefreshToken,
       "Salesforce rejected the stored refresh token (revoked or Connected App policy changed). Reconnect the org.",
     );
-    logger.warn(JSON.stringify({ event: "salesforce_credentials_rejected", organizationId }));
+    logger.warn(JSON.stringify({ event: "salesforce_credentials_rejected", organizationId, marked }));
   },
 });
 

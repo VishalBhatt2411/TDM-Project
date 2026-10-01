@@ -317,12 +317,42 @@ export class OrganizationRepository {
     });
   }
 
-  /** Salesforce issued a new refresh token during a refresh (rotation policy) — the old one is now dead. */
-  async saveRotatedRefreshToken(id: string, refreshToken: string): Promise<void> {
-    await this.prisma.organization.update({
-      where: { id },
+  /**
+   * Salesforce issued a new refresh token during a refresh (rotation policy) — the old one is now
+   * dead. Compare-and-swap: written only while `previousRefreshToken` is still the stored one, so a
+   * slower instance can't overwrite a newer rotation. Returns whether it was written.
+   */
+  async saveRotatedRefreshToken(id: string, previousRefreshToken: string, refreshToken: string): Promise<boolean> {
+    const storedCipher = await this.storedRefreshTokenCipherIf(id, previousRefreshToken);
+    if (!storedCipher) return false;
+    const { count } = await this.prisma.organization.updateMany({
+      where: { id, sfRefreshTokenEnc: storedCipher },
       data: { sfRefreshTokenEnc: encryptSecret(refreshToken, this.masterKeyHex) },
     });
+    return count === 1;
+  }
+
+  /**
+   * Salesforce rejected `rejectedRefreshToken` — marks the org as needing a reconnect, unless the
+   * stored token has since moved on (another instance rotated it), in which case the org is fine.
+   * Returns whether the org was marked.
+   */
+  async recordRefreshTokenRejected(id: string, rejectedRefreshToken: string, message: string): Promise<boolean> {
+    const storedCipher = await this.storedRefreshTokenCipherIf(id, rejectedRefreshToken);
+    if (!storedCipher) return false;
+    const { count } = await this.prisma.organization.updateMany({
+      where: { id, sfRefreshTokenEnc: storedCipher },
+      data: { connectionStatus: "error", connectionError: message },
+    });
+    return count === 1;
+  }
+
+  /** The stored refresh-token ciphertext when it decrypts to `refreshToken` (AES-GCM ciphertexts differ per encryption, so compare plaintexts). */
+  private async storedRefreshTokenCipherIf(id: string, refreshToken: string): Promise<string | null> {
+    const record = await this.prisma.organization.findUnique({ where: { id }, select: { sfRefreshTokenEnc: true } });
+    const cipher = record?.sfRefreshTokenEnc;
+    if (!cipher) return null;
+    return decryptSecret(cipher, this.masterKeyHex) === refreshToken ? cipher : null;
   }
 
   /** Null until the onboarding wizard has stored both halves of the Connected App credentials. */
