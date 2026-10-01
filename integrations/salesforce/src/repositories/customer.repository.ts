@@ -1,4 +1,4 @@
-import { Customer, CustomerRepository } from "@tdm/domain";
+import { Customer, CustomerRepository, InvalidValueError } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { Connection } from "jsforce";
 import { contactPhoneNeedsCountryCode, contactToCustomer, customerToContactRecord } from "../mappers";
@@ -21,9 +21,24 @@ export class SalesforceCustomerRepository implements CustomerRepository {
   async findByIds(ids: readonly string[]): Promise<Customer[]> {
     if (!ids.length) return [];
     return withConnection(this.connectionProvider, async (conn) => {
-      const { records } = await conn.query(`SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c IN ${soqlIdList(ids)}`);
+      // A booking references its customer by portal user id, or by Contact Id when staff booked
+      // for a Contact that never registered on the portal (see bookingRecordToDomain) — match either.
+      const idList = soqlIdList(ids);
+      const { records } = await conn.query(
+        `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c IN ${idList} OR Id IN ${idList}`,
+      );
       const countryCode = records.some(contactPhoneNeedsCountryCode) ? await companyPhoneCountryCode(conn) : undefined;
-      return records.map((record) => contactToCustomer(record, countryCode));
+      // A Contact edited directly in Salesforce can carry an email or phone the domain rejects;
+      // skip it like an unknown id rather than failing every other customer in the batch.
+      return records.flatMap((record: any) => {
+        try {
+          return [contactToCustomer({ ...record, Portal_User_Id__c: record.Portal_User_Id__c ?? record.Id }, countryCode)];
+        } catch (error) {
+          if (!(error instanceof InvalidValueError)) throw error;
+          console.warn(JSON.stringify({ event: "customer_contact_invalid", contactId: record.Id }));
+          return [];
+        }
+      });
     });
   }
 
