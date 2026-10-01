@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { runInBackground } from "../common/background-tasks";
 import { StaffAssignment, StaffAssignmentConflictError, StaffAssignmentRepository } from "@tdm/domain";
 import {
   OrganizationRecord,
@@ -182,7 +183,7 @@ export class OnboardingService {
     // over one org's deploy failure. deployMetadataInBackground already catches everything it
     // can attribute to a cause; this is the last-resort net for anything that still slips out
     // (e.g. the error-recording write itself failing).
-    this.deployMetadataInBackground(org.id, connectingUserId).catch((err) => {
+    runInBackground(this.deployMetadataInBackground(org.id, connectingUserId)).catch((err) => {
       this.logger.error(
         JSON.stringify({ event: "onboarding_metadata_deploy_unhandled", organizationId: org.id, reason: (err as Error).message }),
       );

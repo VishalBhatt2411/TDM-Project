@@ -20,5 +20,9 @@ export const BRAND_IMAGE_CONTENT_TYPES: Record<BrandAssetKind, readonly AllowedI
   hero: ALLOWED_IMAGE_CONTENT_TYPES,
 };
 
-/** Decoded size caps per image kind — a hero is a full-width photo, a logo is a small mark. */
-export const MAX_BRAND_IMAGE_BYTES = { logo: 1024 * 1024, hero: 4 * 1024 * 1024 } as const;
+/**
+ * Decoded size caps per image kind — a hero is a full-width photo, a logo is a small mark. The hero
+ * cap keeps the base64 upload body under a serverless host's ~4.5 MB request limit; the admin
+ * console downscales larger files to fit before uploading.
+ */
+export const MAX_BRAND_IMAGE_BYTES = { logo: 1024 * 1024, hero: 3 * 1024 * 1024 } as const;

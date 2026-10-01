@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SUPPORTED_LANGUAGES } from "@/i18n";
 import { errorMessage } from "@/lib/api-error";
+import { blobToBase64, prepareImageForUpload } from "@/lib/image-upload";
 import { heroBackground, heroTextContrast } from "@/lib/brand-hero";
 import { WCAG_AA_LARGE, WCAG_AA_NORMAL, WHITE, contrastRatio, hexToRgb, isHexColor, readableOn } from "@/lib/color";
 import { cn } from "@/lib/utils";
@@ -133,14 +134,8 @@ function imageUrl(url: string | undefined, assetId: string | undefined): string 
   return assetId ? brandAssetUrl(assetId) : url || undefined;
 }
 
-function readAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
-    reader.onerror = () => reject(reader.error ?? new Error("Couldn't read the file."));
-    reader.readAsDataURL(file);
-  });
-}
+/** Longest edge per image kind: a logo renders small, a hero spans a wide screen. */
+const MAX_IMAGE_DIMENSION: Record<BrandImageKind, number> = { logo: 1024, hero: 2560 };
 
 function formatMegabytes(bytes: number): string {
   return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
@@ -234,7 +229,10 @@ function ImageField({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [fileError, setFileError] = React.useState<string>();
   const upload = useMutation({
-    mutationFn: async (file: File) => uploadBrandImage(scope, { kind, contentType: file.type, dataBase64: await readAsBase64(file) }),
+    mutationFn: async (file: File) => {
+      const image = await prepareImageForUpload(file, { maxBytes, maxDimension: MAX_IMAGE_DIMENSION[kind] });
+      return uploadBrandImage(scope, { kind, contentType: image.contentType, dataBase64: await blobToBase64(image.blob) });
+    },
     onSuccess: ({ assetId: uploaded }) => onChange({ url: "", assetId: uploaded }),
   });
   const maxBytes = schema.maxImageBytes[kind];
@@ -246,7 +244,6 @@ function ImageField({
     upload.reset();
     if (!file) return;
     if (!contentTypes.includes(file.type)) setFileError(`Use a ${formats} image.`);
-    else if (file.size > maxBytes) setFileError(`The image must be ${formatMegabytes(maxBytes)} or smaller.`);
     else upload.mutate(file);
   };
 
@@ -260,7 +257,7 @@ function ImageField({
       isSet={!!(url || assetId)}
       resetLabel="Remove"
       onReset={() => onChange({ url: "", assetId: "" })}
-      hint={`An https:// link, or upload a ${formats} up to ${formatMegabytes(maxBytes)}.`}
+      hint={`An https:// link, or upload a ${formats}; images over ${formatMegabytes(maxBytes)} are resized automatically.`}
     >
       <div className="flex items-start gap-3">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">

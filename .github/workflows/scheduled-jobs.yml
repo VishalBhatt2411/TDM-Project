@@ -1,0 +1,53 @@
+# Triggers the API's scheduled jobs on hosts without a long-running process (SCHEDULER_MODE=external).
+# Repository settings: variable APP_URL (https origin of a deployed tenant host) and secret
+# JOB_TRIGGER_SECRET (the API's value). GitHub may delay scheduled runs by a few minutes; every job
+# is idempotent, so a late or skipped run is caught up by the next one.
+name: Scheduled jobs
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * *"
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run now
+        required: true
+        type: choice
+        options: [host-sync, reminders, follow-ups]
+
+permissions: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: vars.APP_URL != ''
+    concurrency:
+      group: scheduled-job-${{ github.event.inputs.job || github.event.schedule }}
+      cancel-in-progress: false
+    steps:
+      - name: Resolve job
+        id: job
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_JOB: ${{ github.event.inputs.job }}
+        run: |
+          case "${INPUT_JOB:-$SCHEDULE}" in
+            "*/5 * * * *") job=host-sync ;;
+            "*/15 * * * *") job=reminders ;;
+            "0 10 * * *") job=follow-ups ;;
+            host-sync|reminders|follow-ups) job="$INPUT_JOB" ;;
+            *) echo "Unknown schedule: ${INPUT_JOB:-$SCHEDULE}" >&2; exit 1 ;;
+          esac
+          echo "name=$job" >> "$GITHUB_OUTPUT"
+      - name: Trigger ${{ steps.job.outputs.name }}
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          JOB_TRIGGER_SECRET: ${{ secrets.JOB_TRIGGER_SECRET }}
+          JOB: ${{ steps.job.outputs.name }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 --retry 2 --retry-all-errors \
+            -X POST -H "Authorization: Bearer $JOB_TRIGGER_SECRET" \
+            "$APP_URL/api/v1/internal/jobs/$JOB"

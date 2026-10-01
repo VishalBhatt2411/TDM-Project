@@ -18,11 +18,14 @@ import { AssetsModule } from "./assets/assets.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { TenancyModule } from "./tenancy/tenancy.module";
 import { TenantMiddleware } from "./tenancy/tenant.middleware";
+import { JobsModule } from "./jobs/jobs.module";
+import { env } from "./common/env";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ScheduleModule.forRoot(),
+    // Without the schedule module the @Cron handlers stay inert; JobsModule's triggers run them instead.
+    ...(env.schedulerMode === "in-process" ? [ScheduleModule.forRoot()] : []),
     // Baseline abuse protection for every endpoint; auth-sensitive endpoints
     // (login, OTP, password reset) apply a stricter override via @Throttle.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
@@ -40,6 +43,7 @@ import { TenantMiddleware } from "./tenancy/tenant.middleware";
     ComplianceModule,
     AssetsModule,
     OnboardingModule,
+    JobsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

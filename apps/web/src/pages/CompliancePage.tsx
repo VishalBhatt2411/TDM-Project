@@ -12,19 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
+import { blobToBase64, prepareImageForUpload } from "@/lib/image-upload";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-// Base64 grows a file by a third; 5 MB stays within the API's 8,000,000-character cap.
-const MAX_LICENSE_PHOTO_BYTES = 5 * 1024 * 1024;
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+// The photo and signature travel in one JSON body, which the host caps at ~4.5 MB after base64's
+// one-third growth; 2.5 MB leaves room for the signature. 2400px keeps licence text legible.
+const LICENSE_PHOTO_BUDGET = { maxBytes: 2.5 * 1024 * 1024, maxDimension: 2400 };
 
 export function CompliancePage() {
   const { id } = useParams<{ id: string }>();
@@ -54,16 +47,16 @@ export function CompliancePage() {
     mutationFn: async () => {
       if (!licenseFile) throw new Error("Please upload a photo of your driving license.");
       if (!ALLOWED_IMAGE_TYPES.has(licenseFile.type)) throw new Error("License photo must be a JPEG, PNG, or WebP image.");
-      if (licenseFile.size > MAX_LICENSE_PHOTO_BYTES) throw new Error("License photo must be 5 MB or smaller.");
       const signatureBase64 = signaturePadRef.current?.toBase64();
       if (!signatureBase64) throw new Error("Please draw your signature.");
       if (!consentAccepted) throw new Error("Please accept the consent terms to continue.");
 
-      const licenseImageBase64 = await fileToBase64(licenseFile);
+      const licensePhoto = await prepareImageForUpload(licenseFile, LICENSE_PHOTO_BUDGET);
+      const licenseImageBase64 = await blobToBase64(licensePhoto.blob);
       return submitCompliance(bookingId, {
         licenseNumber,
         licenseImageBase64,
-        licenseImageContentType: licenseFile.type,
+        licenseImageContentType: licensePhoto.contentType,
         licenseExpiryDate: licenseExpiryDate || undefined,
         consentAccepted,
         signatureImageBase64: signatureBase64,

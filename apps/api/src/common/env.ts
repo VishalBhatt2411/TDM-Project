@@ -26,7 +26,17 @@ export interface AppEnv {
   sfOAuthRedirectUri: string;
   sfOnboardingRedirectUri: string;
   anthropicApiKey?: string;
+  /**
+   * "in-process": the API's own cron timers run the background jobs (a long-running server).
+   * "external": an outside scheduler triggers them over HTTP (serverless, where no process outlives a request).
+   */
+  schedulerMode: SchedulerMode;
+  /** Bearer secret an external scheduler presents to trigger a job; only set in "external" mode. */
+  jobTriggerSecret?: string;
 }
+
+export type SchedulerMode = "in-process" | "external";
+const SCHEDULER_MODES: readonly SchedulerMode[] = ["in-process", "external"];
 
 const MIN_JWT_SECRET_LENGTH = 32;
 
@@ -93,6 +103,13 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     errors.push("CUSTOM_DOMAIN_TARGET must be a bare hostname, e.g. cname.vercel-dns.com.");
   }
 
+  const schedulerMode = (read("SCHEDULER_MODE") ?? "in-process") as SchedulerMode;
+  if (!SCHEDULER_MODES.includes(schedulerMode)) errors.push(`SCHEDULER_MODE must be one of: ${SCHEDULER_MODES.join(", ")}.`);
+  const jobTriggerSecret = read("JOB_TRIGGER_SECRET");
+  if (schedulerMode === "external" && (!jobTriggerSecret || jobTriggerSecret.length < MIN_JWT_SECRET_LENGTH)) {
+    errors.push(`JOB_TRIGGER_SECRET of at least ${MIN_JWT_SECRET_LENGTH} characters is required when SCHEDULER_MODE=external.`);
+  }
+
   const webOrigin = url("WEB_ORIGIN", "http://localhost:5173");
   const adminWebOrigin = read("ADMIN_WEB_ORIGIN") ? url("ADMIN_WEB_ORIGIN", webOrigin) : webOrigin;
 
@@ -111,6 +128,8 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     sfOAuthRedirectUri: url("SF_OAUTH_REDIRECT_URI", "http://localhost:3000/api/v1/admin/auth/salesforce/callback"),
     sfOnboardingRedirectUri: url("SF_ONBOARDING_REDIRECT_URI", "http://localhost:3000/api/v1/onboarding/salesforce/callback"),
     anthropicApiKey: read("ANTHROPIC_API_KEY"),
+    schedulerMode,
+    jobTriggerSecret: schedulerMode === "external" ? jobTriggerSecret : undefined,
   };
 
   if (errors.length > 0) {

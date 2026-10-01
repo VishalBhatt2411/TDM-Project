@@ -19,6 +19,12 @@ module.exports = {
   },
   overrides: [
     {
+      // Platform entries (CommonJS, loaded by the host's Node runtime).
+      files: ["api/**/*.js"],
+      env: { node: true },
+      rules: { "@typescript-eslint/no-var-requires": "off" },
+    },
+    {
       // Business logic talks to repository interfaces only.
       files: ["packages/domain/**/*.ts", "packages/types/**/*.ts"],
       rules: {

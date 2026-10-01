@@ -13,6 +13,6 @@ import { QrCheckinService } from "./qr-checkin.service";
   imports: [AuthModule, NotificationsModule, DealershipConfigModule],
   controllers: [BookingsController],
   providers: [BookingsService, BookingMutationService, ReminderScheduler, FollowUpScheduler, QrCheckinService],
-  exports: [BookingMutationService, QrCheckinService],
+  exports: [BookingMutationService, QrCheckinService, ReminderScheduler, FollowUpScheduler],
 })
 export class BookingsModule {}

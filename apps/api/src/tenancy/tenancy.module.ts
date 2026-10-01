@@ -7,6 +7,6 @@ import { CustomDomainService } from "./custom-domain.service";
 @Global()
 @Module({
   providers: [TenantResolverService, TenantMiddleware, DealershipHostSyncScheduler, CustomDomainService],
-  exports: [TenantResolverService, TenantMiddleware, CustomDomainService],
+  exports: [TenantResolverService, TenantMiddleware, CustomDomainService, DealershipHostSyncScheduler],
 })
 export class TenancyModule {}

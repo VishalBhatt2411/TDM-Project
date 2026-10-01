@@ -15,6 +15,8 @@ const HOST_OPTIONAL_PREFIXES = [
   "/api/v1/analytics/",
   "/api/v1/assets/",
   "/api/v1/onboarding/",
+  // Job triggers are platform-wide (they fan out over every tenant) and authenticate by secret.
+  "/api/v1/internal/",
   "/health/",
   "/api/docs/",
 ];

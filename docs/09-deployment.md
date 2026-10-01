@@ -1,47 +1,70 @@
-# Deployment (Vercel + Render)
+# Deployment (Vercel + Neon + GitHub Actions)
 
-The web app is static and goes to Vercel. The API is a long-running Node service (in-process
-schedulers, pooled Postgres connections) and goes to Render via `render.yaml`. The browser only
-ever talks to the Vercel host: Vercel rewrites `/api/*` to the API, so the request host — which
-selects the tenant — stays the customer-facing one, and cookies stay first-party.
+Everything runs on free tiers. One Vercel project serves both the web app (static, `apps/web/dist`)
+and the API (one Node function, `api/index.js`, wrapping `apps/api/src/serverless.ts`). The
+platform store is a Neon Postgres. Because a serverless host has no long-running process, the API
+runs with `SCHEDULER_MODE=external` and `.github/workflows/scheduled-jobs.yml` triggers the
+reminder (15 min), host-sync (5 min) and follow-up (daily, 10:00 UTC) jobs over HTTPS.
 
-## 1. API on Render
+The same build still runs as a long-running server (`node apps/api/dist/main.js`, default
+`SCHEDULER_MODE=in-process`) on any container host.
 
-1. Push the branch to GitHub, then in Render choose **New → Blueprint** and select the repo.
-   It creates `tdm-api` and the `tdm-platform-db` Postgres from `render.yaml`.
-2. Enter the `sync: false` values (all URLs `https`):
+## 1. Database
 
-   | Variable | Value |
-   | --- | --- |
-   | `ENCRYPTION_KEY` | 64 hex chars; generate once and keep it — rotating it forces every tenant to reconnect Salesforce |
-   | `WEB_ORIGIN` | `https://<tenant label>.<TENANT_BASE_DOMAIN>` (the Vercel host) |
-   | `TENANT_BASE_DOMAIN` | `vercel.app` while on `*.vercel.app`; your own domain later |
-   | `SF_OAUTH_REDIRECT_URI` | `https://<web host>/api/v1/admin/auth/salesforce/callback` |
-   | `SF_ONBOARDING_REDIRECT_URI` | `https://<web host>/api/v1/onboarding/salesforce/callback` |
-   | `ANTHROPIC_API_KEY` | optional (AI licence check) |
+Create a Neon project (Vercel → Storage → Neon, or neon.tech). Use the pooled connection string
+as `DATABASE_URL`; migrations run during the Vercel build against `DATABASE_URL_UNPOOLED` when it
+is set (the Neon integration sets both), else `DATABASE_URL`.
 
-3. Deploy. `preDeployCommand` applies migrations; `/health/ready` gates traffic.
+## 2. Vercel project
 
-## 2. Web on Vercel
+Import the repo with the **repository root** as Root Directory; `vercel.json` holds the build,
+rewrites (`/api/*`, `/health*` → the function; everything else → the SPA) and security headers.
+Environment variables (Production):
 
-1. Import the repo with **Root Directory** `apps/web` (framework: Vite). `apps/web/vercel.json`
-   holds the build command, SPA fallback, security headers and the `/api/*` rewrite to the
-   Render service URL.
-2. Domains: tenants resolve from `<label>.<TENANT_BASE_DOMAIN>`, where the label is a company or
-   dealer slug. On `*.vercel.app` add each tenant host as a project domain (e.g.
-   `<dealer-slug>.vercel.app`, if that name is free). A real domain replaces this with a single
-   wildcard `*.<domain>` (requires Vercel nameservers) — then set `TENANT_BASE_DOMAIN` to it.
+| Variable | Value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | Neon pooled URL |
+| `JWT_SECRET` | ≥ 32 random characters |
+| `ENCRYPTION_KEY` | 64 hex characters; keep it — rotating it forces every tenant to reconnect Salesforce |
+| `SCHEDULER_MODE` | `external` |
+| `JOB_TRIGGER_SECRET` | ≥ 32 random characters (same value as the GitHub secret) |
+| `TENANT_BASE_DOMAIN` | `vercel.app` while on `*.vercel.app`; your own domain later |
+| `TRUST_PROXY_HOPS` | `1` (Vercel's edge) |
+| `WEB_ORIGIN` | `https://<tenant host>` |
+| `SF_OAUTH_REDIRECT_URI` | `https://<tenant host>/api/v1/admin/auth/salesforce/callback` |
+| `SF_ONBOARDING_REDIRECT_URI` | `https://<tenant host>/api/v1/onboarding/salesforce/callback` |
+| `ANTHROPIC_API_KEY` | optional (AI licence check) |
 
-## 3. Salesforce
+Domains: a tenant resolves from `<label>.<TENANT_BASE_DOMAIN>`, where the label is a company or
+dealer slug. On `*.vercel.app` add each tenant host as a project domain (e.g.
+`<dealer-slug>.vercel.app`, if that name is free). A real domain replaces this with one wildcard
+`*.<domain>` (requires Vercel nameservers) — then set `TENANT_BASE_DOMAIN` to it.
+
+## 3. Scheduled jobs
+
+In the GitHub repo set variable `APP_URL` (`https://<tenant host>`) and secret
+`JOB_TRIGGER_SECRET`. The workflow is inert until `APP_URL` exists. Run any job on demand from
+Actions → Scheduled jobs → Run workflow.
+
+## 4. Salesforce
 
 Each tenant's Connected App must list both redirect URIs above as callback URLs. Tenants
 connected before the move reconnect from the admin console (a new `ENCRYPTION_KEY` cannot read
 credentials encrypted with the old one).
 
-## 4. Verify
+## 5. Serverless limits
 
-- `GET https://<render url>/health/ready` → 200.
-- `GET https://<web host>/api/v1/config/dealership` → the tenant's dealership (or 503
-  `TENANT_NOT_CONNECTED` until its Salesforce org is reconnected) — either proves the rewrite
-  forwards the tenant host. 404 `unknown_tenant` means it doesn't: check `TRUST_PROXY_HOPS`
-  against the number of proxies in front of the API.
+- Request bodies are capped at ~4.5 MB. The web app downscales licence photos and brand images
+  before upload, and the hero image cap is 3 MB to fit.
+- Rate limiting (`ThrottlerModule`) is in-memory, so each warm function instance counts
+  separately — limits are per instance, not global. A shared store (e.g. Redis) makes them global.
+- A tenant's metadata deploy runs after the onboarding response via `waitUntil`, bounded by the
+  function's `maxDuration` (60 s).
+
+## 6. Verify
+
+- `GET https://<tenant host>/health/ready` → 200.
+- `GET https://<tenant host>/api/v1/config/dealership` → the tenant's dealership (or 503
+  `TENANT_NOT_CONNECTED` until its Salesforce org is reconnected). 404 `unknown_tenant` means the
+  host didn't resolve: check `TENANT_BASE_DOMAIN`, the domain list and `TRUST_PROXY_HOPS`.
