@@ -24,8 +24,8 @@ export class FeatureFlagService {
 
   constructor(@Inject(FEATURE_FLAG_REPOSITORY) private readonly flags: FeatureFlagRepository) {}
 
-  /** Every flag's effective setting at `scope` — by default, the current request's host dealership. */
-  async resolve(scope: ConfigScope = { dealershipId: TenantContext.hostDealershipId() }): Promise<ResolvedFeatureFlags> {
+  /** Every flag's effective setting at `scope` — by default, company-wide. */
+  async resolve(scope: ConfigScope = {}): Promise<ResolvedFeatureFlags> {
     const organizationId = TenantContext.currentOrganizationId();
     if (!organizationId) throw new NotFoundException("Unknown dealership.");
 

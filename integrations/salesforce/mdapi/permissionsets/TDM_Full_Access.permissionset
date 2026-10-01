@@ -798,11 +798,6 @@
         <editable>true</editable>
     </fieldPermissions>
     <fieldPermissions>
-        <field>Dealership__c.Custom_Domain__c</field>
-        <readable>true</readable>
-        <editable>true</editable>
-    </fieldPermissions>
-    <fieldPermissions>
         <field>Dealership__c.Is_Active__c</field>
         <readable>true</readable>
         <editable>true</editable>

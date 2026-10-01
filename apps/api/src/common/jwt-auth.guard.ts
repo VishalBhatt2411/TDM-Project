@@ -12,7 +12,7 @@ export interface AuthenticatedUser {
  * Guards customer-facing endpoints. Requires `scope: "customer"` in the JWT payload
  * so a staff (admin console) token — a structurally valid JWT signed with the same
  * secret — can never be used here. See StaffAuthGuard for the mirror-image check.
- * The token's `org` must match the dealer host's tenant (TenantContext.bindSession).
+ * The token's `org` must match the company address's tenant (TenantContext.bindSession).
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

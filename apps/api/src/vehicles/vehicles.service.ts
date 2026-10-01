@@ -18,7 +18,6 @@ import {
 import { VEHICLE_REPOSITORY, VEHICLE_VARIANT_REPOSITORY } from "../infrastructure/tokens";
 import { RegionalSettingsService } from "../config/regional-settings.service";
 import { BookingScheduleService } from "../config/booking-schedule.service";
-import { TenantContext } from "../tenancy/tenant-context";
 import { VehicleSearchQueryDto } from "./dto";
 
 export function vehicleToDto(vehicle: Vehicle): VehicleDto {
@@ -87,12 +86,7 @@ export class VehiclesService {
   ) {}
 
   async search(query: VehicleSearchQueryDto): Promise<Paginated<VehicleDto>> {
-    // The host scope is applied last so a query parameter can never widen it.
-    const { items, total } = await this.vehicles.search({
-      ...query,
-      excludeStatuses: RETIRED_VEHICLE_STATUSES,
-      ...TenantContext.hostDealershipScope(),
-    });
+    const { items, total } = await this.vehicles.search({ ...query, excludeStatuses: RETIRED_VEHICLE_STATUSES });
     return {
       items: items.map(vehicleToDto),
       total,
@@ -102,14 +96,12 @@ export class VehiclesService {
   }
 
   async getById(id: string): Promise<VehicleDto> {
-    return vehicleToDto(await this.requireVisible(id));
+    return vehicleToDto(await this.requireVehicle(id));
   }
 
   async compare(ids: string[]): Promise<VehicleDto[]> {
     const vehicles = await Promise.all(ids.map((id) => this.vehicles.findById(id)));
-    return vehicles
-      .filter((v): v is Vehicle => v !== null && TenantContext.isVisibleOnHost(v.dealershipId))
-      .map(vehicleToDto);
+    return vehicles.filter((v): v is Vehicle => v !== null).map(vehicleToDto);
   }
 
   async getFeatured(
@@ -117,26 +109,23 @@ export class VehiclesService {
     location: Omit<VehicleLocationFilter, "dealershipIds"> = {},
     limit?: number,
   ): Promise<VehicleDto[]> {
-    const vehicles = await this.vehicles.findFeatured(kind, limit, { ...location, ...TenantContext.hostDealershipScope() });
+    const vehicles = await this.vehicles.findFeatured(kind, limit, location);
     return vehicles.map(vehicleToDto);
   }
 
-  /** Related vehicles share the vehicle's dealership, so checking the vehicle itself scopes them too. */
   async getRelated(id: string, limit?: number): Promise<VehicleDto[]> {
-    if (TenantContext.hostDealershipId()) await this.requireVisible(id);
     const vehicles = await this.vehicles.findRelated(id, limit);
     return vehicles.map(vehicleToDto);
   }
 
   async getVariants(vehicleId: string): Promise<VehicleVariantDto[]> {
-    if (TenantContext.hostDealershipId()) await this.requireVisible(vehicleId);
     const variants = await this.variants.findByVehicle(vehicleId);
     return variants.map(variantToDto);
   }
 
   /** Free/busy for the dealership's booking schedule (see BookingScheduleService) on a given date — only slots far enough ahead for a customer — as wall-clock times in the vehicle's dealership time zone — a slot is unavailable if it overlaps a Confirmed/InProgress booking for this vehicle. Branch is accepted for API-contract parity with the booking flow (a vehicle belongs to one branch) but isn't filtered on since conflicts are vehicle-scoped, not branch-scoped. */
   async getAvailability(vehicleId: string, date: string): Promise<VehicleAvailabilityResponse> {
-    const vehicle = await this.requireVisible(vehicleId);
+    const vehicle = await this.requireVehicle(vehicleId);
 
     const [day, { phoneCountryCode }] = await Promise.all([
       this.schedule.vehicleDay({ id: vehicleId, dealershipId: vehicle.dealershipId }, date, "customer"),
@@ -146,10 +135,9 @@ export class VehiclesService {
     return { vehicleId, date, ...day, ...(phoneCountryCode ? { phoneCountryCode } : {}) };
   }
 
-  /** A vehicle of another dealership is reported as missing on a dealer host — its existence isn't disclosed. */
-  private async requireVisible(id: string): Promise<Vehicle> {
+  private async requireVehicle(id: string): Promise<Vehicle> {
     const vehicle = await this.vehicles.findById(id);
-    if (!vehicle || !TenantContext.isVisibleOnHost(vehicle.dealershipId)) {
+    if (!vehicle) {
       throw new NotFoundException(`Vehicle ${id} was not found.`);
     }
     return vehicle;

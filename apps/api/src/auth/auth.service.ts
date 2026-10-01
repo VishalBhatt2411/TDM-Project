@@ -180,13 +180,13 @@ export class AuthService {
   }
 
   /**
-   * The dealer site the customer is on — sign-in links must return them there, not to a
+   * The company site the customer is on — sign-in links must return them there, not to a
    * shared origin that can't resolve their tenant. Customer routes always run on a resolved
    * host (TenantMiddleware fails closed otherwise), so a missing one is a programming error.
    */
   private customerSiteOrigin(): string {
     const origin = TenantContext.hostSiteOrigin();
-    if (!origin) throw new Error("Customer links need a resolved dealer host.");
+    if (!origin) throw new Error("Customer links need a resolved company host.");
     return origin;
   }
 

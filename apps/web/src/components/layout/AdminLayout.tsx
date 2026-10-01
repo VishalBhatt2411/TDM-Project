@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail, Palette, Globe } from "lucide-react";
+import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail, Palette } from "lucide-react";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { cn } from "@/lib/utils";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
@@ -24,7 +24,6 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/admin/users", label: "Users & Permissions", icon: Users, permission: "manage_users" },
   { to: "/admin/branding", label: "Branding & Home Page", icon: Palette, permission: "manage_config" },
   { to: "/admin/notification-templates", label: "Notification Templates", icon: Mail, permission: "manage_config" },
-  { to: "/admin/domains", label: "Domains", icon: Globe, permission: "manage_config" },
   { to: "/admin/feature-flags", label: "Feature Flags", icon: ToggleLeft, permission: "manage_config" },
   { to: "/admin/audit-log", label: "Audit Log", icon: ScrollText, permission: "view_audit_log" },
   { to: "/admin/system-health", label: "System Health", icon: Activity, permission: "manage_config", companyAdminOnly: true },

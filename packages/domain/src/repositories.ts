@@ -80,11 +80,6 @@ export interface DealershipRepository {
   /** Every dealership in the current tenant, active or not — callers filter. */
   findAll(): Promise<Dealership[]>;
   findById(id: string): Promise<Dealership | null>;
-  /**
-   * Sets (or, with null, clears) the dealership's own custom domain. Throws InvalidValueError
-   * when the provider rejects it — malformed, or already another dealership's.
-   */
-  setCustomDomain(id: string, hostname: string | null): Promise<void>;
 }
 
 /** An inclusive span of instants — e.g. one calendar day in a dealership's time zone. */

@@ -47,8 +47,8 @@ export class BookingScheduleService {
     private readonly regional: RegionalSettingsService,
   ) {}
 
-  /** The schedule for `dealershipId`, else the current host dealership's, else the company's. */
-  async resolve(dealershipId: string | undefined = TenantContext.hostDealershipId()): Promise<ResolvedBookingSchedule> {
+  /** The schedule for `dealershipId`, else the company's. */
+  async resolve(dealershipId?: string): Promise<ResolvedBookingSchedule> {
     const organizationId = TenantContext.currentOrganizationId();
     if (!organizationId) throw new NotFoundException("Unknown dealership.");
 

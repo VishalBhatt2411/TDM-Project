@@ -2,7 +2,6 @@ import { Controller, HttpCode, Logger, NotFoundException, Param, Post, UseGuards
 import { SkipThrottle } from "@nestjs/throttler";
 import { ReminderScheduler } from "../bookings/reminder.scheduler";
 import { FollowUpScheduler } from "../bookings/followup.scheduler";
-import { DealershipHostSyncScheduler } from "../tenancy/dealership-host-sync.scheduler";
 import { JobTriggerGuard } from "./job-trigger.guard";
 
 /**
@@ -17,11 +16,10 @@ export class JobsController {
   private readonly logger = new Logger(JobsController.name);
   private readonly jobs: Record<string, () => Promise<void>>;
 
-  constructor(reminders: ReminderScheduler, followUps: FollowUpScheduler, hostSync: DealershipHostSyncScheduler) {
+  constructor(reminders: ReminderScheduler, followUps: FollowUpScheduler) {
     this.jobs = {
       reminders: () => reminders.sendDueReminders(),
       "follow-ups": () => followUps.sendDueFollowUps(),
-      "host-sync": () => hostSync.syncAll(),
     };
   }
 

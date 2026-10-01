@@ -107,7 +107,7 @@ export const BRANCH_FIELDS =
 export const BRANDING_FIELDS =
   "Tagline__c, Logo_Text__c, Logo_Url__c, Primary_Color_Hex__c, Phone__c, Email__c, Address__c, Operating_Hours__c";
 
-export const DEALERSHIP_FIELDS = `Id, Name, Url_Slug__c, Custom_Domain__c, Is_Active__c, ${BRANDING_FIELDS}`;
+export const DEALERSHIP_FIELDS = `Id, Name, Is_Active__c, ${BRANDING_FIELDS}`;
 
 export const BOOKING_FIELDS =
   "Id, Contact__c, Contact__r.Portal_User_Id__c, Contact__r.FirstName, Contact__r.LastName, Contact__r.Email, " +

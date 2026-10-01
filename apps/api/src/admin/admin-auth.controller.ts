@@ -42,7 +42,7 @@ export class AdminAuthController {
 
   /**
    * Full-page navigation target for the "Login with Salesforce" button — not an XHR call.
-   * `org` is the company identifier (tenant slug); omitted, the dealer host's tenant is used.
+   * `org` is the company identifier (tenant slug); omitted, the company address's tenant is used.
    */
   @Get("salesforce/login")
   async loginWithSalesforce(@Query("org") org: unknown, @Res() res: Response) {

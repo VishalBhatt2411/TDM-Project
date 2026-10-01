@@ -30,8 +30,8 @@ export function configureApp(app: NestExpressApplication): void {
 
   app.use(helmet());
   // The web app calls the API same-origin through /api, so CORS only matters when a deployment
-  // serves them apart: the platform origins, plus any registered tenant host (subdomain or
-  // custom domain) on the shared scheme and port.
+  // serves them apart: the platform origins, plus any company's platform subdomain on the shared
+  // scheme and port.
   const tenantHosts = app.get(TenantResolverService);
   app.enableCors({
     credentials: true,
@@ -45,7 +45,7 @@ export function configureApp(app: NestExpressApplication): void {
       }
       if (siteOriginOf(hostname) !== origin) return callback(null, false);
       tenantHosts.resolveHost(hostname).then(
-        (route) => callback(null, !!route),
+        (organizationId) => callback(null, !!organizationId),
         () => callback(null, false),
       );
     },

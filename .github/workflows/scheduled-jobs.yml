@@ -6,7 +6,6 @@ name: Scheduled jobs
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
     - cron: "*/15 * * * *"
     - cron: "0 10 * * *"
   workflow_dispatch:
@@ -15,7 +14,7 @@ on:
         description: Job to run now
         required: true
         type: choice
-        options: [host-sync, reminders, follow-ups]
+        options: [reminders, follow-ups]
 
 permissions: {}
 
@@ -35,10 +34,9 @@ jobs:
           INPUT_JOB: ${{ github.event.inputs.job }}
         run: |
           case "${INPUT_JOB:-$SCHEDULE}" in
-            "*/5 * * * *") job=host-sync ;;
             "*/15 * * * *") job=reminders ;;
             "0 10 * * *") job=follow-ups ;;
-            host-sync|reminders|follow-ups) job="$INPUT_JOB" ;;
+            reminders|follow-ups) job="$INPUT_JOB" ;;
             *) echo "Unknown schedule: ${INPUT_JOB:-$SCHEDULE}" >&2; exit 1 ;;
           esac
           echo "name=$job" >> "$GITHUB_OUTPUT"

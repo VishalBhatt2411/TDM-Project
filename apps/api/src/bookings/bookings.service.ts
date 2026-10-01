@@ -32,7 +32,6 @@ import { BookingEmailContextService } from "../notifications/booking-email-conte
 import { RegionalSettingsService } from "../config/regional-settings.service";
 import { BookingScheduleService } from "../config/booking-schedule.service";
 import { FeatureFlagService } from "../config/feature-flag.service";
-import { TenantContext } from "../tenancy/tenant-context";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
@@ -239,12 +238,12 @@ export class BookingsService {
 
   /**
    * A vehicle is test-driven at the branch that stocks it. The booking's dealership is derived
-   * from that branch, never taken from the request, and must be one this host serves. The slot
+   * from that branch, never taken from the request. The slot
    * must be one of that dealership's scheduled slots, far enough ahead — checked here, before any account is touched.
    */
   private async resolveBookingBranch(dto: CreateBookingDto): Promise<Branch> {
     const [vehicle, branch] = await Promise.all([this.vehicles.findById(dto.vehicleId), this.branches.findById(dto.branchId)]);
-    if (!vehicle || !TenantContext.isVisibleOnHost(vehicle.dealershipId)) throw new NotFoundException("Vehicle not found.");
+    if (!vehicle) throw new NotFoundException("Vehicle not found.");
     if (vehicle.branchId !== dto.branchId) {
       throw new BadRequestException("This vehicle can only be test-driven at the branch that stocks it.");
     }

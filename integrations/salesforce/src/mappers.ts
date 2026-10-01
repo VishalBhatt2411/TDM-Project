@@ -209,8 +209,6 @@ export function dealershipRecordToDomain(record: any): Dealership {
   return Dealership.restore({
     id: record.Id,
     name: record.Name,
-    urlSlug: record.Url_Slug__c,
-    customDomain: record.Custom_Domain__c ?? undefined,
     isActive: !!record.Is_Active__c,
     branding: brandingFromRecord(record),
   });

@@ -18,15 +18,11 @@ export interface BrandProfile extends DealershipBranding {
 export interface DealershipProps {
   id: string;
   name: string;
-  /** Platform subdomain label: "<urlSlug>.<base domain>". Lowercase letters, digits and single hyphens. */
-  urlSlug: string;
-  /** The dealer's own hostname (lowercase, no port), if they serve the customer app from one. */
-  customDomain?: string;
   isActive: boolean;
   branding: DealershipBranding;
 }
 
-/** One dealership (rooftop group) within a tenant company — owns branches, stock and its own customer URL. */
+/** One dealership (rooftop group) within a tenant company — owns branches and stock. */
 export class Dealership {
   private constructor(private readonly props: DealershipProps) {}
 
@@ -36,12 +32,6 @@ export class Dealership {
 
   get id() {
     return this.props.id;
-  }
-  get urlSlug() {
-    return this.props.urlSlug;
-  }
-  get customDomain() {
-    return this.props.customDomain;
   }
   get isActive() {
     return this.props.isActive;

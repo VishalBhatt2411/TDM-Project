@@ -31,20 +31,11 @@
         <description>Subdomain label for this dealership's customer site (&lt;slug&gt;.&lt;platform domain&gt;). Lowercase letters, digits and single hyphens. Must also be unique across every company on the platform — the TDM platform reports a clash as a sync conflict.</description>
     </fields>
     <fields>
-        <fullName>Custom_Domain__c</fullName>
-        <label>Custom Domain</label>
-        <type>Text</type>
-        <length>253</length>
-        <unique>true</unique>
-        <caseSensitive>false</caseSensitive>
-        <description>Optional own domain for this dealership's customer site (e.g. drive.acme-motors.com). DNS must point at the TDM platform before it is set.</description>
-    </fields>
-    <fields>
         <fullName>Is_Active__c</fullName>
         <label>Is Active</label>
         <type>Checkbox</type>
         <defaultValue>true</defaultValue>
-        <description>Inactive dealerships stop resolving on their URL; deactivate rather than delete.</description>
+        <description>Inactive dealerships are hidden from customers; deactivate rather than delete.</description>
     </fields>
     <fields>
         <fullName>Tagline__c</fullName>
@@ -141,14 +132,6 @@
         <errorConditionFormula>NOT(REGEX(Url_Slug__c, "[a-z0-9]+(-[a-z0-9]+)*"))</errorConditionFormula>
         <errorDisplayField>Url_Slug__c</errorDisplayField>
         <errorMessage>Use lowercase letters, digits and single hyphens only (e.g. acme-downtown).</errorMessage>
-    </validationRules>
-    <validationRules>
-        <fullName>Custom_Domain_Format</fullName>
-        <active>true</active>
-        <description>Custom domains are matched exactly against the request host, so only bare lowercase host names are accepted.</description>
-        <errorConditionFormula>AND(NOT(ISBLANK(Custom_Domain__c)), NOT(REGEX(Custom_Domain__c, "([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}")))</errorConditionFormula>
-        <errorDisplayField>Custom_Domain__c</errorDisplayField>
-        <errorMessage>Enter a lowercase host name only, without https:// or a path (e.g. drive.acme-motors.com).</errorMessage>
     </validationRules>
     <validationRules>
         <fullName>Primary_Color_Hex_Format</fullName>

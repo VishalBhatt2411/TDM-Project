@@ -277,56 +277,6 @@ export async function clearFeatureFlag(key: string, scope: ConfigScopeParams): P
   await adminApiClient.delete(`/admin/feature-flags/${key}`, { params: scope });
 }
 
-export type CustomDomainStatus = "live" | "pending" | "conflict";
-
-export interface CustomDomainDto {
-  hostname: string;
-  status: CustomDomainStatus;
-  /** DNS TXT record proving ownership — present until the domain is live. */
-  verification?: { name: string; value: string };
-}
-
-export interface SiteDomainsDto {
-  /** null for the company-wide site. */
-  dealershipId: string | null;
-  name: string;
-  platformHost?: string;
-  customDomains: CustomDomainDto[];
-}
-
-export interface CustomDomainsDto {
-  /** Host a custom domain's CNAME record must point at. */
-  target: string;
-  sites: SiteDomainsDto[];
-}
-
-export async function listCustomDomains(): Promise<CustomDomainsDto> {
-  const { data } = await adminApiClient.get<CustomDomainsDto>("/admin/domains");
-  return data;
-}
-
-export async function addCompanyDomain(hostname: string): Promise<CustomDomainDto> {
-  const { data } = await adminApiClient.post<CustomDomainDto>("/admin/domains", { hostname });
-  return data;
-}
-
-export async function removeCompanyDomain(hostname: string): Promise<void> {
-  await adminApiClient.delete(`/admin/domains/${encodeURIComponent(hostname)}`);
-}
-
-/** null clears the dealership's domain. */
-export async function setDealershipDomain(dealershipId: string, hostname: string | null): Promise<void> {
-  await adminApiClient.put(`/admin/domains/dealerships/${dealershipId}`, { hostname });
-}
-
-export async function verifyCustomDomain(hostname: string, dealershipId: string | null): Promise<CustomDomainDto> {
-  const { data } = await adminApiClient.post<CustomDomainDto>("/admin/domains/verify", {
-    hostname,
-    ...(dealershipId ? { dealershipId } : {}),
-  });
-  return data;
-}
-
 export interface AuditLogEntryDto {
   id: string;
   actorId: string;

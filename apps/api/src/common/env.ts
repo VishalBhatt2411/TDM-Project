@@ -19,10 +19,8 @@ export interface AppEnv {
   corsOrigins: string[];
   trustProxyHops: number;
   enableApiDocs: boolean;
-  /** Tenants' customer apps are served on "<org slug>.<tenantBaseDomain>" (plus any registered custom domain). */
+  /** Each tenant's customer app is served on "<org slug>.<tenantBaseDomain>". */
   tenantBaseDomain: string;
-  /** Host a tenant's custom domain must CNAME to so it reaches the platform (defaults to tenantBaseDomain). */
-  customDomainTarget: string;
   sfOAuthRedirectUri: string;
   sfOnboardingRedirectUri: string;
   anthropicApiKey?: string;
@@ -103,11 +101,6 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     errors.push("TENANT_BASE_DOMAIN must be a bare hostname (no scheme, port or path), e.g. tdm.example.com.");
   }
 
-  const customDomainTarget = (read("CUSTOM_DOMAIN_TARGET") ?? tenantBaseDomain).toLowerCase();
-  if (customDomainTarget && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(customDomainTarget)) {
-    errors.push("CUSTOM_DOMAIN_TARGET must be a bare hostname, e.g. cname.vercel-dns.com.");
-  }
-
   const schedulerMode = (read("SCHEDULER_MODE") ?? "in-process") as SchedulerMode;
   if (!SCHEDULER_MODES.includes(schedulerMode)) errors.push(`SCHEDULER_MODE must be one of: ${SCHEDULER_MODES.join(", ")}.`);
   const jobTriggerSecret = read("JOB_TRIGGER_SECRET");
@@ -134,7 +127,6 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     trustProxyHops,
     enableApiDocs: read("ENABLE_API_DOCS") ? read("ENABLE_API_DOCS") === "true" : !isProduction,
     tenantBaseDomain,
-    customDomainTarget,
     sfOAuthRedirectUri: url("SF_OAUTH_REDIRECT_URI", "http://localhost:3000/api/v1/admin/auth/salesforce/callback"),
     sfOnboardingRedirectUri: url("SF_ONBOARDING_REDIRECT_URI", "http://localhost:3000/api/v1/onboarding/salesforce/callback"),
     anthropicApiKey: read("ANTHROPIC_API_KEY"),

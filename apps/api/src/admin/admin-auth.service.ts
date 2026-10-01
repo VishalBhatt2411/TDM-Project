@@ -68,7 +68,7 @@ export interface StaffProfile {
  * Staff (Admin/Manager/Sales Rep) authenticate with their real Salesforce identity
  * via OAuth2 Authorization Code flow — this app never sees or stores a Salesforce
  * password. Login is always against one tenant (chosen by company identifier or the
- * dealer host) through that tenant's own Connected App, and the identity must come
+ * company address) through that tenant's own Connected App, and the identity must come
  * from that tenant's connected Salesforce org. Console access comes entirely from the
  * user's active Staff_Assignment__c records in that org (see StaffAccessService) — a
  * Salesforce user with none can't sign in. The local StaffUser row is identity only.
@@ -122,7 +122,7 @@ export class AdminAuthService {
     return { ok: true, url: identityProvider.buildAuthorizationUrl(state, codeVerifier) };
   }
 
-  /** Explicit company identifier wins; otherwise the dealer host's tenant. Only a connected tenant can sign staff in. */
+  /** Explicit company identifier wins; otherwise the company address's tenant. Only a connected tenant can sign staff in. */
   private async resolveLoginOrganization(organizationSlug: string | undefined): Promise<OrganizationRecord | null> {
     const hostOrganizationId = TenantContext.hostOrganizationId();
     const organization = organizationSlug

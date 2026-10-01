@@ -1,7 +1,6 @@
 import { Controller, Get, Inject } from "@nestjs/common";
 import { BranchRepository } from "@tdm/domain";
 import { BRANCH_REPOSITORY } from "../infrastructure/tokens";
-import { TenantContext } from "../tenancy/tenant-context";
 import { RegionalSettingsService } from "../config/regional-settings.service";
 
 @Controller("branches")
@@ -13,7 +12,7 @@ export class BranchesController {
 
   @Get()
   async list() {
-    const branches = await this.branches.findAll(TenantContext.hostDealershipScope());
+    const branches = await this.branches.findAll();
     const zones = await this.regional.timeZonesOf(branches.map((b) => b.toProps().dealershipId));
     return branches.map((b) => {
       const props = b.toProps();

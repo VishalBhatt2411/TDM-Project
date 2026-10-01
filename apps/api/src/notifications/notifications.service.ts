@@ -2,7 +2,6 @@ import { Inject, Injectable } from "@nestjs/common";
 import { BrandProfile, NotificationTemplateRepository } from "@tdm/domain";
 import { NOTIFICATION_TEMPLATE_REPOSITORY } from "../infrastructure/tokens";
 import { BrandingService } from "../config/branding.service";
-import { TenantContext } from "../tenancy/tenant-context";
 import { EMAIL_SENDER, EmailSender } from "./email-sender";
 import {
   accountAccessEmail,
@@ -26,8 +25,8 @@ type RenderedEmail = { subject: string; html: string };
 
 /**
  * Sends transactional emails branded by the dealership they concern — a booking's own
- * dealership, or (for emails with no booking, e.g. an OTP) the host dealership the customer
- * is on — with that dealership's template overrides, else the company-wide ones.
+ * dealership, or (for emails with no booking, e.g. an OTP) the company site the customer
+ * is on — with that scope's template overrides, else the company-wide ones.
  */
 @Injectable()
 export class NotificationsService {
@@ -43,10 +42,9 @@ export class NotificationsService {
     dealershipId: string | undefined,
     render: (brand: BrandProfile, override?: TemplateOverride) => RenderedEmail,
   ): Promise<void> {
-    const scopeDealershipId = dealershipId ?? TenantContext.hostDealershipId();
     const [brand, record] = await Promise.all([
-      this.branding.resolveForEmail(scopeDealershipId),
-      this.templateOverrides.findEffective(key, scopeDealershipId),
+      this.branding.resolveForEmail(dealershipId),
+      this.templateOverrides.findEffective(key, dealershipId),
     ]);
     const { subject, html } = render(brand, record ? { subject: record.subject, note: record.note } : undefined);
     await this.emailSender.send({ to: toEmail, subject, html });

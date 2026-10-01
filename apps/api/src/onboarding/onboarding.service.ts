@@ -220,7 +220,7 @@ export class OnboardingService {
   /**
    * Public, unauthenticated check the Admin Console's pre-login screen uses to decide
    * whether to show a "connect your Salesforce org" banner for one tenant (by `slug`,
-   * else the dealer host's tenant). Keyed off whether anyone can actually sign in — the
+   * else the company address's tenant). Keyed off whether anyone can actually sign in — the
    * first Company Admin assignment is granted with the metadata deploy — not whether the
    * org merely reached "connected".
    * An unknown or unidentified tenant reports no setup need — a fresh company starts

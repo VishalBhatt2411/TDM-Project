@@ -13,7 +13,6 @@ import { BOOKING_REPOSITORY, VEHICLE_REPOSITORY, WISHLIST_REPOSITORY } from "../
 import { bookingToDto } from "../bookings/bookings.service";
 import { FeatureFlagService } from "../config/feature-flag.service";
 import { vehicleToDto } from "../vehicles/vehicles.service";
-import { TenantContext } from "../tenancy/tenant-context";
 
 const UPCOMING_STATUSES = new Set(["Requested", "Confirmed", "Waitlisted", "InProgress"]);
 /** Size of the available-stock pool recommendations are ranked from. */
@@ -39,7 +38,7 @@ export class CustomersService {
   async addToWishlist(customerId: string, vehicleId: string): Promise<{ added: true }> {
     await this.featureFlags.assertEnabled("wishlist");
     const vehicle = await this.vehicles.findById(vehicleId);
-    if (!vehicle || !TenantContext.isVisibleOnHost(vehicle.dealershipId)) {
+    if (!vehicle) {
       throw new NotFoundException("Vehicle not found.");
     }
     const existing = await this.wishlist.findByCustomer(customerId);
@@ -94,7 +93,7 @@ export class CustomersService {
 
     const [priorVehicles, candidatePool] = await Promise.all([
       this.findVisible(priorVehicleIds),
-      this.vehicles.search({ status: "Available", pageSize: RECOMMENDATION_POOL_SIZE, ...TenantContext.hostDealershipScope() }),
+      this.vehicles.search({ status: "Available", pageSize: RECOMMENDATION_POOL_SIZE }),
     ]);
 
     const pick = (ids: string[]) => [...new Set(ids)].flatMap((id) => priorVehicles.get(id) ?? []);
@@ -109,13 +108,9 @@ export class CustomersService {
     return scored.map((s) => ({ vehicle: vehicleToDto(s.vehicle), score: s.score, reasons: s.reasons }));
   }
 
-  /** Each distinct vehicle once, keyed by id — dropping any gone or belonging to a dealership this host doesn't show. */
+  /** Each distinct vehicle once, keyed by id — dropping any that no longer exist. */
   private async findVisible(ids: Iterable<string>): Promise<Map<string, Vehicle>> {
     const vehicles = await Promise.all([...new Set(ids)].map((id) => this.vehicles.findById(id)));
-    return new Map(
-      vehicles
-        .filter((v): v is Vehicle => v !== null && TenantContext.isVisibleOnHost(v.dealershipId))
-        .map((v) => [v.toProps().id, v]),
-    );
+    return new Map(vehicles.filter((v): v is Vehicle => v !== null).map((v) => [v.toProps().id, v]));
   }
 }

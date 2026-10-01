@@ -26,7 +26,6 @@ const AdminDashboardPage = lazyPage(() => import("@/pages/admin/AdminDashboardPa
 const AdminUsersPage = lazyPage(() => import("@/pages/admin/AdminUsersPage"), "AdminUsersPage");
 const AdminBookingsPage = lazyPage(() => import("@/pages/admin/AdminBookingsPage"), "AdminBookingsPage");
 const AdminFeatureFlagsPage = lazyPage(() => import("@/pages/admin/AdminFeatureFlagsPage"), "AdminFeatureFlagsPage");
-const AdminDomainsPage = lazyPage(() => import("@/pages/admin/AdminDomainsPage"), "AdminDomainsPage");
 const AdminAuditLogPage = lazyPage(() => import("@/pages/admin/AdminAuditLogPage"), "AdminAuditLogPage");
 const AdminBranchesPage = lazyPage(() => import("@/pages/admin/AdminBranchesPage"), "AdminBranchesPage");
 const AdminVehiclesPage = lazyPage(() => import("@/pages/admin/AdminVehiclesPage"), "AdminVehiclesPage");
@@ -83,7 +82,6 @@ export function App() {
           <Route path="/admin/bookings" element={<AdminBookingsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/feature-flags" element={<AdminFeatureFlagsPage />} />
-          <Route path="/admin/domains" element={<AdminDomainsPage />} />
           <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
           <Route path="/admin/branches" element={<AdminBranchesPage />} />
           <Route path="/admin/vehicles" element={<AdminVehiclesPage />} />

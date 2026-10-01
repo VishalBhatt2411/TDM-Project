@@ -71,8 +71,8 @@ export class BrandingService {
     @Inject(ORGANIZATION_REPOSITORY) private readonly organizations: OrganizationRepository,
   ) {}
 
-  /** Branding for `dealershipId`, else for the current request's host dealership, else the company's. */
-  async resolve(dealershipId: string | undefined = TenantContext.hostDealershipId()): Promise<ResolvedBrand> {
+  /** Branding for `dealershipId`, else the company's. */
+  async resolve(dealershipId?: string): Promise<ResolvedBrand> {
     return (await this.resolveCached(dealershipId)).brand;
   }
 

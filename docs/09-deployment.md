@@ -4,7 +4,7 @@ Everything runs on free tiers. One Vercel project serves both the web app (stati
 and the API (one Node function, `api/index.js`, wrapping `apps/api/src/serverless.ts`). The
 platform store is a Neon Postgres. Because a serverless host has no long-running process, the API
 runs with `SCHEDULER_MODE=external` and `.github/workflows/scheduled-jobs.yml` triggers the
-reminder (15 min), host-sync (5 min) and follow-up (daily, 10:00 UTC) jobs over HTTPS.
+reminder (15 min) and follow-up (daily, 10:00 UTC) jobs over HTTPS.
 
 The same build still runs as a long-running server (`node apps/api/dist/main.js`, default
 `SCHEDULER_MODE=in-process`) on any container host.
@@ -37,9 +37,9 @@ Environment variables (Production):
 | `ANTHROPIC_API_KEY` | optional (AI licence check) |
 | `PLATFORM_OPERATOR_PASSWORD_HASH` | optional; enables the operator console (below) |
 
-Domains: a tenant resolves from `<label>.<TENANT_BASE_DOMAIN>`, where the label is a company or
-dealer slug. On `*.vercel.app` add each tenant host as a project domain (e.g.
-`<dealer-slug>.vercel.app`, if that name is free). A real domain replaces this with one wildcard
+Domains: each company has one customer site, `<company slug>.<TENANT_BASE_DOMAIN>`, shared by all
+its dealerships. On `*.vercel.app` add each company host as a project domain (e.g.
+`<company-slug>.vercel.app`, if that name is free). A real domain replaces this with one wildcard
 `*.<domain>` (requires Vercel nameservers) — then set `TENANT_BASE_DOMAIN` to it.
 
 ## 3. Scheduled jobs
@@ -82,4 +82,4 @@ Without `PLATFORM_OPERATOR_PASSWORD_HASH` the console and its API return 404.
 - `GET https://<tenant host>/health/ready` → 200.
 - `GET https://<tenant host>/api/v1/config/dealership` → the tenant's dealership (or 503
   `TENANT_NOT_CONNECTED` until its Salesforce org is reconnected). 404 `unknown_tenant` means the
-  host didn't resolve: check `TENANT_BASE_DOMAIN`, the domain list and `TRUST_PROXY_HOPS`.
+  host didn't resolve: check the company slug, `TENANT_BASE_DOMAIN`, the project's domains and `TRUST_PROXY_HOPS`.

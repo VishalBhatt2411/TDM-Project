@@ -15,8 +15,8 @@ export class RegionalSettingsService {
 
   constructor(@Inject(REGIONAL_SETTINGS_REPOSITORY) private readonly regional: RegionalSettingsRepository) {}
 
-  /** Settings for `dealershipId`, else for the current request's host dealership, else the company's. */
-  async resolve(dealershipId: string | undefined = TenantContext.hostDealershipId()): Promise<ResolvedRegionalSettings> {
+  /** Settings for `dealershipId`, else the company's. */
+  async resolve(dealershipId?: string): Promise<ResolvedRegionalSettings> {
     const organizationId = TenantContext.currentOrganizationId();
     if (!organizationId) throw new NotFoundException("Unknown dealership.");
 

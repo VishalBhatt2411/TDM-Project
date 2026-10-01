@@ -181,7 +181,7 @@ model StaffOAuthState {
 model Organization {
   id                   String    @id @default(uuid())
   name                 String
-  // URL-safe company identifier (Admin Console login, and its TenantSubdomain label) —
+  // URL-safe company identifier (Admin Console login, and its customer site's subdomain label) —
   // validated lowercase-alphanumeric-with-hyphens at creation time (OnboardingService).
   slug                 String    @unique
   sfConsumerKey        String?
@@ -202,51 +202,8 @@ model Organization {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  staffUsers   StaffUser[]
-  oauthStates  StaffOAuthState[]
-  hosts        TenantHost[]
-  domainClaims CompanyDomainClaim[]
-  subdomains   TenantSubdomain[]
-  auditLog     AuditLogEntry[]
+  staffUsers  StaffUser[]
+  oauthStates StaffOAuthState[]
+  auditLog    AuditLogEntry[]
 }
 
-// Routes a company's or dealer's own custom domain to its tenant. Platform subdomains
-// ("<label>.<TENANT_BASE_DOMAIN>") resolve through TenantSubdomain instead.
-// Must live outside Salesforce: it decides *which* Salesforce org to talk to at all.
-model TenantHost {
-  hostname       String       @id // lowercase, no port
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  // Salesforce Dealership__c Id the domain serves; null = registered for the whole company.
-  dealershipId   String?
-  createdAt      DateTime     @default(now())
-
-  @@index([organizationId])
-}
-
-// A company-wide custom domain an admin has asked for but whose DNS ownership proof (a TXT
-// record) hasn't been seen yet. Claims are per tenant, so asking for a domain never blocks the
-// domain's real owner; only a verified claim becomes a TenantHost.
-model CompanyDomainClaim {
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  hostname       String // lowercase, no port
-  createdAt      DateTime     @default(now())
-
-  @@id([organizationId, hostname])
-}
-
-// Platform subdomain labels ("<label>.<TENANT_BASE_DOMAIN>"). Company slugs and dealer
-// Url_Slug__c values share this one global namespace, so a label can never resolve to two
-// tenants; dealer rows are synced from Salesforce Dealership__c (first registration wins).
-model TenantSubdomain {
-  label          String       @id // lowercase, validated against ORGANIZATION_SLUG_PATTERN
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  // Salesforce Dealership__c Id; null = the company's own label (its Organization.slug).
-  dealershipId   String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  @@index([organizationId])
-}
