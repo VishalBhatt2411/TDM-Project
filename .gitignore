@@ -15,3 +15,4 @@ integrations/salesforce/.sf/
 integrations/salesforce/.sfdx/
 .sf/
 .sfdx/
+.vercel

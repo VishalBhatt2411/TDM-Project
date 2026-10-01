@@ -1,0 +1,20 @@
+# Uploaded by `vercel deploy`: source only. Vercel installs and builds remotely.
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+coverage
+.turbo
+*.tsbuildinfo
+integrations/salesforce/.sf
+integrations/salesforce/.sfdx
+.sf
+.sfdx
+.claude
+.agents
