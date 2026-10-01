@@ -2,7 +2,7 @@ import { Customer, CustomerRepository, InvalidValueError } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { Connection } from "jsforce";
 import { contactPhoneNeedsCountryCode, contactToCustomer, customerToContactRecord } from "../mappers";
-import { CONTACT_FIELDS, escapeSoql, soqlIdList, withConnection } from "../soql";
+import { CONTACT_FIELDS, escapeSoql, isSalesforceId, soqlIdList, withConnection } from "../soql";
 import { companyPhoneCountryCode } from "./branding.repository";
 
 export class SalesforceCustomerRepository implements CustomerRepository {
@@ -23,9 +23,10 @@ export class SalesforceCustomerRepository implements CustomerRepository {
     return withConnection(this.connectionProvider, async (conn) => {
       // A booking references its customer by portal user id, or by Contact Id when staff booked
       // for a Contact that never registered on the portal (see bookingRecordToDomain) — match either.
-      const idList = soqlIdList(ids);
+      const contactIds = ids.filter(isSalesforceId);
+      const contactIdFilter = contactIds.length ? ` OR Id IN ${soqlIdList(contactIds)}` : "";
       const { records } = await conn.query(
-        `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c IN ${idList} OR Id IN ${idList}`,
+        `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c IN ${soqlIdList(ids)}${contactIdFilter}`,
       );
       const countryCode = records.some(contactPhoneNeedsCountryCode) ? await companyPhoneCountryCode(conn) : undefined;
       // A Contact edited directly in Salesforce can carry an email or phone the domain rejects;
