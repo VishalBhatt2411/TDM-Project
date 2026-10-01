@@ -1,6 +1,7 @@
 import { adminApiClient } from "@/lib/admin-api-client";
 import type { RegionalSettingsDto } from "@/api/config";
 import type {
+  AdminBookingDto,
   BookingDto,
   BookingStatus,
   ComplianceStatusDto,
@@ -80,8 +81,8 @@ export interface AdminBookingListQuery {
   pageSize?: number;
 }
 
-export async function listAdminBookings(query: AdminBookingListQuery): Promise<Paginated<BookingDto>> {
-  const { data } = await adminApiClient.get<Paginated<BookingDto>>("/admin/bookings", { params: query });
+export async function listAdminBookings(query: AdminBookingListQuery): Promise<Paginated<AdminBookingDto>> {
+  const { data } = await adminApiClient.get<Paginated<AdminBookingDto>>("/admin/bookings", { params: query });
   return data;
 }
 
@@ -92,8 +93,8 @@ export interface RepBookingListQuery {
 }
 
 /** Bookings currently assigned to the signed-in staff member. */
-export async function listMyAssignedBookings(query: RepBookingListQuery): Promise<Paginated<BookingDto>> {
-  const { data } = await adminApiClient.get<Paginated<BookingDto>>("/admin/bookings/mine", { params: query });
+export async function listMyAssignedBookings(query: RepBookingListQuery): Promise<Paginated<AdminBookingDto>> {
+  const { data } = await adminApiClient.get<Paginated<AdminBookingDto>>("/admin/bookings/mine", { params: query });
   return data;
 }
 

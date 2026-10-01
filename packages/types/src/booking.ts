@@ -46,6 +46,13 @@ export interface BookingDto {
   staffNotes?: string;
 }
 
+/** Who and what a booking is about — resolved for staff lists only; absent when the record is gone. */
+export interface AdminBookingDto extends BookingDto {
+  customer?: { name: string; email: string; phone: string };
+  vehicle?: { label: string; vin: string; color?: string; imageUrl?: string };
+  branchName?: string;
+}
+
 export interface CreateBookingRequest {
   vehicleId: string;
   preferredVariantId?: string;

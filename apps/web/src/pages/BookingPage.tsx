@@ -16,14 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DriveType, PurchaseTimeline } from "@tdm/types";
 import { errorMessage } from "@/lib/api-error";
-
-const PURCHASE_TIMELINE_OPTIONS: { value: PurchaseTimeline; label: string }[] = [
-  { value: "Immediate", label: "Immediately" },
-  { value: "Within_1_Month", label: "Within 1 month" },
-  { value: "Within_3_Months", label: "Within 3 months" },
-  { value: "Within_6_Months", label: "Within 6 months" },
-  { value: "Just_Exploring", label: "Just exploring" },
-];
+import { PURCHASE_TIMELINE_OPTIONS } from "@/lib/booking-labels";
 
 interface FormValues {
   firstName: string;

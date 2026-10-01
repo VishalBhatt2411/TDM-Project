@@ -15,6 +15,8 @@ import { TimeSlot } from "./value-objects";
 
 export interface CustomerRepository {
   findById(id: string): Promise<Customer | null>;
+  /** Unknown ids are skipped; order is not guaranteed. */
+  findByIds(ids: readonly string[]): Promise<Customer[]>;
   findByEmail(email: string): Promise<Customer | null>;
   save(customer: Customer): Promise<void>;
 }
@@ -49,6 +51,8 @@ export interface VehicleSearchCriteria extends VehicleLocationFilter {
 
 export interface VehicleRepository {
   findById(id: string): Promise<Vehicle | null>;
+  /** Unknown ids are skipped; order is not guaranteed. */
+  findByIds(ids: readonly string[]): Promise<Vehicle[]>;
   search(criteria: VehicleSearchCriteria): Promise<{ items: Vehicle[]; total: number }>;
   findFeatured(kind: "featured" | "bestSeller" | "newLaunch", limit?: number, filter?: VehicleLocationFilter): Promise<Vehicle[]>;
   /** Related vehicles always come from the same dealership as `vehicleId`. */

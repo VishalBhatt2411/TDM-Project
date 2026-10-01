@@ -28,7 +28,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QrScanner } from "@/components/admin/QrScanner";
 import { ComplianceReviewPanel } from "@/components/admin/ComplianceReviewPanel";
-import type { BookingDto, BookingStatus } from "@tdm/types";
+import { purchaseTimelineLabel } from "@/lib/booking-labels";
+import { Car, Mail, MapPin, Phone } from "lucide-react";
+import type { AdminBookingDto, BookingDto, BookingStatus } from "@tdm/types";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
   Requested: "warning",
@@ -71,7 +73,7 @@ export function AdminBookingsPage() {
 
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">{canManageAll ? "Test Drive Management" : "My Test Drives"}</h1>
         <p className="text-sm text-muted-foreground">
@@ -113,15 +115,22 @@ export function AdminBookingsPage() {
         <div className="space-y-3">
           {data?.items.map((booking) => (
             <Card key={booking.id}>
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium">
-                  {regional.dateTime(booking.slot.start, zones.get(booking.dealershipId))} ·{" "}
-                  {booking.driveType === "Home" ? "Home" : "Showroom"}
-                </CardTitle>
-                <Badge variant={STATUS_VARIANT[booking.status] ?? "secondary"}>{booking.status}</Badge>
+              <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="truncate text-base">{booking.customer?.name ?? "Customer record unavailable"}</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {regional.dateTime(booking.slot.start, zones.get(booking.dealershipId))} ·{" "}
+                    {booking.driveType === "Home" ? "Home drive" : "Showroom drive"}
+                    {booking.branchName && <> · {booking.branchName}</>}
+                  </p>
+                </div>
+                <Badge className="shrink-0" variant={STATUS_VARIANT[booking.status] ?? "secondary"}>
+                  {booking.status}
+                </Badge>
               </CardHeader>
-              <CardContent className="flex items-center justify-between gap-4">
-                <p className="text-xs text-muted-foreground">Ref: {booking.id}</p>
+              <BookingDetails booking={booking} />
+              <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                <p className="break-all text-xs text-muted-foreground">Ref: {booking.id}</p>
                 {canManageAll && (
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-muted-foreground">Sales Rep:</label>
@@ -150,6 +159,77 @@ export function AdminBookingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function BookingDetails({ booking }: { booking: AdminBookingDto }) {
+  const { customer, vehicle, homeAddress } = booking;
+  return (
+    <CardContent className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-3">
+      <div className="flex min-w-0 gap-3">
+        {vehicle?.imageUrl ? (
+          <img src={vehicle.imageUrl} alt="" className="h-12 w-16 shrink-0 rounded object-cover" loading="lazy" />
+        ) : (
+          <Car className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        )}
+        <div className="min-w-0">
+          <p className="font-medium">{vehicle?.label ?? "Vehicle record unavailable"}</p>
+          {vehicle && (
+            <p className="break-all text-xs text-muted-foreground">
+              {[vehicle.color, vehicle.vin && `VIN ${vehicle.vin}`].filter(Boolean).join(" · ")}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="min-w-0 space-y-1">
+        {customer ? (
+          <>
+            <a href={`tel:${customer.phone}`} className="flex items-center gap-2 hover:underline">
+              <Phone className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              {customer.phone}
+            </a>
+            <a href={`mailto:${customer.email}`} className="flex min-w-0 items-center gap-2 hover:underline">
+              <Mail className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="truncate">{customer.email}</span>
+            </a>
+          </>
+        ) : (
+          <p className="text-muted-foreground">No contact details on file.</p>
+        )}
+        {homeAddress && (
+          <p className="flex gap-2 text-xs text-muted-foreground">
+            <MapPin className="h-4 w-4 shrink-0" aria-hidden />
+            {[homeAddress.line1, homeAddress.city, homeAddress.state, homeAddress.postalCode].filter(Boolean).join(", ")}
+          </p>
+        )}
+      </div>
+
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+        <dt className="text-muted-foreground">Buying</dt>
+        <dd>{purchaseTimelineLabel(booking.purchaseTimeline)}</dd>
+        <dt className="text-muted-foreground">Customer</dt>
+        <dd>{booking.isExistingCustomer ? "Existing" : "New"}</dd>
+        {booking.currentVehicleOwned && (
+          <>
+            <dt className="text-muted-foreground">Drives</dt>
+            <dd className="break-words">{booking.currentVehicleOwned}</dd>
+          </>
+        )}
+        {booking.pickupRequired && (
+          <>
+            <dt className="text-muted-foreground">Pickup</dt>
+            <dd>Required</dd>
+          </>
+        )}
+        {booking.additionalNotes && (
+          <>
+            <dt className="text-muted-foreground">Note</dt>
+            <dd className="break-words">{booking.additionalNotes}</dd>
+          </>
+        )}
+      </dl>
+    </CardContent>
   );
 }
 

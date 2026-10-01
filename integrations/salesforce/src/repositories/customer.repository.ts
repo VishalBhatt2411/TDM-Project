@@ -2,7 +2,7 @@ import { Customer, CustomerRepository } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { Connection } from "jsforce";
 import { contactPhoneNeedsCountryCode, contactToCustomer, customerToContactRecord } from "../mappers";
-import { CONTACT_FIELDS, escapeSoql, withConnection } from "../soql";
+import { CONTACT_FIELDS, escapeSoql, soqlIdList, withConnection } from "../soql";
 import { companyPhoneCountryCode } from "./branding.repository";
 
 export class SalesforceCustomerRepository implements CustomerRepository {
@@ -15,6 +15,15 @@ export class SalesforceCustomerRepository implements CustomerRepository {
       );
       const record = result.records[0];
       return record ? toCustomer(conn, record) : null;
+    });
+  }
+
+  async findByIds(ids: readonly string[]): Promise<Customer[]> {
+    if (!ids.length) return [];
+    return withConnection(this.connectionProvider, async (conn) => {
+      const { records } = await conn.query(`SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c IN ${soqlIdList(ids)}`);
+      const countryCode = records.some(contactPhoneNeedsCountryCode) ? await companyPhoneCountryCode(conn) : undefined;
+      return records.map((record) => contactToCustomer(record, countryCode));
     });
   }
 

@@ -1,7 +1,24 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { AuditLogRepository, Booking, BookingRepository, BookingStatus, SalesRepRepository, SalesRepresentative } from "@tdm/domain";
-import { BookingDto, VehicleAvailabilityResponse } from "@tdm/types";
-import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, SALES_REP_REPOSITORY } from "../infrastructure/tokens";
+import {
+  AuditLogRepository,
+  Booking,
+  BookingRepository,
+  BookingStatus,
+  BranchRepository,
+  CustomerRepository,
+  SalesRepRepository,
+  SalesRepresentative,
+  VehicleRepository,
+} from "@tdm/domain";
+import { AdminBookingDto, BookingDto, VehicleAvailabilityResponse } from "@tdm/types";
+import {
+  AUDIT_LOG_REPOSITORY,
+  BOOKING_REPOSITORY,
+  BRANCH_REPOSITORY,
+  CUSTOMER_REPOSITORY,
+  SALES_REP_REPOSITORY,
+  VEHICLE_REPOSITORY,
+} from "../infrastructure/tokens";
 import { bookingToDto } from "../bookings/bookings.service";
 import { BookingMutationService } from "../bookings/booking-mutation.service";
 import { QrCheckinService } from "../bookings/qr-checkin.service";
@@ -27,6 +44,9 @@ export class AdminBookingsService {
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
+    @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
+    @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
+    @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     private readonly access: BookingAccessPolicy,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
@@ -41,7 +61,7 @@ export class AdminBookingsService {
     const scope = access.scopeFor(PERMISSIONS.MANAGE_BOOKINGS) ?? { dealershipIds: [] };
     const { items, total } = await this.bookings.findAll({ ...filters, ...scope });
     return {
-      items: items.map(adminBookingToDto),
+      items: await this.withDetails(items),
       total,
       page: filters.page ?? 1,
       pageSize: filters.pageSize ?? 25,
@@ -52,11 +72,45 @@ export class AdminBookingsService {
   async listMine(access: StaffAccess, filters: { status?: BookingStatus; page?: number; pageSize?: number }) {
     const { items, total } = await this.bookings.findAll({ ...filters, salesRepId: access.salesforceUserId });
     return {
-      items: items.map(adminBookingToDto),
+      items: await this.withDetails(items),
       total,
       page: filters.page ?? 1,
       pageSize: filters.pageSize ?? 25,
     };
+  }
+
+  /** One batched lookup per related record type for the whole page — never one per booking. */
+  private async withDetails(bookings: Booking[]): Promise<AdminBookingDto[]> {
+    if (!bookings.length) return [];
+    const unique = (ids: string[]) => [...new Set(ids)];
+    const [customers, vehicles, branches] = await Promise.all([
+      this.customers.findByIds(unique(bookings.map((b) => b.customerId))),
+      this.vehicles.findByIds(unique(bookings.map((b) => b.vehicleId))),
+      this.branches.findAllIncludingInactive({ dealershipIds: unique(bookings.map((b) => b.dealershipId)) }),
+    ]);
+    const customerById = new Map(customers.map((c) => [c.id, c]));
+    const vehicleById = new Map(vehicles.map((v) => [v.id, v.toProps()]));
+    const branchNameById = new Map(branches.map((b) => [b.id, b.toProps().name]));
+
+    return bookings.map((booking) => {
+      const customer = customerById.get(booking.customerId);
+      const vehicle = vehicleById.get(booking.vehicleId);
+      return {
+        ...adminBookingToDto(booking),
+        customer: customer && {
+          name: `${customer.name.firstName} ${customer.name.lastName}`.trim(),
+          email: customer.email.toString(),
+          phone: customer.phone.toString(),
+        },
+        vehicle: vehicle && {
+          label: [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" "),
+          vin: vehicle.vin,
+          color: vehicle.color,
+          imageUrl: vehicle.primaryImageUrl,
+        },
+        branchName: branchNameById.get(booking.branchId),
+      };
+    });
   }
 
   async getById(bookingId: string, staff: AuthenticatedStaff) {

@@ -13,7 +13,7 @@ import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "../connection-source";
 import { orgRegionalDefaults } from "../org-defaults";
 import { branchRecordToDomain, branchToRecord, variantRecordToDomain, vehicleRecordToDomain, vehicleToFullRecord } from "../mappers";
-import { BRANCH_FIELDS, dealershipCondition, escapeSoql, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
+import { BRANCH_FIELDS, dealershipCondition, escapeSoql, soqlIdList, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
 
 export class SalesforceVehicleRepository implements VehicleRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
@@ -26,6 +26,17 @@ export class SalesforceVehicleRepository implements VehicleRepository {
       ]);
       const record = result.records[0];
       return record ? vehicleRecordToDomain(record, currency) : null;
+    });
+  }
+
+  async findByIds(ids: readonly string[]): Promise<Vehicle[]> {
+    if (!ids.length) return [];
+    return withConnection(this.connectionProvider, async (conn) => {
+      const [result, currency] = await Promise.all([
+        conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Id IN ${soqlIdList(ids)}`),
+        this.currency(conn),
+      ]);
+      return result.records.map((record) => vehicleRecordToDomain(record, currency));
     });
   }
 
