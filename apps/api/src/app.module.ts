@@ -19,6 +19,7 @@ import { OnboardingModule } from "./onboarding/onboarding.module";
 import { TenancyModule } from "./tenancy/tenancy.module";
 import { TenantMiddleware } from "./tenancy/tenant.middleware";
 import { JobsModule } from "./jobs/jobs.module";
+import { PlatformModule } from "./platform/platform.module";
 import { env } from "./common/env";
 
 @Module({
@@ -44,6 +45,7 @@ import { env } from "./common/env";
     AssetsModule,
     OnboardingModule,
     JobsModule,
+    PlatformModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

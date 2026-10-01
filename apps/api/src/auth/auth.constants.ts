@@ -21,6 +21,10 @@ export const REFRESH_TOKEN_COOKIE = "tdm_staff_rt";
 export const ACCESS_TOKEN_COOKIE_MAX_AGE_MS = ACCESS_TOKEN_TTL_SECONDS * 1000;
 export const REFRESH_TOKEN_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_MS;
 
+// --- Platform operator console (/platform) — cross-tenant, so short-lived and never refreshed ---
+export const PLATFORM_OPERATOR_COOKIE = "tdm_platform_op";
+export const PLATFORM_OPERATOR_SESSION_TTL_SECONDS = 30 * 60;
+
 // --- JWT scopes ---
 // A customer token can never pass StaffAuthGuard and a staff token can never pass
 // JwtAuthGuard, even though both are structurally valid JWTs signed with the same
@@ -29,6 +33,7 @@ export const AUTH_SCOPE = {
   CUSTOMER: "customer",
   STAFF: "staff",
   CHECKIN: "checkin",
+  PLATFORM_OPERATOR: "platform_operator",
 } as const;
 export type AuthScope = (typeof AUTH_SCOPE)[keyof typeof AUTH_SCOPE];
 

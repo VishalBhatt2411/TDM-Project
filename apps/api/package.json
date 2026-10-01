@@ -6,7 +6,8 @@
     "start:dev": "ts-node-dev --respawn --transpile-only --conditions=development src/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "platform:hash-password": "node --conditions=development -r ts-node/register/transpile-only scripts/hash-platform-password.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

@@ -37,6 +37,8 @@ const CreateOrganizationPage = lazyPage(() => import("@/pages/onboarding/CreateO
 const ConnectedAppInstructionsPage = lazyPage(() => import("@/pages/onboarding/ConnectedAppInstructionsPage"), "ConnectedAppInstructionsPage");
 const SalesforceCredentialsPage = lazyPage(() => import("@/pages/onboarding/SalesforceCredentialsPage"), "SalesforceCredentialsPage");
 const OnboardingCallbackPage = lazyPage(() => import("@/pages/onboarding/OnboardingCallbackPage"), "OnboardingCallbackPage");
+const ResumeOnboardingPage = lazyPage(() => import("@/pages/onboarding/ResumeOnboardingPage"), "ResumeOnboardingPage");
+const PlatformConsolePage = lazyPage(() => import("@/pages/platform/PlatformConsolePage"), "PlatformConsolePage");
 
 export function App() {
   return (
@@ -68,6 +70,9 @@ export function App() {
       <Route path="/onboarding/:organizationId/connected-app" element={<ConnectedAppInstructionsPage />} />
       <Route path="/onboarding/:organizationId/credentials" element={<SalesforceCredentialsPage />} />
       <Route path="/onboarding/:organizationId/connecting" element={<OnboardingCallbackPage />} />
+      <Route path="/onboarding/:organizationId/resume" element={<ResumeOnboardingPage />} />
+      {/* Platform operator console — deliberately unlinked; password-protected by the API. */}
+      <Route path="/platform" element={<PlatformConsolePage />} />
 
       {/* Admin Console — entirely separate auth space from the customer app, backed by Salesforce identity. */}
       <Route path="/admin/login" element={<AdminLoginPage />} />

@@ -260,6 +260,44 @@ export class OrganizationRepository {
     return records.map((r) => r.id);
   }
 
+  /** Every tenant, newest first — for the platform operator console. */
+  async listAll(): Promise<OrganizationRecord[]> {
+    const records = await this.prisma.organization.findMany({ orderBy: { createdAt: "desc" } });
+    return records.map(toRecord);
+  }
+
+  /**
+   * Drops the tenant's Salesforce connection and issues a new setup token, so its onboarding
+   * wizard can run again. The Connected App credentials and the bound sfOrgId are kept (a
+   * tenant only ever reconnects its own org); staff sessions are revoked, since nobody can
+   * work against a disconnected org. Returns false when the organization doesn't exist.
+   */
+  async resetConnection(id: string, onboardingTokenHash: string): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.organization.updateMany({
+        where: { id },
+        data: { sfRefreshTokenEnc: null, connectionStatus: "pending", connectionError: null, onboardingTokenHash },
+      });
+      if (count === 0) return false;
+      await revokeStaffSessions(tx, id);
+      return true;
+    });
+  }
+
+  /**
+   * Deletes the tenant and everything the platform stores for it (staff, hosts, OAuth states,
+   * audit log cascade; staff refresh tokens have no relation, so they go explicitly). Its data in
+   * Salesforce is untouched. Returns false when the organization doesn't exist.
+   */
+  async deleteOrganization(id: string): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const staff = await tx.staffUser.findMany({ where: { organizationId: id }, select: { id: true } });
+      await tx.staffRefreshToken.deleteMany({ where: { staffUserId: { in: staff.map((s) => s.id) } } });
+      const { count } = await tx.organization.deleteMany({ where: { id } });
+      return count === 1;
+    });
+  }
+
   /** Creates the company together with its subdomain label, atomically — the label namespace is shared with dealer slugs. */
   async create(input: { name: string; slug: string; onboardingTokenHash: string }): Promise<OrganizationRecord> {
     const slug = input.slug.toLowerCase();
@@ -405,6 +443,14 @@ export class OrganizationRepository {
       data: { metadataDeployedAt: new Date(), connectionError: null },
     });
   }
+}
+
+async function revokeStaffSessions(tx: Prisma.TransactionClient, organizationId: string): Promise<void> {
+  const staff = await tx.staffUser.findMany({ where: { organizationId }, select: { id: true } });
+  await tx.staffRefreshToken.updateMany({
+    where: { staffUserId: { in: staff.map((s) => s.id) }, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
 }
 
 function isUniqueViolation(err: unknown): boolean {

@@ -35,6 +35,7 @@ Environment variables (Production):
 | `SF_OAUTH_REDIRECT_URI` | `https://<tenant host>/api/v1/admin/auth/salesforce/callback` |
 | `SF_ONBOARDING_REDIRECT_URI` | `https://<tenant host>/api/v1/onboarding/salesforce/callback` |
 | `ANTHROPIC_API_KEY` | optional (AI licence check) |
+| `PLATFORM_OPERATOR_PASSWORD_HASH` | optional; enables the operator console (below) |
 
 Domains: a tenant resolves from `<label>.<TENANT_BASE_DOMAIN>`, where the label is a company or
 dealer slug. On `*.vercel.app` add each tenant host as a project domain (e.g.
@@ -53,7 +54,21 @@ Each tenant's Connected App must list both redirect URIs above as callback URLs.
 connected before the move reconnect from the admin console (a new `ENCRYPTION_KEY` cannot read
 credentials encrypted with the old one).
 
-## 5. Serverless limits
+## 5. Operator console
+
+`https://<platform host>/platform` lists every connected company and can **Reconnect** (drops its
+Salesforce connection, signs out its staff, and issues a one-time setup link that reruns the
+onboarding wizard for the same org) or **Delete** it (removes everything the platform stores for
+it; Salesforce data is untouched). It is unlinked from the UI and protected by one operator
+password; sessions last 30 minutes and logins are throttled. Set the hash (never the password):
+
+```bash
+printf %s "<password of 16+ characters>" | npm run -s platform:hash-password -w apps/api
+```
+
+Without `PLATFORM_OPERATOR_PASSWORD_HASH` the console and its API return 404.
+
+## 6. Serverless limits
 
 - Request bodies are capped at ~4.5 MB. The web app downscales licence photos and brand images
   before upload, and the hero image cap is 3 MB to fit.
@@ -62,7 +77,7 @@ credentials encrypted with the old one).
 - A tenant's metadata deploy runs after the onboarding response via `waitUntil`, bounded by the
   function's `maxDuration` (60 s).
 
-## 6. Verify
+## 7. Verify
 
 - `GET https://<tenant host>/health/ready` → 200.
 - `GET https://<tenant host>/api/v1/config/dealership` → the tenant's dealership (or 503

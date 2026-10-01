@@ -33,6 +33,11 @@ export interface AppEnv {
   schedulerMode: SchedulerMode;
   /** Bearer secret an external scheduler presents to trigger a job; only set in "external" mode. */
   jobTriggerSecret?: string;
+  /**
+   * scrypt hash ("salt:key" hex, see hashSecret) of the platform operator password that opens the
+   * operator console (/platform). Unset, the console and its API don't exist (404).
+   */
+  platformOperatorPasswordHash?: string;
 }
 
 export type SchedulerMode = "in-process" | "external";
@@ -110,6 +115,11 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     errors.push(`JOB_TRIGGER_SECRET of at least ${MIN_JWT_SECRET_LENGTH} characters is required when SCHEDULER_MODE=external.`);
   }
 
+  const platformOperatorPasswordHash = read("PLATFORM_OPERATOR_PASSWORD_HASH")?.toLowerCase();
+  if (platformOperatorPasswordHash && !/^[0-9a-f]{32}:[0-9a-f]{128}$/.test(platformOperatorPasswordHash)) {
+    errors.push("PLATFORM_OPERATOR_PASSWORD_HASH must be generated with `npm run platform:hash-password -w apps/api`.");
+  }
+
   const webOrigin = url("WEB_ORIGIN", "http://localhost:5173");
   const adminWebOrigin = read("ADMIN_WEB_ORIGIN") ? url("ADMIN_WEB_ORIGIN", webOrigin) : webOrigin;
 
@@ -130,6 +140,7 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     anthropicApiKey: read("ANTHROPIC_API_KEY"),
     schedulerMode,
     jobTriggerSecret: schedulerMode === "external" ? jobTriggerSecret : undefined,
+    platformOperatorPasswordHash,
   };
 
   if (errors.length > 0) {
