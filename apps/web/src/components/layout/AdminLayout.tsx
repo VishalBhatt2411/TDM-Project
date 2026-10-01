@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail, Palette, Globe } from "lucide-react";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { cn } from "@/lib/utils";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { STAFF_ROLE_OPTIONS, staffRoleLabel } from "@/lib/permissions";
 
 interface NavItem {
@@ -75,7 +76,9 @@ export function AdminLayout() {
         </div>
       </aside>
       <main className="flex-1 overflow-x-auto">
-        <Outlet />
+        <RouteErrorBoundary key={location.pathname}>
+          <Outlet />
+        </RouteErrorBoundary>
       </main>
     </div>
   );

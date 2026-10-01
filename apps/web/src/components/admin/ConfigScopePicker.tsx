@@ -28,11 +28,15 @@ export function ConfigScopePicker({ value, onChange, withBranch = false }: Confi
   const branchesQuery = useQuery({ queryKey: ["branches-lookup"], queryFn: listBranchesLookup, enabled: withBranch });
 
   const dealerships = dealershipsQuery.data;
+  // Picking the starting scope must not re-run because the parent passed a new callback —
+  // a parent whose handler changes identity on every render would otherwise loop forever.
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
   React.useEffect(() => {
     if (value || !dealerships) return;
-    if (isCompanyAdmin) onChange({});
-    else if (dealerships[0]) onChange({ dealershipId: dealerships[0].id });
-  }, [value, dealerships, isCompanyAdmin, onChange]);
+    if (isCompanyAdmin) onChangeRef.current({});
+    else if (dealerships[0]) onChangeRef.current({ dealershipId: dealerships[0].id });
+  }, [value, dealerships, isCompanyAdmin]);
 
   const branches = React.useMemo(
     () => (branchesQuery.data ?? []).filter((b) => b.dealershipId === value?.dealershipId),

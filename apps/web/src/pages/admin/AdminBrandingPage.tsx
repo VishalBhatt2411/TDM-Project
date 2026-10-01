@@ -403,14 +403,15 @@ export function AdminBrandingPage() {
   const errors = form ? validate(form) : {};
   const hasErrors = Object.keys(errors).length > 0;
 
+  const resetSave = save.reset;
   const changeScope = React.useCallback(
     (next: ConfigScopeParams) => {
       if (isDirty && !window.confirm("Discard your unsaved branding changes?")) return;
-      save.reset();
+      resetSave();
       setSavedAt(undefined);
       setScope(next);
     },
-    [isDirty, save],
+    [isDirty, resetSave],
   );
 
   const update = (patch: (draft: BrandForm) => void) => {
