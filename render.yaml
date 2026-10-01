@@ -1,0 +1,50 @@
+# Render blueprint for the API (the web app is deployed to Vercel — see docs/09-deployment.md).
+# The API is a long-running service, not serverless: its reminder (15 min), host-sync (5 min)
+# and follow-up (daily) schedulers run in-process. Secrets marked sync:false are entered in the
+# Render dashboard when the blueprint is applied; nothing secret is committed here.
+services:
+  - type: web
+    name: tdm-api
+    runtime: node
+    # Schedulers need an always-on instance; the free plan sleeps when idle.
+    plan: starter
+    buildCommand: >-
+      npm ci --include=dev &&
+      npm run build -w @tdm/types -w @tdm/domain -w @tdm/postgres-adapter -w @tdm/salesforce-adapter -w @tdm/api
+    # Migrations run before the new instance takes traffic.
+    preDeployCommand: npm run db:deploy
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tdm-platform-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # 64 hex characters: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+      - key: TENANT_BASE_DOMAIN
+        sync: false
+      # Vercel's edge and Render's load balancer.
+      - key: TRUST_PROXY_HOPS
+        value: "2"
+      - key: SF_OAUTH_REDIRECT_URI
+        sync: false
+      - key: SF_ONBOARDING_REDIRECT_URI
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+databases:
+  - name: tdm-platform-db
+    plan: basic-256mb
+    databaseName: tdm
+    ipAllowList: []
