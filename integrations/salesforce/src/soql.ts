@@ -74,7 +74,7 @@ export function toEighteenCharId(id: string): string {
 /** `('a', 'b')` for an IN clause. Callers must handle an empty list (SOQL rejects `IN ()`). */
 const SALESFORCE_ID_PATTERN = /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/;
 
-/** True for a 15/18-character record Id — an `Id IN (...)` filter rejects the whole query on any other value. */
+/** True for a 15/18-character record Id â€” an `Id IN (...)` filter rejects the whole query on any other value. */
 export function isSalesforceId(value: string): boolean {
   return SALESFORCE_ID_PATTERN.test(value);
 }

@@ -117,7 +117,7 @@ export function AdminBookingsPage() {
             <Card key={booking.id}>
               <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
                 <div className="min-w-0 space-y-1">
-                  <CardTitle className="truncate text-base">{booking.customer?.name ?? "Customer record unavailable"}</CardTitle>
+                  <CardTitle className="truncate text-base">{booking.customer ? booking.customer.name || "Unnamed contact" : "Customer record unavailable"}</CardTitle>
                   <p className="text-sm text-muted-foreground">
                     {regional.dateTime(booking.slot.start, zones.get(booking.dealershipId))} ·{" "}
                     {booking.driveType === "Home" ? "Home drive" : "Showroom drive"}
@@ -183,16 +183,20 @@ function BookingDetails({ booking }: { booking: AdminBookingDto }) {
       </div>
 
       <div className="min-w-0 space-y-1">
-        {customer ? (
+        {customer?.phone || customer?.email ? (
           <>
-            <a href={`tel:${customer.phone}`} className="flex items-center gap-2 hover:underline">
-              <Phone className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              {customer.phone}
-            </a>
-            <a href={`mailto:${customer.email}`} className="flex min-w-0 items-center gap-2 hover:underline">
-              <Mail className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="truncate">{customer.email}</span>
-            </a>
+            {customer.phone && (
+              <a href={`tel:${customer.phone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-2 hover:underline">
+                <Phone className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                {customer.phone}
+              </a>
+            )}
+            {customer.email && (
+              <a href={`mailto:${customer.email}`} className="flex min-w-0 items-center gap-2 hover:underline">
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate">{customer.email}</span>
+              </a>
+            )}
           </>
         ) : (
           <p className="text-muted-foreground">No contact details on file.</p>

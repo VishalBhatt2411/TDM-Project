@@ -3,6 +3,7 @@ import {
   Booking,
   ComplianceRecord,
   Customer,
+  CustomerContactSummary,
   Dealership,
   DealershipBranding,
   DriveFeedback,
@@ -36,6 +37,19 @@ export function contactToCustomer(record: any, phoneCountryCode?: string): Custo
     marketingOptIn: !!record.Marketing_Opt_In__c,
     createdAt: new Date(record.CreatedDate ?? Date.now()),
   });
+}
+
+/** Keyed the way bookings reference customers: portal user id, else Contact Id. Never throws on bad data. */
+export function contactToSummary(record: any, phoneCountryCode?: string): CustomerContactSummary {
+  const name = [record.FirstName, record.LastName].filter(Boolean).join(" ").trim();
+  const email = (record.Email ?? "").trim();
+  const phone = normalizeContactPhone(record.Phone ?? record.MobilePhone, phoneCountryCode);
+  return {
+    id: record.Portal_User_Id__c ?? record.Id,
+    name,
+    ...(email ? { email } : {}),
+    ...(phone ? { phone } : {}),
+  };
 }
 
 /**

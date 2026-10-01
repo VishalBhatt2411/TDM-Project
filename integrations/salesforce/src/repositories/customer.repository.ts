@@ -1,7 +1,7 @@
-import { Customer, CustomerRepository, InvalidValueError } from "@tdm/domain";
+import { Customer, CustomerContactSummary, CustomerRepository } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { Connection } from "jsforce";
-import { contactPhoneNeedsCountryCode, contactToCustomer, customerToContactRecord } from "../mappers";
+import { contactPhoneNeedsCountryCode, contactToCustomer, contactToSummary, customerToContactRecord } from "../mappers";
 import { CONTACT_FIELDS, escapeSoql, isSalesforceId, soqlIdList, withConnection } from "../soql";
 import { companyPhoneCountryCode } from "./branding.repository";
 
@@ -18,34 +18,24 @@ export class SalesforceCustomerRepository implements CustomerRepository {
     });
   }
 
-  async findByIds(ids: readonly string[]): Promise<Customer[]> {
+  async findContactSummaries(ids: readonly string[]): Promise<CustomerContactSummary[]> {
     if (!ids.length) return [];
     return withConnection(this.connectionProvider, async (conn) => {
       // A booking references its customer by portal user id, or by Contact Id when staff booked
-      // for a Contact that never registered on the portal (see bookingRecordToDomain) � match either.
+      // for a Contact that never registered on the portal (see bookingRecordToDomain) — match either.
       const contactIds = ids.filter(isSalesforceId);
       const contactIdFilter = contactIds.length ? ` OR Id IN ${soqlIdList(contactIds)}` : "";
       const { records } = await conn.query(
         `SELECT ${CONTACT_FIELDS} FROM Contact WHERE Portal_User_Id__c IN ${soqlIdList(ids)}${contactIdFilter}`,
       );
       const countryCode = records.some(contactPhoneNeedsCountryCode) ? await companyPhoneCountryCode(conn) : undefined;
-      // A Contact edited directly in Salesforce can carry an email or phone the domain rejects;
-      // skip it like an unknown id rather than failing every other customer in the batch.
-      return records.flatMap((record: any) => {
-        try {
-          return [contactToCustomer({ ...record, Portal_User_Id__c: record.Portal_User_Id__c ?? record.Id }, countryCode)];
-        } catch (error) {
-          if (!(error instanceof InvalidValueError)) throw error;
-          console.warn(JSON.stringify({ event: "customer_contact_invalid", contactId: record.Id }));
-          return [];
-        }
-      });
+      return records.map((record: any) => contactToSummary(record, countryCode));
     });
   }
 
   /**
    * Matches only Contacts actually registered as portal customers (Portal_User_Id__c
-   * set) — a Contact can exist in Salesforce for all sorts of reasons unrelated to
+   * set) â€” a Contact can exist in Salesforce for all sorts of reasons unrelated to
    * this app (CRM data entry, lead conversion, an import) and must never be treated
    * as an existing portal account just because it happens to share an email.
    */

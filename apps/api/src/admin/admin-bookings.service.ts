@@ -84,7 +84,7 @@ export class AdminBookingsService {
     if (!bookings.length) return [];
     const unique = (ids: string[]) => [...new Set(ids)];
     const [customers, vehicles, branches] = await Promise.all([
-      this.customers.findByIds(unique(bookings.map((b) => b.customerId))),
+      this.customers.findContactSummaries(unique(bookings.map((b) => b.customerId))),
       this.vehicles.findByIds(unique(bookings.map((b) => b.vehicleId))),
       this.branches.findAllIncludingInactive({ dealershipIds: unique(bookings.map((b) => b.dealershipId)) }),
     ]);
@@ -97,11 +97,7 @@ export class AdminBookingsService {
       const vehicle = vehicleById.get(booking.vehicleId);
       return {
         ...adminBookingToDto(booking),
-        customer: customer && {
-          name: `${customer.name.firstName} ${customer.name.lastName}`.trim(),
-          email: customer.email.toString(),
-          phone: customer.phone.toString(),
-        },
+        customer: customer && { name: customer.name, email: customer.email, phone: customer.phone },
         vehicle: vehicle && {
           label: [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" "),
           vin: vehicle.vin,

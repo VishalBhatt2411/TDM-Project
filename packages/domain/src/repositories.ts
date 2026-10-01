@@ -13,10 +13,21 @@ import { Vehicle, VehicleStatus, VehicleVariant } from "./entities/vehicle";
 import { FunnelStageCounts } from "./services/recommendation-engine";
 import { TimeSlot } from "./value-objects";
 
+export interface CustomerContactSummary {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
 export interface CustomerRepository {
   findById(id: string): Promise<Customer | null>;
-  /** Unknown ids are skipped; order is not guaranteed. */
-  findByIds(ids: readonly string[]): Promise<Customer[]>;
+  /**
+   * Who each id is, as the data source holds it — for staff-facing lists. Deliberately not a
+   * Customer: records maintained outside the app may lack a valid email or phone, and that must
+   * not hide who booked. Unknown ids are skipped; order is not guaranteed.
+   */
+  findContactSummaries(ids: readonly string[]): Promise<CustomerContactSummary[]>;
   findByEmail(email: string): Promise<Customer | null>;
   save(customer: Customer): Promise<void>;
 }
