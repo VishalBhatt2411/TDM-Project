@@ -194,6 +194,10 @@ model Organization {
   sfConsumerKey        String?
   sfConsumerSecretEnc  String? // AES-256-GCM, "iv:authTag:cipher" hex (see crypto.ts)
   sfRefreshTokenEnc    String?
+  // The live access token + instance URL + org/user ids as encrypted JSON, shared by every app instance
+  // (see TenantSalesforceConnectionProvider); expires at sfSessionExpiresAt.
+  sfSessionEnc         String?
+  sfSessionExpiresAt   DateTime?
   sfInstanceUrl        String?
   sfLoginUrl           String    @default("https://login.salesforce.com")
   sfOrgId              String?
