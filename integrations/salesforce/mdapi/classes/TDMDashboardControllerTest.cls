@@ -165,6 +165,28 @@ private class TDMDashboardControllerTest {
     }
 
     @isTest
+    static void testRescheduledBookingsAreNotCounted() {
+        Booking__c template = [SELECT Contact__c, Vehicle__c, Branch__c FROM Booking__c LIMIT 1];
+        insert new Booking__c(
+            Contact__c = template.Contact__c, Vehicle__c = template.Vehicle__c, Branch__c = template.Branch__c,
+            Drive_Type__c = 'Dealership', Scheduled_Start__c = Datetime.now().addDays(3),
+            Scheduled_End__c = Datetime.now().addDays(3).addHours(1), Status__c = 'Cancelled',
+            Cancellation_Reason__c = 'Rescheduled'
+        );
+
+        Test.startTest();
+        TDMDashboardController.DashboardKpis kpis = TDMDashboardController.getKpis();
+        List<TDMDashboardController.RepStat> stats = TDMDashboardController.getRepLeaderboard();
+        Test.stopTest();
+
+        System.assertEquals(2, kpis.totalBookings, 'The old half of a reschedule is not a booking.');
+        System.assertEquals(2, stats[0].totalBookings);
+        for (TDMDashboardController.StatusCount sc : TDMDashboardController.getStatusBreakdown()) {
+            System.assertNotEquals('Cancelled', sc.status, 'A reschedule is not a cancellation.');
+        }
+    }
+
+    @isTest
     static void testGetStatusBreakdown() {
         Test.startTest();
         List<TDMDashboardController.StatusCount> breakdown = TDMDashboardController.getStatusBreakdown();

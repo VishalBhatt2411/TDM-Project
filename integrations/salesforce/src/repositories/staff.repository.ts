@@ -78,7 +78,8 @@ export class SalesforceStaffAssignmentRepository implements StaffAssignmentRepos
           ? await conn.sobject("Staff_Assignment__c").create(record)
           : await conn.sobject("Staff_Assignment__c").update({ Id: props.id, ...record });
       } catch (err: any) {
-        if (err?.errorCode) throw toDomainError([err]);
+        // An expired session is not a validation failure: let it reach withConnection, which retries on a fresh one.
+        if (err?.errorCode && err.errorCode !== "INVALID_SESSION_ID") throw toDomainError([err]);
         throw err;
       }
       if (!result.success) throw toDomainError(result.errors ?? []);

@@ -343,7 +343,8 @@ export function bookingToRecord(booking: Booking): Record<string, unknown> {
     Scheduled_Start__c: props.slot.start.toISOString(),
     Scheduled_End__c: props.slot.end.toISOString(),
     Status__c: props.status,
-    Home_Address__c: props.homeAddress?.line1 ?? null,
+    // Home_Address__c is a single text field: keep the whole address in it, not just the street line.
+    Home_Address__c: props.homeAddress ? singleLineAddress(props.homeAddress) : null,
     Check_In_Method__c: props.checkInMethod ?? null,
     Check_In_Timestamp__c: props.checkInTimestamp?.toISOString() ?? null,
     Actual_Start__c: props.actualStart?.toISOString() ?? null,
@@ -363,6 +364,15 @@ export function bookingToRecord(booking: Booking): Record<string, unknown> {
     Additional_Notes__c: props.additionalNotes ?? null,
     Staff_Notes__c: props.staffNotes ?? null,
   };
+}
+
+/** The address as one comma-separated line, trimmed to the 255 characters of Booking__c.Home_Address__c. */
+function singleLineAddress(address: { line1: string; city: string; state: string; postalCode: string; country: string }): string {
+  return [address.line1, address.city, address.state, address.postalCode, address.country]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(", ")
+    .slice(0, 255);
 }
 
 export function staffAssignmentRecordToDomain(record: any): StaffAssignment {

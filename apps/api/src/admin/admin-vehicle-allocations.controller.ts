@@ -1,9 +1,11 @@
 import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { IsIn, IsOptional } from "class-validator";
-import { BranchRepository, VehicleAllocation, VehicleAllocationRepository, VehicleRepository } from "@tdm/domain";
-import { BRANCH_REPOSITORY, VEHICLE_ALLOCATION_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
+import { AuditLogRepository, BranchRepository, VehicleAllocation, VehicleAllocationRepository, VehicleRepository } from "@tdm/domain";
+import { AUDIT_LOG_REPOSITORY, BRANCH_REPOSITORY, VEHICLE_ALLOCATION_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
 import { IsRecordId, ParseRecordIdPipe } from "../common/record-id";
 import { StaffAuthGuard } from "./staff-auth.guard";
+import type { AuthenticatedStaff } from "./staff-auth.guard";
+import { CurrentStaff } from "./current-staff.decorator";
 import { PermissionGuard } from "./permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
 import { CurrentStaffAccess } from "./current-staff-access.decorator";
@@ -51,6 +53,7 @@ export class AdminVehicleAllocationsController {
     @Inject(VEHICLE_ALLOCATION_REPOSITORY) private readonly allocations: VehicleAllocationRepository,
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
+    @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
   ) {}
 
   @Get()
@@ -61,7 +64,7 @@ export class AdminVehicleAllocationsController {
   }
 
   @Post()
-  async create(@Body() dto: CreateAllocationDto, @CurrentStaffAccess() access: StaffAccess) {
+  async create(@Body() dto: CreateAllocationDto, @CurrentStaffAccess() access: StaffAccess, @CurrentStaff() staff: AuthenticatedStaff) {
     const [vehicle, toBranch] = await Promise.all([this.vehicles.findById(dto.vehicleId), this.branches.findById(dto.toBranchId)]);
     // Either end outside the admin's dealerships is indistinguishable from a nonexistent one.
     if (!vehicle || !access.canIn(PERMISSIONS.MANAGE_CONFIG, vehicle.dealershipId)) {
@@ -80,19 +83,29 @@ export class AdminVehicleAllocationsController {
       toBranchId: toBranch.id,
     });
     const saved = await this.allocations.save(allocation);
+    await this.audit(staff, "VEHICLE_ALLOCATION_REQUESTED", saved, vehicle.dealershipId);
     return allocationToDto(saved);
   }
 
   @Patch(":id/transit")
-  async markInTransit(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
+  async markInTransit(
+    @Param("id", ParseRecordIdPipe) id: string,
+    @CurrentStaffAccess() access: StaffAccess,
+    @CurrentStaff() staff: AuthenticatedStaff,
+  ) {
     const existing = await this.requireAllocation(id, access);
     existing.markInTransit();
     const saved = await this.allocations.save(existing);
+    await this.audit(staff, "VEHICLE_ALLOCATION_IN_TRANSIT", saved);
     return allocationToDto(saved);
   }
 
   @Patch(":id/complete")
-  async complete(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
+  async complete(
+    @Param("id", ParseRecordIdPipe) id: string,
+    @CurrentStaffAccess() access: StaffAccess,
+    @CurrentStaff() staff: AuthenticatedStaff,
+  ) {
     const existing = await this.requireAllocation(id, access);
     existing.complete();
     const saved = await this.allocations.save(existing);
@@ -106,16 +119,34 @@ export class AdminVehicleAllocationsController {
       vehicle.moveToBranch(toBranch.id, toBranch.dealershipId);
       await this.vehicles.save(vehicle);
     }
+    await this.audit(staff, "VEHICLE_ALLOCATION_COMPLETED", saved, toBranch?.dealershipId);
 
     return allocationToDto(saved);
   }
 
   @Patch(":id/cancel")
-  async cancel(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
+  async cancel(
+    @Param("id", ParseRecordIdPipe) id: string,
+    @CurrentStaffAccess() access: StaffAccess,
+    @CurrentStaff() staff: AuthenticatedStaff,
+  ) {
     const existing = await this.requireAllocation(id, access);
     existing.cancel();
     const saved = await this.allocations.save(existing);
+    await this.audit(staff, "VEHICLE_ALLOCATION_CANCELLED", saved);
     return allocationToDto(saved);
+  }
+
+  private audit(staff: AuthenticatedStaff, action: string, allocation: VehicleAllocation, dealershipId?: string) {
+    const { id, vehicleId, fromBranchId, toBranchId } = allocation.toProps();
+    return this.auditLog.append({
+      actorId: staff.staffUserId,
+      action,
+      entityType: "VehicleAllocation",
+      entityId: id,
+      dealershipId,
+      metadata: { vehicleId, fromBranchId, toBranchId },
+    });
   }
 
   /**

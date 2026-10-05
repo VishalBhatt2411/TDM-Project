@@ -11,8 +11,9 @@ import { TimeSlot } from "../value-objects";
 export class BookingConflictChecker {
   constructor(private readonly bookings: BookingRepository) {}
 
-  async assertNoConflict(vehicleId: string, slot: TimeSlot): Promise<void> {
-    const active = await this.bookings.findActiveByVehicle(vehicleId);
+  /** `ignoreBookingId` is the booking being moved, which must not collide with its own current slot. */
+  async assertNoConflict(vehicleId: string, slot: TimeSlot, ignoreBookingId?: string): Promise<void> {
+    const active = (await this.bookings.findActiveByVehicle(vehicleId)).filter((b) => b.id !== ignoreBookingId);
     const conflicting = active.find((b) => b.slot.overlaps(slot));
     if (conflicting) {
       const suggested = this.suggestAlternativeSlots(slot, active);
@@ -40,18 +41,23 @@ export class BookingConflictChecker {
 
 /**
  * Promotes the next waitlisted booking (FIFO by waitlistPosition) once a vehicle's
- * active booking is cancelled/completed and a slot is free.
+ * active booking is cancelled/completed and a slot is free. Only a waitlisted booking whose own
+ * slot is still ahead and no longer overlaps an active booking is eligible — a slot freed elsewhere
+ * in the day says nothing about whether this one is now open.
  */
 export class WaitlistPromotionService {
   constructor(private readonly bookings: BookingRepository) {}
 
-  async promoteNextFor(vehicleId: string): Promise<Booking | null> {
-    const waitlisted = await this.bookings.findWaitlistedForVehicle(vehicleId);
+  async promoteNextFor(vehicleId: string, asOf: Date = new Date()): Promise<Booking | null> {
+    const waitlisted = (await this.bookings.findWaitlistedForVehicle(vehicleId))
+      .filter((b) => b.slot.start > asOf)
+      .sort((a, b) => (a.waitlistPosition ?? Infinity) - (b.waitlistPosition ?? Infinity));
     if (waitlisted.length === 0) return null;
 
-    const next = waitlisted.reduce((earliest, candidate) =>
-      (candidate.waitlistPosition ?? Infinity) < (earliest.waitlistPosition ?? Infinity) ? candidate : earliest,
-    );
+    const active = await this.bookings.findActiveByVehicle(vehicleId);
+    const next = waitlisted.find((candidate) => !active.some((b) => b.id !== candidate.id && b.slot.overlaps(candidate.slot)));
+    if (!next) return null;
+
     next.confirm();
     await this.bookings.save(next);
     return next;

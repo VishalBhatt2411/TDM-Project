@@ -10,12 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { errorMessage } from "@/lib/api-error";
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+/** Normalises to the identifier alphabet. `final` also trims edge hyphens; while typing they're kept so "acme-" can become "acme-motors". */
+function slugify(value: string, final = false): string {
+  const slug = value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "");
+  return final ? slug.replace(/-+$/, "") : slug;
 }
 
 const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
@@ -61,7 +59,7 @@ export function CreateOrganizationPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              mutation.mutate({ name, slug });
+              mutation.mutate({ name, slug: slugify(slug, true) });
             }}
           >
             <div className="space-y-1.5">
@@ -71,7 +69,7 @@ export function CreateOrganizationPage() {
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
-                  if (!slugEdited) setSlug(slugify(e.target.value));
+                  if (!slugEdited) setSlug(slugify(e.target.value, true));
                 }}
                 placeholder="Acme Motors"
                 required

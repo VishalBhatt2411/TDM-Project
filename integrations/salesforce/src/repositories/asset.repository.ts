@@ -22,7 +22,7 @@ export class SalesforceAssetRepository implements AssetRepository {
 
     return withConnection(this.connectionProvider, async (conn) => {
       const parent = await conn.query<{ Id: string }>(
-        `SELECT Id FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(bookingId)}' LIMIT 1`,
+        `SELECT Id FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(bookingId)}' ORDER BY CreatedDate ASC LIMIT 1`,
       );
       const parentId = parent.records[0]?.Id;
       if (!parentId) throw new Error(`No Compliance_Record__c exists for booking ${bookingId}; save it before its assets.`);

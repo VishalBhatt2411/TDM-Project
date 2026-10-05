@@ -14,6 +14,9 @@ export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // How long a pending authorization (state + PKCE code_verifier, stored server-side —
 // see StaffOAuthStateRepository) may be completed before it must be restarted.
 export const OAUTH_STATE_TTL_MS = 5 * 60 * 1000;
+// Binds a pending authorization to the browser that started it: the callback only proceeds if its
+// `state` matches this cookie, so a victim can't be signed in with an attacker's authorization code.
+export const STAFF_OAUTH_STATE_COOKIE = "tdm_staff_oauth";
 
 // --- Staff auth cookies (HttpOnly — never readable from browser JS) ---
 export const ACCESS_TOKEN_COOKIE = "tdm_staff_at";
@@ -35,6 +38,13 @@ export const AUTH_SCOPE = {
   CHECKIN: "checkin",
   PLATFORM_OPERATOR: "platform_operator",
 } as const;
+// --- JWT token types ---
+// Access and refresh tokens carry the same identity payload and are signed with the same secret,
+// so `typ` is what stops a long-lived refresh token being replayed as a bearer access token
+// (which would outlive logout/revocation, since access tokens are never looked up in the database).
+// A refresh token minted before `typ` existed carries none and is still honoured by /refresh only.
+export const TOKEN_TYPE = { ACCESS: "access", REFRESH: "refresh" } as const;
+
 export type AuthScope = (typeof AUTH_SCOPE)[keyof typeof AUTH_SCOPE];
 
 // --- QR check-in token (customer-generated, staff-scanned at the booking) ---

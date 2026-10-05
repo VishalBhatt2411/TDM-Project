@@ -9,6 +9,7 @@ import { CurrentStaffAccess } from "./current-staff-access.decorator";
 import type { StaffAccess } from "./staff-access";
 import { AdminUsersService } from "./admin-users.service";
 import { CreateStaffAssignmentDto, StaffDirectoryQueryDto, UpdateStaffAssignmentDto } from "./dto";
+import { ParseRecordIdPipe } from "../common/record-id";
 
 /**
  * Staff access is managed as staff assignments (a Salesforce user holding a role at a
@@ -43,7 +44,7 @@ export class AdminUsersController {
 
   @Patch(":id")
   update(
-    @Param("id") id: string,
+    @Param("id", ParseRecordIdPipe) id: string,
     @Body() dto: UpdateStaffAssignmentDto,
     @CurrentStaff() staff: AuthenticatedStaff,
     @CurrentStaffAccess() access: StaffAccess,

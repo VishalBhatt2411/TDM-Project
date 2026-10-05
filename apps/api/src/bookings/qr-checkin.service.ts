@@ -14,7 +14,8 @@ export class QrCheckinService {
 
   /** A code valid until `notAfter` (the slot's end) or the token TTL, whichever is sooner. */
   issueToken(bookingId: string, notAfter: Date, now: Date = new Date()): CheckInToken {
-    const expiresInSeconds = Math.min(CHECKIN_TOKEN_TTL_SECONDS, Math.floor((notAfter.getTime() - now.getTime()) / 1000));
+    // At least one second, or a code requested in the slot's last moments would be signed already expired.
+    const expiresInSeconds = Math.max(1, Math.min(CHECKIN_TOKEN_TTL_SECONDS, Math.floor((notAfter.getTime() - now.getTime()) / 1000)));
     const token = this.jwtService.sign({ sub: bookingId, scope: AUTH_SCOPE.CHECKIN }, { expiresIn: expiresInSeconds });
     return { token, expiresAt: new Date(now.getTime() + expiresInSeconds * 1000).toISOString() };
   }

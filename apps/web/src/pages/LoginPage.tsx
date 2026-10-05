@@ -2,7 +2,7 @@ import * as React from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,7 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [serverError, setServerError] = React.useState<string | null>(null);
   const {
     register,
@@ -31,7 +32,9 @@ export function LoginPage() {
     setServerError(null);
     try {
       await login({ email: values.email, password: values.password });
-      navigate("/vehicles");
+      const from = (location.state as { from?: unknown } | null)?.from;
+      // Only an in-app path: a crafted state must never turn the login into an open redirect.
+      navigate(typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/vehicles", { replace: true });
     } catch (err) {
       setServerError(errorMessage(err, "Invalid email or password.") ?? null);
     }

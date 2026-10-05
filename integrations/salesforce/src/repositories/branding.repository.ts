@@ -67,13 +67,22 @@ async function findCompanyProfile(conn: Connection): Promise<any | null> {
   return result.records[0] ?? null;
 }
 
-/** The singleton's id, creating an empty profile on first use. */
+/**
+ * The singleton's id, creating an empty profile on first use. Two first saves can race; the unique
+ * Singleton_Key__c rejects the loser, which then adopts the winner's profile instead of failing.
+ */
 async function ensureCompanyProfileId(conn: Connection): Promise<string> {
   const existing = await findCompanyProfile(conn);
   if (existing) return existing.Id;
-  const created: any = await conn.sobject("Company_Profile__c").create({ Singleton_Key__c: COMPANY_SINGLETON_KEY });
-  assertSaved(created, "Company_Profile__c");
-  return created.id;
+  try {
+    const created: any = await conn.sobject("Company_Profile__c").create({ Singleton_Key__c: COMPANY_SINGLETON_KEY });
+    assertSaved(created, "Company_Profile__c");
+    return created.id;
+  } catch (err) {
+    const winner = await findCompanyProfile(conn);
+    if (winner) return winner.Id;
+    throw err;
+  }
 }
 
 /**

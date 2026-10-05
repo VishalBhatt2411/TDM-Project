@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { AssetRepository, BookingRepository, ComplianceRecord } from "@tdm/domain";
 import { ComplianceStatusDto } from "@tdm/types";
 import { ASSET_REPOSITORY, BOOKING_REPOSITORY } from "../infrastructure/tokens";
@@ -130,11 +130,9 @@ export class ComplianceService {
 
   private async requireOwnedBooking(customerId: string, bookingId: string) {
     const booking = await this.bookings.findById(bookingId);
-    if (!booking) {
+    // Someone else's booking answers exactly like a missing one, so booking ids can't be probed.
+    if (!booking || booking.customerId !== customerId) {
       throw new NotFoundException(`Booking ${bookingId} was not found.`);
-    }
-    if (booking.customerId !== customerId) {
-      throw new ForbiddenException("This booking does not belong to you.");
     }
     return booking;
   }

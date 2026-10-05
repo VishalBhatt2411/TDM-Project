@@ -7,6 +7,7 @@ import {
   accountAccessEmail,
   BookingEmailContext,
   bookingConfirmationEmail,
+  BookingRecipient,
   cancellationEmail,
   followUpEmail,
   NotificationTemplateKey,
@@ -41,60 +42,60 @@ export class NotificationsService {
     key: NotificationTemplateKey,
     dealershipId: string | undefined,
     render: (brand: BrandProfile, override?: TemplateOverride) => RenderedEmail,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const [brand, record] = await Promise.all([
       this.branding.resolveForEmail(dealershipId),
       this.templateOverrides.findEffective(key, dealershipId),
     ]);
     const { subject, html } = render(brand, record ? { subject: record.subject, note: record.note } : undefined);
-    await this.emailSender.send({ to: toEmail, subject, html });
+    return this.emailSender.send({ to: toEmail, subject, html });
   }
 
-  sendBookingConfirmation(toEmail: string, ctx: BookingEmailContext): Promise<void> {
+  sendBookingConfirmation(toEmail: string, ctx: BookingEmailContext): Promise<boolean> {
     return this.send(toEmail, "bookingConfirmation", ctx.dealershipId, (brand, o) => bookingConfirmationEmail(brand, ctx, o));
   }
 
-  sendAccountAccess(toEmail: string, customerName: string, magicLinkUrl: string): Promise<void> {
+  sendAccountAccess(toEmail: string, customerName: string, magicLinkUrl: string): Promise<boolean> {
     return this.send(toEmail, "accountAccess", undefined, (brand, o) => accountAccessEmail(brand, customerName, magicLinkUrl, o));
   }
 
-  sendCancellation(toEmail: string, ctx: BookingEmailContext, reason: string): Promise<void> {
-    return this.send(toEmail, "cancellation", ctx.dealershipId, (brand, o) => cancellationEmail(brand, ctx, reason, o));
+  sendCancellation(toEmail: string, ctx: BookingEmailContext, reason: string, recipient?: BookingRecipient): Promise<boolean> {
+    return this.send(toEmail, "cancellation", ctx.dealershipId, (brand, o) => cancellationEmail(brand, ctx, reason, o, recipient));
   }
 
-  sendWaitlisted(toEmail: string, ctx: BookingEmailContext, position: number): Promise<void> {
+  sendWaitlisted(toEmail: string, ctx: BookingEmailContext, position: number): Promise<boolean> {
     return this.send(toEmail, "waitlisted", ctx.dealershipId, (brand, o) => waitlistedEmail(brand, ctx, position, o));
   }
 
-  sendWaitlistPromotion(toEmail: string, ctx: BookingEmailContext): Promise<void> {
+  sendWaitlistPromotion(toEmail: string, ctx: BookingEmailContext): Promise<boolean> {
     return this.send(toEmail, "waitlistPromoted", ctx.dealershipId, (brand, o) => waitlistPromotedEmail(brand, ctx, o));
   }
 
-  sendReschedule(toEmail: string, ctx: BookingEmailContext, previousStart: Date): Promise<void> {
-    return this.send(toEmail, "reschedule", ctx.dealershipId, (brand, o) => rescheduleEmail(brand, ctx, previousStart, o));
+  sendReschedule(toEmail: string, ctx: BookingEmailContext, previousStart: Date, recipient?: BookingRecipient): Promise<boolean> {
+    return this.send(toEmail, "reschedule", ctx.dealershipId, (brand, o) => rescheduleEmail(brand, ctx, previousStart, o, recipient));
   }
 
-  sendRepAssignment(toEmail: string, repName: string, ctx: BookingEmailContext): Promise<void> {
+  sendRepAssignment(toEmail: string, repName: string, ctx: BookingEmailContext): Promise<boolean> {
     return this.send(toEmail, "salesRepAssigned", ctx.dealershipId, (brand, o) => salesRepAssignedEmail(brand, repName, ctx, o));
   }
 
-  sendReminder(toEmail: string, ctx: BookingEmailContext, kind: "24h" | "2h" | "day_of"): Promise<void> {
+  sendReminder(toEmail: string, ctx: BookingEmailContext, kind: "24h" | "2h" | "day_of"): Promise<boolean> {
     return this.send(toEmail, "reminder", ctx.dealershipId, (brand, o) => reminderEmail(brand, ctx, kind, o));
   }
 
-  sendFollowUp(toEmail: string, dealershipId: string, customerName: string, vehicleLabel: string, daysSince: number): Promise<void> {
+  sendFollowUp(toEmail: string, dealershipId: string, customerName: string, vehicleLabel: string, daysSince: number): Promise<boolean> {
     return this.send(toEmail, "followUp", dealershipId, (brand, o) => followUpEmail(brand, customerName, vehicleLabel, daysSince, o));
   }
 
-  sendSurveyRequest(toEmail: string, dealershipId: string, customerName: string, vehicleLabel: string, surveyUrl: string): Promise<void> {
+  sendSurveyRequest(toEmail: string, dealershipId: string, customerName: string, vehicleLabel: string, surveyUrl: string): Promise<boolean> {
     return this.send(toEmail, "surveyRequest", dealershipId, (brand, o) => surveyRequestEmail(brand, customerName, vehicleLabel, surveyUrl, o));
   }
 
-  sendPasswordSetup(toEmail: string, customerName: string, setupUrl: string, isNewAccount: boolean): Promise<void> {
+  sendPasswordSetup(toEmail: string, customerName: string, setupUrl: string, isNewAccount: boolean): Promise<boolean> {
     return this.send(toEmail, "passwordSetup", undefined, (brand, o) => passwordSetupEmail(brand, customerName, setupUrl, isNewAccount, o));
   }
 
-  sendOtpCode(toEmail: string, code: string, ttlMinutes: number): Promise<void> {
+  sendOtpCode(toEmail: string, code: string, ttlMinutes: number): Promise<boolean> {
     return this.send(toEmail, "otpCode", undefined, (brand, o) => otpCodeEmail(brand, code, ttlMinutes, o));
   }
 }

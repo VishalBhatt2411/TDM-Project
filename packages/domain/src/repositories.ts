@@ -212,8 +212,11 @@ export interface AuthRepository {
   saveOtp(customerId: string, codeHash: string, expiresAt: Date): Promise<void>;
   consumeOtp(customerId: string, code: string): Promise<boolean>;
   saveRefreshToken(customerId: string, tokenHash: string, expiresAt: Date): Promise<void>;
-  isRefreshTokenValid(customerId: string, tokenHash: string): Promise<boolean>;
+  /** Atomically revokes a live refresh token; true only for the single caller that did (rotation is single-use). */
+  consumeRefreshToken(customerId: string, tokenHash: string): Promise<boolean>;
   revokeRefreshToken(customerId: string, tokenHash: string): Promise<void>;
+  /** Ends every session of a customer (e.g. after a password reset). */
+  revokeAllRefreshTokens(customerId: string): Promise<void>;
 }
 
 export interface AuditLogEntry {
@@ -412,6 +415,16 @@ export interface BrandAssetRepository {
   read(id: string): Promise<(BrandAssetInfo & { data: Buffer }) | null>;
   /** Ignores ids that aren't brand assets. */
   deleteMany(ids: string[]): Promise<void>;
+}
+
+/**
+ * Mutual exclusion across concurrent requests and server instances, scoped to the current tenant.
+ * Use it to make a check-then-write sequence (e.g. "is this vehicle free?" then "book it") atomic —
+ * the business-data provider offers no transaction that spans both steps.
+ */
+export interface ExclusiveLock {
+  /** Runs `work` once no other holder of the same `key` is running; waiters queue, and a wait that exceeds the provider's limit throws. */
+  runExclusive<T>(key: string, work: () => Promise<T>): Promise<T>;
 }
 
 /** Reachability probe for the current tenant's business-data provider — keeps health checks provider-agnostic. */

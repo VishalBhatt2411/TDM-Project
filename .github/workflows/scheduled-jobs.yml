@@ -8,13 +8,14 @@ on:
   schedule:
     - cron: "*/15 * * * *"
     - cron: "0 10 * * *"
+    - cron: "30 3 * * *"
   workflow_dispatch:
     inputs:
       job:
         description: Job to run now
         required: true
         type: choice
-        options: [reminders, follow-ups]
+        options: [reminders, follow-ups, purge]
 
 permissions: {}
 
@@ -36,7 +37,8 @@ jobs:
           case "${INPUT_JOB:-$SCHEDULE}" in
             "*/15 * * * *") job=reminders ;;
             "0 10 * * *") job=follow-ups ;;
-            reminders|follow-ups) job="$INPUT_JOB" ;;
+            "30 3 * * *") job=purge ;;
+            reminders|follow-ups|purge) job="$INPUT_JOB" ;;
             *) echo "Unknown schedule: ${INPUT_JOB:-$SCHEDULE}" >&2; exit 1 ;;
           esac
           echo "name=$job" >> "$GITHUB_OUTPUT"

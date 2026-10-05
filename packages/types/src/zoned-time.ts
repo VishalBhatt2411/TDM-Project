@@ -71,13 +71,29 @@ function parseIsoDate(date: string): [number, number, number] {
  * DST jump resolves to the equivalent instant after the jump; a repeated one to its first occurrence.
  */
 export function zonedDateTimeToUtc(date: string, time: string, timeZone: string): Date {
+  return new Date(resolveWallTime(date, time, timeZone).instant);
+}
+
+/** Whether the wall-clock `date` + `time` actually occurs in `timeZone` — false for a time a DST jump skips. */
+export function zonedDateTimeExists(date: string, time: string, timeZone: string): boolean {
+  return !resolveWallTime(date, time, timeZone).skipped;
+}
+
+function resolveWallTime(date: string, time: string, timeZone: string): { instant: number; skipped: boolean } {
   const [year, month, day] = parseIsoDate(date);
   const timeMatch = WALL_TIME.exec(time);
   if (!timeMatch) throw new RangeError(`"${time}" is not a time (HH:mm).`);
   const wall = Date.UTC(year, month - 1, day, Number(timeMatch[1]), Number(timeMatch[2]));
-  const firstGuess = wall - offsetAt(wall, timeZone);
-  const offset = offsetAt(firstGuess, timeZone);
-  return new Date(wall - offset);
+  // The zone's offset a day either side of the wall time brackets any DST change around it. An offset
+  // that is still the zone's offset at the instant it implies is a real reading of the wall time: one
+  // such reading is the normal case, two (a repeated hour) resolve to the earlier, none (a skipped hour)
+  // to the equivalent time after the jump — the pre-jump offset applied to it.
+  const offsetBefore = offsetAt(wall - DAY_MS, timeZone);
+  const offsetAfter = offsetAt(wall + DAY_MS, timeZone);
+  const readings = [offsetBefore, offsetAfter].map((offset) => wall - offset).filter((instant) => offsetAt(instant, timeZone) === wall - instant);
+  return readings.length > 0
+    ? { instant: Math.min(...readings), skipped: false }
+    : { instant: wall - offsetBefore, skipped: true };
 }
 
 /** The calendar date ("YYYY-MM-DD") it is in `timeZone` at `instant`. */

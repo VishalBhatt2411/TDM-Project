@@ -1,6 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { errorCodeOf } from "../common/error-code";
 import type { StaffAssignmentRepository, StaffRole } from "@tdm/domain";
 import {
   OrganizationRecord,
@@ -20,7 +21,7 @@ import {
 } from "../infrastructure/tokens";
 import type { SalesforceIdentityProviderFactory } from "../infrastructure/identity-provider-factory";
 import { TenantContext } from "../tenancy/tenant-context";
-import { ACCESS_TOKEN_TTL, ACCESS_TOKEN_TTL_SECONDS, AUTH_SCOPE, OAUTH_STATE_TTL_MS, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from "../auth/auth.constants";
+import { ACCESS_TOKEN_TTL, ACCESS_TOKEN_TTL_SECONDS, AUTH_SCOPE, OAUTH_STATE_TTL_MS, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS, TOKEN_TYPE } from "../auth/auth.constants";
 import type { PermissionKey } from "./permissions";
 import { StaffAccessService } from "./staff-access.service";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
@@ -44,12 +45,13 @@ export interface StaffTokenPair {
 }
 
 export type SalesforceCallbackResult = ({ ok: true } & StaffTokenPair) | { ok: false; error: AdminAuthErrorCode };
-export type AuthorizationUrlResult = { ok: true; url: string } | { ok: false; error: AdminAuthErrorCode };
+export type AuthorizationUrlResult = { ok: true; url: string; state: string } | { ok: false; error: AdminAuthErrorCode };
 
 interface StaffTokenPayload {
   sub: string;
   scope?: string;
   org?: string;
+  typ?: string;
 }
 
 export interface StaffProfile {
@@ -119,7 +121,7 @@ export class AdminAuthService {
       organizationId: organization.id,
       purpose: "staff_login",
     });
-    return { ok: true, url: identityProvider.buildAuthorizationUrl(state, codeVerifier) };
+    return { ok: true, url: identityProvider.buildAuthorizationUrl(state, codeVerifier), state };
   }
 
   /** Explicit company identifier wins; otherwise the company address's tenant. Only a connected tenant can sign staff in. */
@@ -157,7 +159,7 @@ export class AdminAuthService {
             event: "admin_oauth_exchange_failed",
             provider: "salesforce",
             organizationId,
-            reason: (err as Error).message,
+            errorCode: errorCodeOf(err),
           }),
         );
         return { ok: false, error: AdminAuthErrorCode.EXCHANGE_FAILED };
@@ -197,8 +199,7 @@ export class AdminAuthService {
       // Defense in depth: any unexpected failure (DB outage, etc.) must still map to
       // a generic code — never leak a stack trace or provider-specific message.
       this.logger.error(
-        JSON.stringify({ event: "admin_oauth_unexpected_error", provider: "salesforce", reason: (err as Error).message }),
-        (err as Error).stack,
+        JSON.stringify({ event: "admin_oauth_unexpected_error", provider: "salesforce", errorCode: errorCodeOf(err) }),
       );
       return { ok: false, error: AdminAuthErrorCode.INTERNAL_ERROR };
     }
@@ -215,20 +216,19 @@ export class AdminAuthService {
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token.");
     }
-    if (payload.scope !== AUTH_SCOPE.STAFF) {
+    if (payload.scope !== AUTH_SCOPE.STAFF || payload.typ === TOKEN_TYPE.ACCESS) {
       throw new UnauthorizedException("This token is not valid for admin console endpoints.");
     }
     TenantContext.bindSession(payload.org);
 
     const tokenHash = sha256Hex(refreshToken);
-    const isValid = await this.refreshTokens.isValid(payload.sub, tokenHash);
-    if (!isValid) {
+    // Rotation: a refresh token is single-use. Consuming it is one atomic conditional update, so of two
+    // concurrent refreshes (or a replay of a stolen cookie after the legitimate client rotated) exactly one wins.
+    const consumed = await this.refreshTokens.consume(payload.sub, tokenHash);
+    if (!consumed) {
       this.logger.warn(JSON.stringify({ event: "admin_refresh_rejected", userId: payload.sub, reason: "revoked_or_unknown" }));
       throw new UnauthorizedException("Refresh token has been revoked.");
     }
-    // Rotation: this refresh token is single-use — revoke it immediately so replay
-    // (e.g. a stolen cookie value reused after the legitimate client already rotated) fails.
-    await this.refreshTokens.revoke(payload.sub, tokenHash);
 
     // A session only outlives its access by one access-token lifetime: a user whose last
     // assignment was removed can't renew it.
@@ -277,9 +277,10 @@ export class AdminAuthService {
    * and for the console UI (getProfile), never trusted from a token that may already be stale.
    */
   private async issueTokens(staffUserId: string, organizationId: string): Promise<StaffTokenPair> {
-    const payload = { sub: staffUserId, scope: AUTH_SCOPE.STAFF, org: organizationId };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: REFRESH_TOKEN_TTL });
+    const identity = { sub: staffUserId, scope: AUTH_SCOPE.STAFF, org: organizationId };
+    const accessToken = this.jwtService.sign({ ...identity, typ: TOKEN_TYPE.ACCESS }, { expiresIn: ACCESS_TOKEN_TTL });
+    // `jti` keeps refresh tokens minted in the same second distinct (they're stored by hash under a unique key).
+    const refreshToken = this.jwtService.sign({ ...identity, typ: TOKEN_TYPE.REFRESH, jti: randomUUID() }, { expiresIn: REFRESH_TOKEN_TTL });
     await this.refreshTokens.save(staffUserId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
     return { accessToken, refreshToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS };
   }

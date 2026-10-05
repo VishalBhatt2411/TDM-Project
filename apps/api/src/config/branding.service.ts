@@ -15,10 +15,7 @@ import { BRANDING_REPOSITORY, DEALERSHIP_REPOSITORY, ORGANIZATION_REPOSITORY } f
 import { TenantContext } from "../tenancy/tenant-context";
 import { tenantSiteOrigin } from "../tenancy/tenant-site-origin";
 import { brandAssetPath } from "./brand-assets";
-
-/** Branding edited outside the admin console (straight in the data provider) reaches customers within this window. */
-const CACHE_TTL_MS = 60_000;
-const MAX_CACHE_ENTRIES = 1000;
+import { DealershipSettingsCache } from "./dealership-settings-cache";
 
 /** Home-page content ready to render: images as URLs, every section's visibility decided. */
 export interface ResolvedSiteContent {
@@ -63,7 +60,7 @@ export function toResolvedBrand(name: string, layer: BrandLayer): ResolvedBrand 
  */
 @Injectable()
 export class BrandingService {
-  private readonly cache = new Map<string, CachedBrand & { expiresAt: number }>();
+  private readonly cache = new DealershipSettingsCache<CachedBrand>();
 
   constructor(
     @Inject(DEALERSHIP_REPOSITORY) private readonly dealerships: DealershipRepository,
@@ -90,14 +87,7 @@ export class BrandingService {
     const organizationId = TenantContext.currentOrganizationId();
     if (!organizationId) throw new NotFoundException("Unknown dealership.");
 
-    const cacheKey = `${organizationId}:${dealershipId ?? ""}`;
-    const cached = this.cache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) return cached;
-
-    const loaded = await this.load(organizationId, dealershipId);
-    if (this.cache.size >= MAX_CACHE_ENTRIES) this.cache.clear();
-    this.cache.set(cacheKey, { ...loaded, expiresAt: Date.now() + CACHE_TTL_MS });
-    return loaded;
+    return this.cache.getOrLoad(organizationId, dealershipId, () => this.load(organizationId, dealershipId));
   }
 
   /**
@@ -105,12 +95,7 @@ export class BrandingService {
    * every dealership inherits — all of the organization's. Other API instances catch up within CACHE_TTL_MS.
    */
   invalidate(organizationId: string, dealershipId?: string): void {
-    if (dealershipId) {
-      this.cache.delete(`${organizationId}:${dealershipId}`);
-      return;
-    }
-    const prefix = `${organizationId}:`;
-    for (const key of this.cache.keys()) if (key.startsWith(prefix)) this.cache.delete(key);
+    this.cache.invalidate(organizationId, dealershipId);
   }
 
   private async load(organizationId: string, dealershipId: string | undefined): Promise<CachedBrand> {

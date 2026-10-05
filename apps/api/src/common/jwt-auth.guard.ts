@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
-import { AUTH_SCOPE } from "../auth/auth.constants";
+import { AUTH_SCOPE, TOKEN_TYPE } from "../auth/auth.constants";
 import { TenantContext } from "../tenancy/tenant-context";
 
 export interface AuthenticatedUser {
@@ -25,7 +25,7 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing bearer token.");
     }
     const token = header.slice("Bearer ".length);
-    let payload: { sub: string; scope?: string; org?: string };
+    let payload: { sub: string; scope?: string; org?: string; typ?: string };
     try {
       payload = this.jwtService.verify(token);
     } catch {
@@ -33,6 +33,9 @@ export class JwtAuthGuard implements CanActivate {
     }
     if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
       throw new UnauthorizedException("This token is not valid for customer endpoints.");
+    }
+    if (payload.typ !== TOKEN_TYPE.ACCESS) {
+      throw new UnauthorizedException("Invalid or expired token.");
     }
     TenantContext.bindSession(payload.org);
     request.user = { customerId: payload.sub };

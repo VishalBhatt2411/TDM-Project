@@ -3,6 +3,7 @@ import { StaffAuthGuard } from "./staff-auth.guard";
 import { AdminComplianceService } from "./admin-compliance.service";
 import { CurrentStaff } from "./current-staff.decorator";
 import type { AuthenticatedStaff } from "./staff-auth.guard";
+import { ParseRecordIdPipe } from "../common/record-id";
 
 /**
  * Staff review of a booking's pre-drive compliance record: reading the submitted
@@ -16,17 +17,17 @@ export class AdminComplianceController {
   constructor(private readonly adminCompliance: AdminComplianceService) {}
 
   @Get()
-  getStatus(@Param("id") bookingId: string, @CurrentStaff() staff: AuthenticatedStaff) {
+  getStatus(@Param("id", ParseRecordIdPipe) bookingId: string, @CurrentStaff() staff: AuthenticatedStaff) {
     return this.adminCompliance.getStatus(bookingId, staff);
   }
 
   @Post("verify-license")
-  verifyLicense(@Param("id") bookingId: string, @CurrentStaff() staff: AuthenticatedStaff) {
+  verifyLicense(@Param("id", ParseRecordIdPipe) bookingId: string, @CurrentStaff() staff: AuthenticatedStaff) {
     return this.adminCompliance.verifyLicense(bookingId, staff);
   }
 
   @Patch("confirm-license")
-  confirmLicense(@Param("id") bookingId: string, @CurrentStaff() staff: AuthenticatedStaff) {
+  confirmLicense(@Param("id", ParseRecordIdPipe) bookingId: string, @CurrentStaff() staff: AuthenticatedStaff) {
     return this.adminCompliance.confirmLicense(bookingId, staff);
   }
 }

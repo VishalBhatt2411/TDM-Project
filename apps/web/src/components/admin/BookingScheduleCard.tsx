@@ -36,6 +36,8 @@ interface ScheduleForm {
   ownFollowUps: boolean;
   /** Comma-separated days after the drive. */
   followUpDays: string;
+  /** "" inherits. */
+  dayOfReminderTime: string;
   closures: ClosureForm[];
   ownHours: boolean;
   hours: Record<string, DayForm>;
@@ -74,6 +76,7 @@ function toForm(view: BookingScheduleEditorDto): ScheduleForm {
     checkIn: durationValueOf(own.checkInOpensMinutes, fallback.checkInOpensMinutes),
     ownFollowUps: !!own.followUpDays,
     followUpDays: (own.followUpDays ?? fallback.followUpDays).join(", "),
+    dayOfReminderTime: own.dayOfReminderTime ?? "",
     closures: (own.closures ?? []).map(closureFormOf),
     ownHours: !!own.weeklyHours,
     // Switching a section on starts from what the scope uses today, so nothing changes until edited.
@@ -91,6 +94,7 @@ function toLayer(form: ScheduleForm): BookingScheduleLayerDto {
     ...(form.cutoff.value.trim() ? { cancellationCutoffMinutes: durationMinutes(form.cutoff) } : {}),
     ...(form.checkIn.value.trim() ? { checkInOpensMinutes: durationMinutes(form.checkIn) } : {}),
     ...(form.ownFollowUps ? { followUpDays: followUpDaysOf(form.followUpDays).map(Number) } : {}),
+    ...(form.dayOfReminderTime ? { dayOfReminderTime: form.dayOfReminderTime } : {}),
     ...(form.closures.length ? { closures: form.closures.map(closureDtoOf) } : {}),
     ...(form.ownHours
       ? {
@@ -437,6 +441,21 @@ export function BookingScheduleCard({ scope }: { scope: ConfigScopeParams }) {
                 )}
                 <p id="schedule-follow-ups-hint" className={errors.followUps ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
                   {errors.followUps ?? "Days after a completed drive with no sale to email the customer. Leave the list empty to send none."}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="schedule-day-of-reminder">Same-day reminder from</Label>
+                <Input
+                  id="schedule-day-of-reminder"
+                  type="time"
+                  aria-describedby="schedule-day-of-reminder-hint"
+                  value={form.dayOfReminderTime}
+                  onChange={(e) => update({ dayOfReminderTime: e.target.value })}
+                />
+                <p id="schedule-day-of-reminder-hint" className="text-xs text-muted-foreground">
+                  Time of day the “your drive is today” email goes out
+                  {form.dayOfReminderTime ? "" : ` — blank uses ${fallback.dayOfReminderTime} (${inherited ? "company-wide" : "default"})`}. Drives that start earlier get no same-day email.
                 </p>
               </div>
             </div>

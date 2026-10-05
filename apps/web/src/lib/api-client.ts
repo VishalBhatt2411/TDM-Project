@@ -11,14 +11,26 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+const UNAUTHENTICATED_AUTH_PATHS = [
+  "/auth/register",
+  "/auth/verify-otp",
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/magic-login",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
+
 let refreshInFlight: Promise<string> | null = null;
 
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    const isAuthEndpoint = original?.url?.startsWith("/auth/");
-    if (error.response?.status !== 401 || isAuthEndpoint || original._retried) {
+    // Only the unauthenticated credential endpoints are exempt: a 401 there means bad credentials, not an expired session. /auth/me (and PATCH /auth/me) take the access token and must refresh like any other call.
+    const isCredentialEndpoint = UNAUTHENTICATED_AUTH_PATHS.some((path) => original?.url === path);
+    if (error.response?.status !== 401 || !original || isCredentialEndpoint || original._retried) {
       return Promise.reject(error);
     }
     original._retried = true;

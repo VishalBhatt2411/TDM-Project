@@ -42,10 +42,7 @@ export function QrScanner({ onDetect }: QrScannerProps) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      // The <video> is only mounted once `scanning` is true, so the stream is attached in the effect below.
       setScanning(true);
     } catch {
       setCameraError("Couldn't access the camera. Enter the code manually below.");
@@ -56,6 +53,16 @@ export function QrScanner({ onDetect }: QrScannerProps) {
     if (!scanning || !supported) return;
     const detector = new window.BarcodeDetector!({ formats: ["qr_code"] });
     let cancelled = false;
+
+    const video = videoRef.current;
+    if (video && streamRef.current) {
+      video.srcObject = streamRef.current;
+      video.play().catch(() => {
+        if (cancelled) return;
+        stopCamera();
+        setCameraError("Couldn't start the camera preview. Enter the code manually below.");
+      });
+    }
 
     const tick = async () => {
       if (cancelled || !videoRef.current) return;

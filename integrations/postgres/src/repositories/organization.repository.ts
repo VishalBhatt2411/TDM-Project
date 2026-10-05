@@ -45,6 +45,11 @@ export interface ConnectionCredentials extends ConnectedAppCredentials {
  * callers pass and receive plaintext only through the narrow load* methods, so no
  * service or controller ever handles ciphertext or the master key.
  */
+/** How long a freshly issued onboarding setup token stays valid. */
+export const ONBOARDING_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const onboardingTokenExpiry = (): Date => new Date(Date.now() + ONBOARDING_TOKEN_TTL_MS);
+
 export class OrganizationRepository {
   constructor(
     private readonly prisma: PrismaClient,
@@ -87,7 +92,13 @@ export class OrganizationRepository {
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.organization.updateMany({
         where: { id },
-        data: { sfRefreshTokenEnc: null, connectionStatus: "pending", connectionError: null, onboardingTokenHash },
+        data: {
+          sfRefreshTokenEnc: null,
+          connectionStatus: "pending",
+          connectionError: null,
+          onboardingTokenHash,
+          onboardingTokenExpiresAt: onboardingTokenExpiry(),
+        },
       });
       if (count === 0) return false;
       await revokeStaffSessions(tx, id);
@@ -113,7 +124,7 @@ export class OrganizationRepository {
     const slug = input.slug.toLowerCase();
     try {
       const record = await this.prisma.organization.create({
-        data: { name: input.name, slug, onboardingTokenHash: input.onboardingTokenHash },
+        data: { name: input.name, slug, onboardingTokenHash: input.onboardingTokenHash, onboardingTokenExpiresAt: onboardingTokenExpiry() },
       });
       return toRecord(record);
     } catch (err) {
@@ -122,9 +133,12 @@ export class OrganizationRepository {
     }
   }
 
-  /** Whether `tokenHash` is the onboarding setup token issued for this organization. */
+  /** Whether `tokenHash` is the unexpired onboarding setup token issued for this organization. */
   async matchesOnboardingToken(id: string, tokenHash: string): Promise<boolean> {
-    const record = await this.prisma.organization.findFirst({ where: { id, onboardingTokenHash: tokenHash }, select: { id: true } });
+    const record = await this.prisma.organization.findFirst({
+      where: { id, onboardingTokenHash: tokenHash, onboardingTokenExpiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
     return record !== null;
   }
 

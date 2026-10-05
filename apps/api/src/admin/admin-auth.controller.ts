@@ -12,13 +12,15 @@ import {
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
+import { timingSafeEqual } from "node:crypto";
 import { Request, Response } from "express";
 import { AdminAuthService } from "./admin-auth.service";
 import { StaffAuthGuard, AuthenticatedStaff } from "./staff-auth.guard";
 import { CurrentStaff } from "./current-staff.decorator";
-import { setStaffAuthCookies, clearStaffAuthCookies } from "./staff-auth-cookies.util";
+import { setStaffAuthCookies, clearStaffAuthCookies, setOAuthStateCookie, clearOAuthStateCookie } from "./staff-auth-cookies.util";
 import { parseCookieHeader } from "../common/cookie.util";
-import { REFRESH_TOKEN_COOKIE } from "../auth/auth.constants";
+import { REFRESH_TOKEN_COOKIE, STAFF_OAUTH_STATE_COOKIE } from "../auth/auth.constants";
 import { env } from "../common/env";
 import { isValidOrganizationSlug } from "../tenancy/organization-slug";
 
@@ -32,6 +34,11 @@ function isValidOAuthCode(value: unknown): value is string {
 
 function isValidOAuthState(value: unknown): value is string {
   return typeof value === "string" && OAUTH_STATE_PATTERN.test(value);
+}
+
+/** Both are fixed-length hex by now, so a length mismatch is simply "different". */
+function sameState(a: string | undefined, b: string): boolean {
+  return !!a && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 @Controller("admin/auth")
@@ -51,7 +58,12 @@ export class AdminAuthController {
       return;
     }
     const result = await this.adminAuthService.buildAuthorizationUrl(org);
-    res.redirect(result.ok ? result.url : `${env.adminWebOrigin}/admin/login?error=${result.error}`);
+    if (!result.ok) {
+      res.redirect(`${env.adminWebOrigin}/admin/login?error=${result.error}`);
+      return;
+    }
+    setOAuthStateCookie(res, result.state);
+    res.redirect(result.url);
   }
 
   @Get("salesforce/callback")
@@ -72,6 +84,16 @@ export class AdminAuthController {
       throw new BadRequestException({ error: "invalid_request", message: "Malformed OAuth callback parameters." });
     }
 
+    // Login CSRF guard: the state must have been issued to this very browser. Checked before the
+    // state is consumed, so a forged callback can't burn the legitimate user's pending login.
+    const boundState = parseCookieHeader(req.headers.cookie)[STAFF_OAUTH_STATE_COOKIE];
+    clearOAuthStateCookie(res);
+    if (!sameState(boundState, state)) {
+      this.logger.warn(JSON.stringify({ event: "admin_oauth_callback_rejected", reason: "state_not_bound_to_browser", ip: req.ip }));
+      res.redirect(`${env.adminWebOrigin}/admin/login?error=invalid_state`);
+      return;
+    }
+
     const result = await this.adminAuthService.handleCallback(code, state);
     if (!result.ok) {
       res.redirect(`${env.adminWebOrigin}/admin/login?error=${result.error}`);
@@ -83,6 +105,7 @@ export class AdminAuthController {
   }
 
   @Post("refresh")
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = parseCookieHeader(req.headers.cookie)[REFRESH_TOKEN_COOKIE];

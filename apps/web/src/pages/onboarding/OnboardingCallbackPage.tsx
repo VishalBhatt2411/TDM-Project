@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
@@ -15,23 +16,30 @@ function shouldKeepPolling(status?: { connectionStatus: string; metadataDeployed
   return status.connectionStatus !== "connected" || !status.metadataDeployedAt;
 }
 
+/** The package deploy normally takes well under a minute; past this it was most likely cut off, and nothing will finish it. */
+const DEPLOY_STALLED_AFTER_MS = 3 * 60_000;
+
 export function OnboardingCallbackPage() {
   const { organizationId } = useParams<{ organizationId: string }>();
   const navigate = useNavigate();
-
-  const { data: org, isLoading, isError } = useQuery({
-    queryKey: ["onboarding-status", organizationId],
-    queryFn: () => getOrganizationStatus(organizationId!),
-    enabled: !!organizationId,
-    refetchInterval: (query) => (shouldKeepPolling(query.state.data) ? 2500 : false),
-  });
+  const openedAt = useRef(Date.now());
 
   const completeMutation = useMutation({
     mutationFn: () => completeOnboarding(organizationId!),
     onSuccess: () => forgetOnboardingToken(organizationId!),
   });
+  // Once provisioned the onboarding token is discarded, so further status polls would 401 — stop them
+  // and keep showing the success screen from the data already loaded.
+  const completed = completeMutation.isSuccess;
 
-  if (isError) return <OnboardingUnavailable />;
+  const { data: org, isLoading, isError } = useQuery({
+    queryKey: ["onboarding-status", organizationId],
+    queryFn: () => getOrganizationStatus(organizationId!),
+    enabled: !!organizationId && !completed,
+    refetchInterval: (query) => (shouldKeepPolling(query.state.data) ? 2500 : false),
+  });
+
+  if (isError && !completed) return <OnboardingUnavailable />;
 
   if (isLoading || !org) {
     return (
@@ -84,26 +92,31 @@ export function OnboardingCallbackPage() {
     );
   }
 
-  const isDeploying = org.connectionStatus === "connected" && !org.metadataDeployedAt && !org.connectionError;
-  const deployFailed = org.connectionStatus === "connected" && !org.metadataDeployedAt && !!org.connectionError;
+  const pendingDeploy = org.connectionStatus === "connected" && !org.metadataDeployedAt;
+  const deployFailed = pendingDeploy && !!org.connectionError;
+  const deployStalled = pendingDeploy && !org.connectionError && Date.now() - openedAt.current > DEPLOY_STALLED_AFTER_MS;
+  const isDeploying = pendingDeploy && !org.connectionError && !deployStalled;
   const ready = org.connectionStatus === "connected" && !!org.metadataDeployedAt;
+  const needsRetry = deployFailed || deployStalled;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="items-center text-center">
-          {!ready && !deployFailed && <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary" />}
-          {(ready || deployFailed) && <CheckCircle2 className="mb-2 h-8 w-8 text-green-600" />}
+          {!ready && !needsRetry && <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary" />}
+          {needsRetry && <XCircle className="mb-2 h-8 w-8 text-destructive" />}
+          {ready && <CheckCircle2 className="mb-2 h-8 w-8 text-green-600" />}
           <CardTitle>
             {org.connectionStatus === "pending" && "Finishing Salesforce authorization…"}
             {isDeploying && "Setting up your TDM workspace…"}
-            {deployFailed && "Salesforce connected"}
+            {needsRetry && "Setup didn't finish"}
             {ready && "Salesforce connected"}
           </CardTitle>
           <CardDescription>
             {org.connectionStatus === "pending" && "This should only take a moment."}
             {isDeploying && "Deploying the test-drive management package to your org."}
-            {deployFailed && "The core connection succeeded, but deploying the TDM package hit an issue."}
+            {deployFailed && "The Salesforce connection succeeded, but deploying the TDM package hit an issue."}
+            {deployStalled && "The Salesforce connection succeeded, but deploying the TDM package is taking far longer than expected."}
             {ready && "Your org is fully set up and ready to go."}
           </CardDescription>
         </CardHeader>
@@ -111,7 +124,13 @@ export function OnboardingCallbackPage() {
           {deployFailed && (
             <p className="rounded-md bg-destructive/10 p-3 text-xs text-destructive">{org.connectionError}</p>
           )}
-          {(ready || deployFailed) && (
+          {needsRetry && (
+            // Authorizing again re-runs the deploy; the admin is only granted once it succeeds.
+            <Button className="w-full" onClick={() => navigate(`/onboarding/${org.id}/credentials`)}>
+              Reconnect and retry setup
+            </Button>
+          )}
+          {ready && (
             <Button className="w-full" onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
               {completeMutation.isPending ? "Provisioning…" : "Provision My Admin Account"}
             </Button>

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   assignSalesRep,
   cancelBookingAsStaff,
@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QrScanner } from "@/components/admin/QrScanner";
+import { errorMessage } from "@/lib/api-error";
 import { ComplianceReviewPanel } from "@/components/admin/ComplianceReviewPanel";
 import { purchaseTimelineLabel } from "@/lib/booking-labels";
 import { Car, Mail, MapPin, Phone } from "lucide-react";
@@ -43,23 +44,35 @@ const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive" | "se
 };
 
 const STATUSES: BookingStatus[] = ["Requested", "Confirmed", "Waitlisted", "InProgress", "Completed", "Cancelled", "NoShow"];
+const PAGE_SIZE = 25;
 const CANCELLABLE_STATUSES = new Set(["Requested", "Confirmed"]);
 
 export function AdminBookingsPage() {
   const { hasPermission } = useAdminAuth();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = React.useState<BookingStatus | undefined>(undefined);
+  const [page, setPage] = React.useState(1);
+  const selectStatus = (status: BookingStatus | undefined) => {
+    setStatusFilter(status);
+    setPage(1);
+  };
 
   const canManageAll = hasPermission("manage_bookings");
   const scopeKey = canManageAll ? "admin-bookings" : "my-assigned-bookings";
 
-  const { data, isLoading, error, refetch, isRefetching } = useQuery({
-    queryKey: [scopeKey, statusFilter],
+  const { data, isLoading, error, refetch, isRefetching, isFetching } = useQuery({
+    queryKey: [scopeKey, statusFilter, page],
     queryFn: () =>
       canManageAll
-        ? listAdminBookings({ status: statusFilter, pageSize: 50 })
-        : listMyAssignedBookings({ status: statusFilter, pageSize: 50 }),
+        ? listAdminBookings({ status: statusFilter, page, pageSize: PAGE_SIZE })
+        : listMyAssignedBookings({ status: statusFilter, page, pageSize: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
   });
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  // A status change elsewhere can shrink the list under the current page; step back instead of showing an empty page.
+  React.useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const { data: reps } = useQuery({ queryKey: ["sales-reps-lookup"], queryFn: listSalesRepsLookup });
   const regional = useAdminRegional();
   const zones = useDealershipTimeZones();
@@ -70,7 +83,7 @@ export function AdminBookingsPage() {
     mutationFn: ({ bookingId, salesRepId }: { bookingId: string; salesRepId: string }) => assignSalesRep(bookingId, salesRepId),
     onSuccess: invalidate,
   });
-
+  const assignError = assignMutation.isError ? errorMessage(assignMutation.error, "Couldn't assign that sales representative. Please try again.") : null;
 
   return (
     <div className="p-4 sm:p-8">
@@ -85,7 +98,7 @@ export function AdminBookingsPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <button
-          onClick={() => setStatusFilter(undefined)}
+          onClick={() => selectStatus(undefined)}
           className={`rounded-full border px-3 py-1 text-xs font-medium ${!statusFilter ? "border-primary bg-primary text-primary-foreground" : "border-input text-muted-foreground"}`}
         >
           All
@@ -93,13 +106,19 @@ export function AdminBookingsPage() {
         {STATUSES.map((s) => (
           <button
             key={s}
-            onClick={() => setStatusFilter(s)}
+            onClick={() => selectStatus(s)}
             className={`rounded-full border px-3 py-1 text-xs font-medium ${statusFilter === s ? "border-primary bg-primary text-primary-foreground" : "border-input text-muted-foreground"}`}
           >
             {s}
           </button>
         ))}
       </div>
+
+      {assignError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {assignError}
+        </p>
+      )}
 
       {isLoading ? (
         <div className="space-y-2">
@@ -156,6 +175,19 @@ export function AdminBookingsPage() {
               <BookingActionsPanel booking={booking} reps={reps ?? []} onChanged={invalidate} />
             </Card>
           ))}
+          {totalPages > 1 && (
+            <nav className="flex items-center justify-between gap-3 pt-2" aria-label="Bookings pages">
+              <Button variant="outline" size="sm" disabled={page <= 1 || isFetching} onClick={() => setPage((p) => p - 1)}>
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {page} of {totalPages} · {data?.total} bookings
+              </span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages || isFetching} onClick={() => setPage((p) => p + 1)}>
+                Next
+              </Button>
+            </nav>
+          )}
         </div>
       )}
     </div>
@@ -271,7 +303,7 @@ function BookingActionsPanel({
       setShowReschedule(false);
       setShowCancel(false);
     },
-    onError: () => setError("That action couldn't be completed. Please try again."),
+    onError: (err) => setError(errorMessage(err, "That action couldn't be completed. Please try again.") ?? null),
   });
 
   const submitReschedule = () => {

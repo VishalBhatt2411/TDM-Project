@@ -24,6 +24,8 @@ export interface AppEnv {
   sfOAuthRedirectUri: string;
   sfOnboardingRedirectUri: string;
   anthropicApiKey?: string;
+  /** Vision-capable model used for the advisory licence-photo read. */
+  anthropicModel: string;
   /**
    * "in-process": the API's own cron timers run the background jobs (a long-running server).
    * "external": an outside scheduler triggers them over HTTP (serverless, where no process outlives a request).
@@ -130,6 +132,7 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     sfOAuthRedirectUri: url("SF_OAUTH_REDIRECT_URI", "http://localhost:3000/api/v1/admin/auth/salesforce/callback"),
     sfOnboardingRedirectUri: url("SF_ONBOARDING_REDIRECT_URI", "http://localhost:3000/api/v1/onboarding/salesforce/callback"),
     anthropicApiKey: read("ANTHROPIC_API_KEY"),
+    anthropicModel: read("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5",
     schedulerMode,
     jobTriggerSecret: schedulerMode === "external" ? jobTriggerSecret : undefined,
     platformOperatorPasswordHash,

@@ -99,6 +99,16 @@ export interface TemplateOverride {
   note?: string;
 }
 
+/** Values an admin-written subject can reference as `{vehicle}`, `{reference}`, `{when}` or `{dealership}` — the placeholders NOTIFICATION_TEMPLATE_KEYS advertises. */
+type SubjectVars = Partial<Record<"vehicle" | "reference" | "when" | "dealership", string>>;
+
+/** The admin's custom subject with its placeholders filled in (an unknown or unavailable one is left as written), else the built-in default. */
+function subjectFor(override: TemplateOverride | undefined, fallback: string, vars: SubjectVars): string {
+  const custom = override?.subject?.trim();
+  if (!custom) return fallback;
+  return custom.replace(/\{(vehicle|reference|when|dealership)\}/g, (match, name: keyof SubjectVars) => vars[name] ?? match).replace(/[\r\n]+/g, " ");
+}
+
 export interface BookingEmailContext {
   /** Dealership the booking's branch belongs to — its branding and template overrides apply. */
   dealershipId: string;
@@ -128,7 +138,7 @@ export function bookingConfirmationEmail(dealership: BrandProfile, ctx: BookingE
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
+      ${infoRow("Date & Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
       ${ctx.salesRepName ? infoRow("Your Sales Contact", ctx.salesRepName) : ""}
@@ -137,7 +147,7 @@ export function bookingConfirmationEmail(dealership: BrandProfile, ctx: BookingE
     <p style="color:#374151;font-size:14px;">Need to change plans? You can reschedule or cancel anytime from your account — just log in and visit "My Bookings".</p>
   `;
   return {
-    subject: override?.subject ?? `Test Drive Confirmed — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    subject: subjectFor(override, `Test Drive Confirmed — ${ctx.vehicleLabel} (${ctx.bookingReference})`, { vehicle: ctx.vehicleLabel, reference: ctx.bookingReference, when: formatWhen(ctx.scheduledStart, ctx), dealership: dealership.name }),
     html: layout(dealership, "Your Test Drive is Confirmed", body, accent, override?.note),
   };
 }
@@ -151,7 +161,7 @@ export function accountAccessEmail(dealership: BrandProfile, customerName: strin
     <p style="color:#6b7280;font-size:13px;">This secure link signs you in directly — no password needed. It expires in 48 hours; you can always request a new one from the login page.</p>
   `;
   return {
-    subject: override?.subject ?? `Access your ${dealership.name} account`,
+    subject: subjectFor(override, `Access your ${dealership.name} account`, { dealership: dealership.name }),
     html: layout(dealership, "Your Account is Ready", body, accent, override?.note),
   };
 }
@@ -164,14 +174,14 @@ export function waitlistedEmail(dealership: BrandProfile, ctx: BookingEmailConte
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Requested Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
+      ${infoRow("Requested Date & Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Waitlist Position", `#${position}`)}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
     <p style="color:#374151;font-size:15px;">We'll email you the moment a slot opens up and your booking is confirmed.</p>
   `;
   return {
-    subject: override?.subject ?? `You're on the Waitlist — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    subject: subjectFor(override, `You're on the Waitlist — ${ctx.vehicleLabel} (${ctx.bookingReference})`, { vehicle: ctx.vehicleLabel, reference: ctx.bookingReference, when: formatWhen(ctx.scheduledStart, ctx), dealership: dealership.name }),
     html: layout(dealership, "Added to the Waitlist", body, accent, override?.note),
   };
 }
@@ -184,7 +194,7 @@ export function waitlistPromotedEmail(dealership: BrandProfile, ctx: BookingEmai
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
+      ${infoRow("Date & Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
       ${ctx.salesRepName ? infoRow("Your Sales Contact", ctx.salesRepName) : ""}
@@ -192,36 +202,55 @@ export function waitlistPromotedEmail(dealership: BrandProfile, ctx: BookingEmai
     <p style="color:#374151;font-size:15px;">Please bring a valid driving license to your appointment.</p>
   `;
   return {
-    subject: override?.subject ?? `You're Confirmed! — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    subject: subjectFor(override, `You're Confirmed! — ${ctx.vehicleLabel} (${ctx.bookingReference})`, { vehicle: ctx.vehicleLabel, reference: ctx.bookingReference, when: formatWhen(ctx.scheduledStart, ctx), dealership: dealership.name }),
     html: layout(dealership, "Waitlist Slot Confirmed", body, accent, override?.note),
   };
 }
 
-export function cancellationEmail(dealership: BrandProfile, ctx: BookingEmailContext, reason: string, override?: TemplateOverride): { subject: string; html: string } {
+/** Who an email about a booking is for: the customer who made it, or the sales rep it was assigned to. */
+export type BookingRecipient = { kind: "customer" } | { kind: "rep"; name: string };
+
+export function cancellationEmail(
+  dealership: BrandProfile,
+  ctx: BookingEmailContext,
+  reason: string,
+  override?: TemplateOverride,
+  recipient: BookingRecipient = { kind: "customer" },
+): { subject: string; html: string } {
   const accent = accentOf(dealership);
+  const forRep = recipient.kind === "rep";
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
-    <p style="color:#374151;font-size:15px;">Your test drive booking has been cancelled as requested.</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(forRep ? recipient.name : ctx.customerName)},</p>
+    <p style="color:#374151;font-size:15px;">${forRep ? "A test drive assigned to you has been cancelled." : "Your test drive booking has been cancelled as requested."}</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
+      ${forRep ? infoRow("Customer", ctx.customerName) : ""}
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Original Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
+      ${infoRow("Original Date & Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Reason", reason || "Not specified")}
     </table>
-    <p style="color:#374151;font-size:15px;">Changed your mind? You're welcome to book a new test drive anytime.</p>
+    ${forRep ? "" : `<p style="color:#374151;font-size:15px;">Changed your mind? You're welcome to book a new test drive anytime.</p>`}
   `;
   return {
-    subject: override?.subject ?? `Test Drive Cancelled — ${ctx.bookingReference}`,
+    subject: subjectFor(override, `Test Drive Cancelled — ${ctx.bookingReference}`, { vehicle: ctx.vehicleLabel, reference: ctx.bookingReference, when: formatWhen(ctx.scheduledStart, ctx), dealership: dealership.name }),
     html: layout(dealership, "Booking Cancelled", body, accent, override?.note),
   };
 }
 
-export function rescheduleEmail(dealership: BrandProfile, ctx: BookingEmailContext, previousStart: Date, override?: TemplateOverride): { subject: string; html: string } {
+export function rescheduleEmail(
+  dealership: BrandProfile,
+  ctx: BookingEmailContext,
+  previousStart: Date,
+  override?: TemplateOverride,
+  recipient: BookingRecipient = { kind: "customer" },
+): { subject: string; html: string } {
   const accent = accentOf(dealership);
+  const forRep = recipient.kind === "rep";
   const body = `
-    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(ctx.customerName)},</p>
-    <p style="color:#374151;font-size:15px;">Your test drive has been rescheduled.</p>
+    <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(forRep ? recipient.name : ctx.customerName)},</p>
+    <p style="color:#374151;font-size:15px;">${forRep ? "A test drive assigned to you has been rescheduled." : "Your test drive has been rescheduled."}</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
+      ${forRep ? infoRow("Customer", ctx.customerName) : ""}
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
       ${infoRow("Previous Time", formatWhen(previousStart, ctx))}
@@ -230,7 +259,7 @@ export function rescheduleEmail(dealership: BrandProfile, ctx: BookingEmailConte
     </table>
   `;
   return {
-    subject: override?.subject ?? `Test Drive Rescheduled — ${ctx.bookingReference}`,
+    subject: subjectFor(override, `Test Drive Rescheduled — ${ctx.bookingReference}`, { vehicle: ctx.vehicleLabel, reference: ctx.bookingReference, when: formatWhen(ctx.scheduledStart, ctx), dealership: dealership.name }),
     html: layout(dealership, "Booking Rescheduled", body, accent, override?.note),
   };
 }
@@ -248,13 +277,13 @@ export function reminderEmail(
     <p style="color:#374151;font-size:15px;">Just a reminder — your test drive is <strong>${leadText}</strong>.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0;">
       ${infoRow("Vehicle", ctx.vehicleLabel)}
-      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
+      ${infoRow("Date & Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
     <p style="color:#374151;font-size:15px;">Please bring a valid driving license. We look forward to seeing you!</p>
   `;
   return {
-    subject: override?.subject ?? `Reminder: Your Test Drive is ${leadText}`,
+    subject: subjectFor(override, `Reminder: Your Test Drive is ${leadText}`, { when: leadText, dealership: dealership.name }),
     html: layout(dealership, "Test Drive Reminder", body, accent, override?.note),
   };
 }
@@ -269,12 +298,12 @@ export function followUpEmail(
   const accent = accentOf(dealership);
   const body = `
     <p style="color:#374151;font-size:15px;">Hi ${escapeHtml(customerName)},</p>
-    <p style="color:#374151;font-size:15px;">It's been ${daysSince} days since your test drive of the ${escapeHtml(vehicleLabel)}. We hope you enjoyed it!</p>
+    <p style="color:#374151;font-size:15px;">It's been ${daysSince} ${daysSince === 1 ? "day" : "days"} since your test drive of the ${escapeHtml(vehicleLabel)}. We hope you enjoyed it!</p>
     <p style="color:#374151;font-size:15px;">If you have any questions, or would like to discuss pricing, financing, or an exchange offer, your sales representative would be happy to help.</p>
     <p style="color:#374151;font-size:15px;">We're here whenever you're ready to take the next step.</p>
   `;
   return {
-    subject: override?.subject ?? `Still thinking about the ${vehicleLabel}?`,
+    subject: subjectFor(override, `Still thinking about the ${vehicleLabel}?`, { vehicle: vehicleLabel, dealership: dealership.name }),
     html: layout(dealership, "We'd Love to Hear From You", body, accent, override?.note),
   };
 }
@@ -297,7 +326,7 @@ export function passwordSetupEmail(
     <p style="color:#6b7280;font-size:13px;">This link expires in 1 hour. If you didn't expect this email, you can safely ignore it.</p>
   `;
   return {
-    subject: override?.subject ?? (isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`),
+    subject: subjectFor(override, (isNewAccount ? `Your ${dealership.name} account is ready` : `Reset your ${dealership.name} password`), { dealership: dealership.name }),
     html: layout(dealership, isNewAccount ? "Your Account is Ready" : "Password Reset Requested", body, accent, override?.note),
   };
 }
@@ -315,7 +344,7 @@ export function otpCodeEmail(
     <p style="color:#6b7280;font-size:13px;">This code expires in ${ttlMinutes} minutes. Never share it with anyone — ${escapeHtml(dealership.name)} staff will never ask for it.</p>
   `;
   return {
-    subject: override?.subject ?? `Your ${dealership.name} verification code`,
+    subject: subjectFor(override, `Your ${dealership.name} verification code`, { dealership: dealership.name }),
     html: layout(dealership, "Your Verification Code", body, accent, override?.note),
   };
 }
@@ -334,14 +363,14 @@ export function salesRepAssignedEmail(
       ${infoRow("Customer", ctx.customerName)}
       ${infoRow("Vehicle", ctx.vehicleLabel)}
       ${infoRow("Booking Reference", ctx.bookingReference)}
-      ${infoRow("Date &amp; Time", formatWhen(ctx.scheduledStart, ctx))}
+      ${infoRow("Date & Time", formatWhen(ctx.scheduledStart, ctx))}
       ${infoRow("Drive Type", ctx.driveType === "Home" ? "Home Test Drive" : "Showroom Test Drive")}
       ${infoRow("Branch", `${ctx.branchName} — ${ctx.branchAddress}`)}
     </table>
     <p style="color:#374151;font-size:15px;">Log in to the Admin Console to view or act on this booking.</p>
   `;
   return {
-    subject: override?.subject ?? `New Test Drive Assigned — ${ctx.vehicleLabel} (${ctx.bookingReference})`,
+    subject: subjectFor(override, `New Test Drive Assigned — ${ctx.vehicleLabel} (${ctx.bookingReference})`, { vehicle: ctx.vehicleLabel, reference: ctx.bookingReference, when: formatWhen(ctx.scheduledStart, ctx), dealership: dealership.name }),
     html: layout(dealership, "You've Been Assigned a Test Drive", body, accent, override?.note),
   };
 }
@@ -354,7 +383,7 @@ export function surveyRequestEmail(dealership: BrandProfile, customerName: strin
     <p style="margin:24px 0;">${button(surveyUrl, "Share Your Feedback", accent)}</p>
   `;
   return {
-    subject: override?.subject ?? `How was your ${vehicleLabel} test drive?`,
+    subject: subjectFor(override, `How was your ${vehicleLabel} test drive?`, { vehicle: vehicleLabel, dealership: dealership.name }),
     html: layout(dealership, "Tell Us About Your Experience", body, accent, override?.note),
   };
 }

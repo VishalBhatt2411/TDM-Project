@@ -10,7 +10,7 @@ import {
   resolveBookingSchedule,
   slotTimesFor,
 } from "@tdm/domain";
-import { addIsoDays, zonedDateTimeToUtc, zonedIsoDate, type VehicleAvailabilityResponse } from "@tdm/types";
+import { addIsoDays, zonedDateTimeToUtc, zonedDateTimeExists, zonedIsoDate, type VehicleAvailabilityResponse } from "@tdm/types";
 import { BOOKING_REPOSITORY, BOOKING_SCHEDULE_REPOSITORY } from "../infrastructure/tokens";
 import { TenantContext } from "../tenancy/tenant-context";
 import { DealershipSettingsCache } from "./dealership-settings-cache";
@@ -136,21 +136,27 @@ export class BookingScheduleService {
 
   /** The scheduled slots of `isoDate` (a calendar date on the dealership's clock). */
   private slotsOn(schedule: ResolvedBookingSchedule, timeZone: string, isoDate: string): DaySlot[] {
-    return slotTimesFor(schedule, isoDate).map(({ time, minutes }) => {
-      const start = zonedDateTimeToUtc(isoDate, time, timeZone);
-      return { time, start, end: new Date(start.getTime() + minutes * 60_000) };
-    });
+    return slotTimesFor(schedule, isoDate)
+      .filter(({ time }) => zonedDateTimeExists(isoDate, time, timeZone)) // a time a DST jump skips never happens
+      .map(({ time, minutes }) => {
+        const start = zonedDateTimeToUtc(isoDate, time, timeZone);
+        return { time, start, end: new Date(start.getTime() + minutes * 60_000) };
+      });
   }
 
   /**
-   * The first date with a slot starting at or after `from`. The schedule repeats weekly, so if
-   * none falls within a week and a day of it, none ever will (undefined: the schedule is shut).
+   * The first date with a slot starting at or after `from`. Opening hours repeat weekly, so only
+   * closures can push the answer further out: past the last closure, if no date within a week and a
+   * day has a slot, none ever will (undefined: the schedule is shut).
    */
   private earliestDate(schedule: ResolvedBookingSchedule, timeZone: string, from: Date): string | undefined {
     const firstDate = zonedIsoDate(from, timeZone);
-    for (let offset = 0; offset <= WEEKDAYS.length; offset++) {
-      const date = addIsoDays(firstDate, offset);
-      if (this.slotsOn(schedule, timeZone, date).some((slot) => slot.start >= from)) return date;
+    const lastClosure = schedule.closures[schedule.closures.length - 1]?.date ?? firstDate;
+    const lastDate = addIsoDays(lastClosure > firstDate ? lastClosure : firstDate, WEEKDAYS.length);
+    for (let date = firstDate; date <= lastDate; date = addIsoDays(date, 1)) {
+      // Slots run in order, so the day's last one is the one that decides whether any starts at or after `from`.
+      const lastSlot = this.slotsOn(schedule, timeZone, date).pop();
+      if (lastSlot && lastSlot.start >= from) return date;
     }
     return undefined;
   }

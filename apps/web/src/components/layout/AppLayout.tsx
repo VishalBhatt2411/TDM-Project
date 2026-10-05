@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Car, Clock, Heart, Menu, MapPin, Phone, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { brandLogoUrl, useBrandTheme, useDealershipConfig, useSiteFeatures } fro
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LocationPicker } from "@/components/LocationPicker";
 import { LocationProvider } from "@/context/location-context";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 
 /** The customer-facing shell; every page inside it shares the header's shopping location. */
 export function AppLayout() {
@@ -26,6 +27,7 @@ function AppShell() {
   useBrandTheme(dealership?.primaryColorHex);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { t } = useTranslation();
+  const location = useLocation();
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -175,7 +177,9 @@ function AppShell() {
       </header>
 
       <main className="flex-1">
-        <Outlet />
+        <RouteErrorBoundary key={location.pathname}>
+          <Outlet />
+        </RouteErrorBoundary>
       </main>
 
       <footer className="border-t bg-muted/40">

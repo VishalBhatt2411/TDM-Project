@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { runInBackground } from "../common/background-tasks";
+import { errorCodeOf } from "../common/error-code";
 import { StaffAssignment, StaffAssignmentConflictError, StaffAssignmentRepository } from "@tdm/domain";
 import {
   OrganizationRecord,
@@ -143,7 +144,7 @@ export class OnboardingService {
       result = await identityProvider.exchangeCodeForConnection(code, consumed.codeVerifier);
     } catch (err) {
       this.logger.error(
-        JSON.stringify({ event: "onboarding_oauth_exchange_failed", organizationId: org.id, reason: (err as Error).message }),
+        JSON.stringify({ event: "onboarding_oauth_exchange_failed", organizationId: org.id, errorCode: errorCodeOf(err) }),
       );
       await this.organizations.recordConnectionError(org.id, "Couldn't complete the Salesforce authorization. Please try again.");
       return { organizationId: org.id };
@@ -185,7 +186,7 @@ export class OnboardingService {
     // (e.g. the error-recording write itself failing).
     runInBackground(this.deployMetadataInBackground(org.id, connectingUserId)).catch((err) => {
       this.logger.error(
-        JSON.stringify({ event: "onboarding_metadata_deploy_unhandled", organizationId: org.id, reason: (err as Error).message }),
+        JSON.stringify({ event: "onboarding_metadata_deploy_unhandled", organizationId: org.id, errorCode: errorCodeOf(err) }),
       );
     });
 

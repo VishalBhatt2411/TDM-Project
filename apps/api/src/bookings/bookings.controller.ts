@@ -4,6 +4,7 @@ import { CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { BookingsService } from "./bookings.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
+import { ParseRecordIdPipe } from "../common/record-id";
 
 @Controller("bookings")
 export class BookingsController {
@@ -29,32 +30,32 @@ export class BookingsController {
 
   @Get(":id")
   @UseGuards(JwtAuthGuard)
-  getById(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  getById(@CurrentUser() user: AuthenticatedUser, @Param("id", ParseRecordIdPipe) id: string) {
     return this.bookingsService.getById(user.customerId, id);
   }
 
   /** A short-lived signed token, rendered client-side as a QR code, for the customer to show at check-in. */
   @Get(":id/check-in-token")
   @UseGuards(JwtAuthGuard)
-  getCheckInToken(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  getCheckInToken(@CurrentUser() user: AuthenticatedUser, @Param("id", ParseRecordIdPipe) id: string) {
     return this.bookingsService.getCheckInToken(user.customerId, id);
   }
 
   @Post(":id/cancel")
   @UseGuards(JwtAuthGuard)
-  cancel(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() dto: CancelBookingDto) {
+  cancel(@CurrentUser() user: AuthenticatedUser, @Param("id", ParseRecordIdPipe) id: string, @Body() dto: CancelBookingDto) {
     return this.bookingsService.cancel(user.customerId, id, dto);
   }
 
   @Post(":id/reschedule")
   @UseGuards(JwtAuthGuard)
-  reschedule(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() dto: RescheduleBookingDto) {
+  reschedule(@CurrentUser() user: AuthenticatedUser, @Param("id", ParseRecordIdPipe) id: string, @Body() dto: RescheduleBookingDto) {
     return this.bookingsService.reschedule(user.customerId, id, dto);
   }
 
   @Post(":id/survey")
   @UseGuards(JwtAuthGuard)
-  submitSurvey(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() dto: SubmitSurveyDto) {
+  submitSurvey(@CurrentUser() user: AuthenticatedUser, @Param("id", ParseRecordIdPipe) id: string, @Body() dto: SubmitSurveyDto) {
     return this.bookingsService.submitSurvey(user.customerId, id, dto);
   }
 }

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { BookingRepository, CustomerRepository, DealershipRepository, VehicleRepository } from "@tdm/domain";
+import { Booking, BookingRepository, CustomerRepository, DealershipRepository, VehicleRepository } from "@tdm/domain";
 import { addIsoDays, zonedIsoDate } from "@tdm/types";
 import { FollowUpLogRepository, OrganizationRepository } from "@tdm/postgres-adapter";
 import {
@@ -64,7 +64,7 @@ export class FollowUpScheduler {
 
   private async processInterval(days: number, now: Date): Promise<void> {
     // "N days ago" is a calendar day where each booking's dealership is. Scan a window that
-    // covers that day in every zone, then keep the bookings on exactly that local date.
+    // covers that day (and the one before, for catch-up) in every zone, then keep the bookings on those local dates.
     const start = new Date(now.getTime() - (days + 2) * DAY_MS);
     const end = new Date(now.getTime() - (days - 2) * DAY_MS);
     const scanned = await this.bookings.findCompletedWithoutOpportunity(start, end);
@@ -77,28 +77,47 @@ export class FollowUpScheduler {
     const candidates = scanned.filter((b) => {
       if (!followUpDays.get(b.dealershipId)?.includes(days)) return false;
       const timeZone = zones.get(b.dealershipId)!;
-      return zonedIsoDate(b.slot.start, timeZone) === addIsoDays(zonedIsoDate(now, timeZone), -days);
+      // The target local date, or the day before it: a missed daily run (deploy, outage) is caught up on
+      // the next one instead of losing that day's follow-ups. The claim log keeps each send to once.
+      const bookedOn = zonedIsoDate(b.slot.start, timeZone);
+      const target = addIsoDays(zonedIsoDate(now, timeZone), -days);
+      return bookedOn <= target && bookedOn >= addIsoDays(target, -1);
     });
 
     for (const booking of candidates) {
-      if (await this.followUpLog.wasSent(booking.id, days)) continue;
+      // One booking's failure must not cost the rest of the interval their follow-ups.
+      try {
+        await this.followUp(booking, days);
+      } catch (err) {
+        this.logger.error(
+          JSON.stringify({ event: "follow_up_failed", bookingId: booking.id, days, reason: (err as Error).message }),
+        );
+      }
+    }
+  }
 
+  /** Claim-then-send (see ReminderScheduler.remind): overlapping runs can't double-send; a failed send releases the claim. */
+  private async followUp(booking: Booking, days: number): Promise<void> {
+    if (!(await this.followUpLog.claim(booking.id, days))) return;
+
+    let delivered = false;
+    try {
       const [customer, vehicle] = await Promise.all([
         this.customers.findById(booking.customerId),
         this.vehicles.findById(booking.vehicleId),
       ]);
-      if (!customer || !vehicle) continue;
-
+      if (!customer || !vehicle) return;
       const vehicleProps = vehicle.toProps();
-      await this.notifications.sendFollowUp(
+      delivered = await this.notifications.sendFollowUp(
         customer.email.value,
         booking.dealershipId,
         `${customer.name.firstName} ${customer.name.lastName}`,
         `${vehicleProps.year} ${vehicleProps.make} ${vehicleProps.model}`,
         days,
       );
-      await this.followUpLog.markSent(booking.id, days);
-      this.logger.log(`Sent ${days}-day follow-up for booking ${booking.id}`);
+    } finally {
+      if (!delivered) await this.followUpLog.release(booking.id, days);
     }
+    this.logger.log(JSON.stringify({ event: delivered ? "follow_up_sent" : "follow_up_not_delivered", bookingId: booking.id, days }));
   }
 }

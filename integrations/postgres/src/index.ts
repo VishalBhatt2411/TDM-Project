@@ -5,6 +5,8 @@ export * from "./repositories/organization.repository";
 export * from "./repositories/auth.repository";
 export * from "./repositories/audit-log.repository";
 export * from "./repositories/automation-tracking.repository";
+export * from "./repositories/exclusive-lock";
+export * from "./repositories/expired-rows.repository";
 export * from "./repositories/magic-login.repository";
 export * from "./repositories/customer-password-token.repository";
 export * from "./repositories/staff-user.repository";

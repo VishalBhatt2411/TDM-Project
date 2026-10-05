@@ -10,6 +10,12 @@ import { setBackgroundTaskHost } from "./common/background-tasks";
 
 type RequestListener = (req: IncomingMessage, res: ServerResponse) => void;
 
+// One tenant's stray rejected promise must not take the instance down for every other tenant.
+process.on("unhandledRejection", (reason) => {
+  // eslint-disable-next-line no-console
+  console.error(JSON.stringify({ event: "unhandled_rejection", reason: reason instanceof Error ? reason.message : String(reason) }));
+});
+
 let listener: Promise<RequestListener> | undefined;
 
 /** Boots the app once per warm instance; later invocations reuse it. A failed boot is retried on the next request. */
@@ -36,6 +42,18 @@ function app(): Promise<RequestListener> {
 export function createHandler(keepAlive?: (task: Promise<unknown>) => void) {
   if (keepAlive) setBackgroundTaskHost(keepAlive);
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    (await app())(req, res);
+    try {
+      (await app())(req, res);
+    } catch (err) {
+      // Boot failed (bad env, database unreachable on a cold start) — answer instead of hanging the request.
+      // eslint-disable-next-line no-console
+      console.error(JSON.stringify({ event: "api_serverless_boot_failed", error: err instanceof Error ? err.message : String(err) }));
+      if (!res.headersSent) {
+        res.statusCode = 503;
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Retry-After", "5");
+      }
+      res.end(JSON.stringify({ error: "service_unavailable", message: "The service is starting up. Please retry shortly." }));
+    }
   };
 }

@@ -7,6 +7,8 @@ import { env } from "../common/env";
 import { isValidOrganizationSlug } from "../tenancy/organization-slug";
 import { OnboardingTokenGuard } from "./onboarding-token.guard";
 
+const MAX_DENIAL_MESSAGE_LENGTH = 300;
+
 // Mirrors AdminAuthController's OAuth callback validation — the `state` we hand out
 // is always 24 random bytes as hex (see OnboardingService.buildAuthorizationUrl).
 const OAUTH_STATE_PATTERN = /^[a-f0-9]{48}$/;
@@ -67,7 +69,8 @@ export class OnboardingController {
     // Salesforce uses this shape (no `code`) when authorization is denied or blocked — e.g. the
     // user declines, or a cross-org OAuth block. It's a normal outcome, not a malformed request.
     if (typeof error === "string" && error.trim().length > 0) {
-      const message = typeof errorDescription === "string" && errorDescription.trim().length > 0 ? errorDescription : error;
+      // The text is whatever the callback URL carried, and is stored and shown to the admin — keep it short.
+      const message = (typeof errorDescription === "string" && errorDescription.trim().length > 0 ? errorDescription : error).slice(0, MAX_DENIAL_MESSAGE_LENGTH);
       const result = isValidOAuthState(state)
         ? await this.onboarding.recordAuthorizationDenied(state, message)
         : { error: "invalid_state" };

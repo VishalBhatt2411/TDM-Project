@@ -7,7 +7,11 @@ export interface EmailMessage {
   plainText?: string;
 }
 
-/** Outbound email port — the concrete provider is bound in InfrastructureModule. Implementations never throw. */
+/**
+ * Outbound email port — the concrete provider is bound in InfrastructureModule. Implementations never
+ * throw; they resolve to whether the provider accepted the message, so a job that must not lose a
+ * send (reminders, follow-ups) can tell a delivered email from a swallowed failure.
+ */
 export interface EmailSender {
-  send(message: EmailMessage): Promise<void>;
+  send(message: EmailMessage): Promise<boolean>;
 }

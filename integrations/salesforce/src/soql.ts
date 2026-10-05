@@ -22,6 +22,17 @@ export async function withConnection<T>(
   }
 }
 
+/** Most rows a list query that has to see every match (not a page of them) will read — a runaway guard, not a limit anyone should hit. */
+const MAX_QUERY_ROWS = 50_000;
+
+/**
+ * Runs a query that must return all its matches. A plain `conn.query` stops after the first batch
+ * (about 2000 rows), which would silently drop bookings from conflict checks and scheduled emails.
+ */
+export async function queryAll(conn: Connection, soql: string) {
+  return conn.query(soql, { autoFetch: true, maxFetch: MAX_QUERY_ROWS });
+}
+
 /**
  * A provider error reduced to what is safe to log: its code, never its message — Salesforce
  * messages routinely echo field values (email addresses, phone numbers, duplicate-rule matches).
@@ -77,6 +88,36 @@ const SALESFORCE_ID_PATTERN = /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/;
 /** True for a 15/18-character record Id — an `Id IN (...)` filter rejects the whole query on any other value. */
 export function isSalesforceId(value: string): boolean {
   return SALESFORCE_ID_PATTERN.test(value);
+}
+
+/**
+ * The Contact behind a platform customer id. A portal customer is matched by `Portal_User_Id__c`; a
+ * Contact staff booked for without a portal account is identified by its own record Id (that is what a
+ * booking's customerId falls back to), so a record-shaped value matches on `Id` too.
+ */
+export async function resolveContactId(conn: any, platformCustomerId: string): Promise<string | null> {
+  const value = escapeSoql(platformCustomerId);
+  const where = isSalesforceId(platformCustomerId) ? `Portal_User_Id__c = '${value}' OR Id = '${value}'` : `Portal_User_Id__c = '${value}'`;
+  const result = await conn.query(`SELECT Id FROM Contact WHERE ${where} LIMIT 1`);
+  return result.records[0]?.Id ?? null;
+}
+
+const MAX_PAGE_SIZE = 200;
+/** SOQL rejects an OFFSET above 2000 outright. */
+const MAX_SOQL_OFFSET = 2000;
+
+/**
+ * LIMIT/OFFSET for a requested page. Page and size are clamped to safe positive integers (a NaN,
+ * zero or negative value falls back to the default) and the size is capped; `reachable` is false
+ * when the page lies beyond what SOQL can offset to, so the caller returns an empty page instead
+ * of sending a query Salesforce would reject with a 500.
+ */
+export function pageWindow(page: number | undefined, pageSize: number | undefined, defaultPageSize: number) {
+  const positive = (value: number | undefined, fallback: number) =>
+    value != null && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+  const limit = Math.min(positive(pageSize, defaultPageSize), MAX_PAGE_SIZE);
+  const offset = (positive(page, 1) - 1) * limit;
+  return { limit, offset, reachable: offset <= MAX_SOQL_OFFSET };
 }
 
 export function soqlIdList(ids: readonly string[]): string {

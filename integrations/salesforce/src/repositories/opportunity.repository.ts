@@ -1,7 +1,7 @@
 import { SalesOpportunity, SalesOpportunityRepository } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { opportunityRecordToDomain } from "../mappers";
-import { withConnection } from "../soql";
+import { escapeSoql, withConnection } from "../soql";
 
 /**
  * Implements the "if everything goes well, create a Lead and an Opportunity" flow
@@ -30,17 +30,21 @@ export class SalesforceSalesOpportunityRepository implements SalesOpportunityRep
       const vehicle = await this.fetchVehicle(conn, props.vehicleId);
       const accountId = await this.ensurePersonalAccount(conn, contact);
 
-      await conn.sobject("Lead").create({
-        FirstName: contact.FirstName,
-        LastName: contact.LastName,
-        Company: `${contact.FirstName} ${contact.LastName} (Individual)`,
-        Email: contact.Email,
-        Phone: contact.Phone,
-        Booking__c: props.bookingId,
-        Vehicle_Interest__c: props.vehicleId,
-        Portal_Contact_Id__c: contact.Id,
-        Source_Channel__c: "Test Drive Platform",
-      });
+      // Lead and Opportunity aren't created atomically, so a retry after a failed Opportunity must not mint a second Lead.
+      const existingLead = await conn.query(`SELECT Id FROM Lead WHERE Booking__c = '${escapeSoql(props.bookingId)}' LIMIT 1`);
+      if (existingLead.records.length === 0) {
+        await conn.sobject("Lead").create({
+          FirstName: contact.FirstName,
+          LastName: contact.LastName,
+          Company: `${contact.FirstName} ${contact.LastName} (Individual)`,
+          Email: contact.Email,
+          Phone: contact.Phone,
+          Booking__c: props.bookingId,
+          Vehicle_Interest__c: props.vehicleId,
+          Portal_Contact_Id__c: contact.Id,
+          Source_Channel__c: "Test Drive Platform",
+        });
+      }
 
       const closeDate = new Date();
       closeDate.setDate(closeDate.getDate() + 30);
@@ -65,7 +69,7 @@ export class SalesforceSalesOpportunityRepository implements SalesOpportunityRep
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
         `SELECT Id, Booking__c, Vehicle__c, StageName, CreatedDate, Booking__r.Contact__r.Portal_User_Id__c ` +
-          `FROM Opportunity WHERE Booking__c = '${bookingId}' LIMIT 1`,
+          `FROM Opportunity WHERE Booking__c = '${escapeSoql(bookingId)}' LIMIT 1`,
       );
       const record = result.records[0];
       return record ? opportunityRecordToDomain(record) : null;
@@ -74,13 +78,13 @@ export class SalesforceSalesOpportunityRepository implements SalesOpportunityRep
 
   private async fetchContact(conn: any, platformCustomerId: string): Promise<any | null> {
     const result = await conn.query(
-      `SELECT Id, FirstName, LastName, Email, Phone, AccountId FROM Contact WHERE Portal_User_Id__c = '${platformCustomerId}' LIMIT 1`,
+      `SELECT Id, FirstName, LastName, Email, Phone, AccountId FROM Contact WHERE Portal_User_Id__c = '${escapeSoql(platformCustomerId)}' LIMIT 1`,
     );
     return result.records[0] ?? null;
   }
 
   private async fetchVehicle(conn: any, vehicleId: string): Promise<any | null> {
-    const result = await conn.query(`SELECT Make__c, Model__c FROM Vehicle__c WHERE Id = '${vehicleId}' LIMIT 1`);
+    const result = await conn.query(`SELECT Make__c, Model__c FROM Vehicle__c WHERE Id = '${escapeSoql(vehicleId)}' LIMIT 1`);
     return result.records[0] ?? null;
   }
 
