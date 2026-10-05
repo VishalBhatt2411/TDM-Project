@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "npm ci --include=dev",
-  "buildCommand": "npm run build && DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" npm run db:deploy",
+  "buildCommand": "npm run build && if [ \"$VERCEL_ENV\" != \"preview\" ] || [ \"$PREVIEW_DB_ISOLATED\" = \"1\" ]; then DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" npm run db:deploy; else echo \"Preview build: skipping migrations until PREVIEW_DB_ISOLATED=1 (Preview must have its own database).\"; fi",
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/index.js": {
