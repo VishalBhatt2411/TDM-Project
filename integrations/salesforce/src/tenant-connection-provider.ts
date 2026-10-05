@@ -1,5 +1,5 @@
 import jsforce, { Connection } from "jsforce";
-import { TenantContextMissingError, TenantNotConnectedError } from "@tdm/domain";
+import { ExclusiveLock, TenantContextMissingError, TenantNotConnectedError } from "@tdm/domain";
 import { SalesforceConnectionSource } from "./connection-source";
 
 export const SALESFORCE_API_VERSION = "62.0";
@@ -24,9 +24,16 @@ export interface TenantSalesforceConnectionProviderOptions {
   onRefreshTokenRotated: (organizationId: string, previousRefreshToken: string, refreshToken: string) => Promise<void>;
   /**
    * Salesforce rejected `rejectedRefreshToken` outright (revoked / Connected App policy changed) —
-   * the tenant must reconnect, unless the stored token is no longer the rejected one.
+   * the tenant must reconnect, unless the stored token is no longer the rejected one. `reason` is
+   * Salesforce's own short explanation (e.g. "expired access/refresh token"), never a secret.
    */
-  onCredentialsRejected: (organizationId: string, rejectedRefreshToken: string) => Promise<void>;
+  onCredentialsRejected: (organizationId: string, rejectedRefreshToken: string, reason: string) => Promise<void>;
+  /**
+   * Makes load-credentials → refresh → persist atomic across every instance of the app. Under a
+   * refresh-token rotation policy each refresh kills the token it used, so two instances refreshing
+   * at once (normal on serverless) would leave the stored token dead and the tenant disconnected.
+   */
+  refreshLock: ExclusiveLock;
   /** How long a minted access token is reused before proactively refreshing. */
   ttlMs?: number;
 }
@@ -48,8 +55,17 @@ const ROTATION_RECHECK_DELAYS_MS = [250, 750, 1500];
 /** Refresh attempts with a newly rotated token before the rejection is treated as final. */
 const MAX_ROTATION_RETRIES = 3;
 
+const REFRESH_LOCK_KEY = "salesforce-refresh";
+const MAX_REJECTION_REASON_LENGTH = 100;
+
 function isInvalidGrant(err: any): boolean {
   return err?.name === "invalid_grant" || err?.errorCode === "invalid_grant";
+}
+
+/** Salesforce's `error_description` for a rejected grant — a fixed phrase, but stripped to plain text before it is stored or logged. */
+function rejectionReason(err: any): string {
+  const text = typeof err?.message === "string" ? err.message.replace(/[^\w\s/.,:'()-]/g, "").trim() : "";
+  return text.slice(0, MAX_REJECTION_REASON_LENGTH) || "no reason given";
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -114,7 +130,12 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
     return fresh;
   }
 
-  private async connect(organizationId: string): Promise<CachedTenantConnection> {
+  private connect(organizationId: string): Promise<CachedTenantConnection> {
+    return this.options.refreshLock.runExclusive(REFRESH_LOCK_KEY, () => this.connectLocked(organizationId));
+  }
+
+  private async connectLocked(organizationId: string): Promise<CachedTenantConnection> {
+    // Read inside the lock: whoever held it before us may have just rotated the token.
     const stored = await this.options.loadCredentials(organizationId);
     if (!stored) throw new TenantNotConnectedError(organizationId);
 
@@ -128,7 +149,7 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
         if (!isInvalidGrant(err)) throw err;
         const rotated: SalesforceOrgCredentials | null = retry < MAX_ROTATION_RETRIES ? await this.awaitRotatedCredentials(organizationId, credentials.refreshToken) : null;
         if (!rotated) {
-          await this.options.onCredentialsRejected(organizationId, credentials.refreshToken);
+          await this.options.onCredentialsRejected(organizationId, credentials.refreshToken, rejectionReason(err));
           // Revoked or expired: only an admin reconnect fixes it, so report it as such rather than a 500.
           throw new TenantNotConnectedError(organizationId);
         }
