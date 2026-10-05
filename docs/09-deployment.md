@@ -16,6 +16,27 @@ Create a Neon project (Vercel → Storage → Neon, or neon.tech). Use the poole
 as `DATABASE_URL`; migrations run during the Vercel build against `DATABASE_URL_UNPOOLED` when it
 is set (the Neon integration sets both), else `DATABASE_URL`.
 
+### Preview deployments need their own database
+
+The build command runs `db:deploy` on **every** Vercel deployment, previews included. If the Preview
+environment shares the production `DATABASE_URL`, building any branch applies its migrations to the
+live database before that code has been reviewed or merged. Give Previews a separate database:
+
+1. In Neon, create a branch for previews (or a second project). Prefer one with **no tenant data**:
+   a branch copied from production also copies each tenant's encrypted Salesforce credentials, and
+   those would then be reachable from preview code.
+2. In Vercel → Project → Settings → Environment Variables, set `DATABASE_URL` (pooled) and
+   `DATABASE_URL_UNPOOLED` to that branch's strings with only the **Preview** scope ticked, and make
+   sure the Production values are scoped to Production only.
+3. Give Preview its own `JWT_SECRET` and `ENCRYPTION_KEY`, so a preview can never sign tokens for
+   or decrypt production data. Leave `JOB_TRIGGER_SECRET` and `ANTHROPIC_API_KEY` unset there so
+   previews don't trigger jobs or spend API credit.
+4. Check it: open a preview deployment's build log, and confirm `_prisma_migrations` in the
+   production database gained no new rows from that build.
+
+The Neon–Vercel integration can also create a database branch per preview automatically (its
+"Create a database branch for each preview deployment" option), which replaces step 1 and 2.
+
 ## 2. Vercel project
 
 Import the repo with the **repository root** as Root Directory; `vercel.json` holds the build,
