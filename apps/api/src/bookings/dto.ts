@@ -5,11 +5,13 @@ import {
   IsIn,
   IsInt,
   IsISO8601,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   ValidateIf,
   ValidateNested,
@@ -17,28 +19,41 @@ import {
 import type { PurchaseTimeline } from "@tdm/types";
 import { IsRecordId } from "../common/record-id";
 
+/** Full ISO-8601 instants only — a bare date or a zone-less time would be read in the server's zone, not the dealership's. */
+const ISO_INSTANT = { strict: true, strictSeparator: true } as const;
+
 class TimeSlotDto {
-  @IsISO8601()
+  @IsISO8601(ISO_INSTANT)
   start!: string;
 
-  @IsISO8601()
+  @IsISO8601(ISO_INSTANT)
   end!: string;
 }
 
 class AddressDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   line1!: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   city!: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   state!: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
   postalCode!: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   country!: string;
 }
 
@@ -71,10 +86,12 @@ export class CreateBookingDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   city?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   state?: string;
 
   @IsOptional()
@@ -83,6 +100,7 @@ export class CreateBookingDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   currentVehicleOwned?: string;
 
   @IsOptional()
@@ -96,10 +114,12 @@ export class CreateBookingDto {
   @IsOptional()
   @ValidateIf((o) => o.pickupRequired)
   @IsString()
+  @MaxLength(500)
   pickupAddress?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   additionalNotes?: string;
 
   /** If the requested slot conflicts with an existing booking, join the vehicle's waitlist instead of failing outright. */
@@ -115,12 +135,17 @@ export class CreateBookingDto {
  */
 export class CreatePublicBookingDto extends CreateBookingDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
   firstName!: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
   lastName!: string;
 
   @IsEmail()
+  @MaxLength(254)
   email!: string;
 
   /**
@@ -133,6 +158,8 @@ export class CreatePublicBookingDto extends CreateBookingDto {
 
 export class CancelBookingDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
   reason!: string;
 }
 
@@ -178,5 +205,6 @@ export class SubmitSurveyDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   additionalComments?: string;
 }

@@ -1,7 +1,26 @@
-import { BadRequestException, Body, ConflictException, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { applyDecorators, BadRequestException, Body, ConflictException, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { PartialType } from "@nestjs/swagger";
-import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Min } from "class-validator";
+import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from "class-validator";
+import {
+  AuditLogRepository,
   AvailabilityStatus,
   BodyType,
   BookingRepository,
@@ -14,11 +33,13 @@ import {
   VehicleRepository,
   VehicleStatus,
 } from "@tdm/domain";
-import { BOOKING_REPOSITORY, BRANCH_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
-import { ParseRecordIdPipe } from "../common/record-id";
+import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, BRANCH_REPOSITORY, VEHICLE_REPOSITORY } from "../infrastructure/tokens";
+import { IsRecordId, ParseRecordIdPipe } from "../common/record-id";
 import { vehicleToDto } from "../vehicles/vehicles.service";
 import { RegionalSettingsService } from "../config/regional-settings.service";
 import { StaffAuthGuard } from "./staff-auth.guard";
+import type { AuthenticatedStaff } from "./staff-auth.guard";
+import { CurrentStaff } from "./current-staff.decorator";
 import { PermissionGuard } from "./permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
 import { CurrentStaffAccess } from "./current-staff-access.decorator";
@@ -31,21 +52,62 @@ const TRANSMISSIONS = ["Manual", "Automatic", "CVT", "DCT"];
 const STATUSES = ["Available", "Reserved", "In_Drive", "Maintenance", "Sold"];
 const AVAILABILITY_STATUSES = ["In_Stock", "Limited_Stock", "On_Request", "Coming_Soon"];
 
+const MAX_URL_LENGTH = 2048;
+const MAX_LIST_ITEMS = 50;
+const LIST_PAGE_SIZE = 200;
+const LIST_MAX_PAGES = 50;
+
+/** An http(s) URL, or an empty string — the admin form submits "" for a field left blank. */
+const IsHttpUrlOrEmpty = () =>
+  applyDecorators(
+    ValidateIf((_, value) => value !== undefined && value !== null && value !== ""),
+    IsUrl({ protocols: ["http", "https"], require_protocol: true, require_tld: false }),
+    MaxLength(MAX_URL_LENGTH),
+  );
+
+/** Validates each element of a bounded string list. */
+const IsStringList = (maxLength: number) =>
+  applyDecorators(IsArray(), ArrayMaxSize(MAX_LIST_ITEMS), IsString({ each: true }), MaxLength(maxLength, { each: true }));
+
+class EngineOptionDto {
+  @IsString() @MaxLength(80) name!: string;
+  @IsString() @MaxLength(80) displacement!: string;
+  @IsString() @MaxLength(80) power!: string;
+  @IsString() @MaxLength(80) torque!: string;
+}
+
+class VehicleColorDto {
+  @IsString() @MaxLength(80) name!: string;
+  @Matches(/^#[0-9a-fA-F]{3,8}$/, { message: "hex must be a CSS hex colour, e.g. #1a2b3c" }) hex!: string;
+  @IsOptional() @IsHttpUrlOrEmpty() imageUrl?: string;
+}
+
+class VehicleFaqDto {
+  @IsString() @MaxLength(300) question!: string;
+  @IsString() @MaxLength(2000) answer!: string;
+}
+
 class CreateVehicleDto {
   @IsString()
+  @MaxLength(80)
   make!: string;
 
   @IsString()
+  @MaxLength(80)
   model!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(80)
   trim?: string;
 
   @IsInt()
+  @Min(1900)
+  @Max(2100)
   year!: number;
 
   @IsString()
+  @MaxLength(32)
   vin!: string;
 
   @IsIn(BODY_TYPES)
@@ -59,27 +121,31 @@ class CreateVehicleDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(80)
   color?: string;
 
   @IsNumber()
   @Min(0)
+  @Max(1_000_000_000)
   price!: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000_000)
   priceMax?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(10_000_000)
   odometer?: number;
 
   @IsOptional()
   @IsIn(STATUSES)
   status?: string;
 
-  @IsString()
+  @IsRecordId()
   branchId!: string;
 
   @IsOptional()
@@ -100,26 +166,35 @@ class CreateVehicleDto {
 
   @IsOptional()
   @IsInt()
+  @Min(1)
+  @Max(60)
   seatingCapacity?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(1000)
   mileageKmpl?: number;
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(5)
   safetyRatingStars?: number;
 
   @IsOptional()
-  @IsString()
+  @IsHttpUrlOrEmpty()
   primaryImageUrl?: string;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_LIST_ITEMS)
+  @IsUrl({ protocols: ["http", "https"], require_protocol: true, require_tld: false }, { each: true })
+  @MaxLength(MAX_URL_LENGTH, { each: true })
   galleryUrls?: string[];
 
   @IsOptional()
-  @IsString()
+  @IsHttpUrlOrEmpty()
   videoUrl?: string;
 
   @IsOptional()
@@ -127,40 +202,50 @@ class CreateVehicleDto {
   specSheet?: Record<string, string>;
 
   @IsOptional()
-  @IsArray()
+  @IsStringList(200)
   accessories?: string[];
 
   @IsOptional()
   @IsString()
+  @MaxLength(10_000)
   description?: string;
 
   @IsOptional()
   @IsArray()
-  engineOptions?: { name: string; displacement: string; power: string; torque: string }[];
+  @ArrayMaxSize(MAX_LIST_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => EngineOptionDto)
+  engineOptions?: EngineOptionDto[];
 
   @IsOptional()
-  @IsArray()
+  @IsStringList(200)
   safetyFeatures?: string[];
 
   @IsOptional()
-  @IsArray()
+  @IsStringList(200)
   infotainmentFeatures?: string[];
 
   @IsOptional()
-  @IsArray()
+  @IsStringList(200)
   exteriorHighlights?: string[];
 
   @IsOptional()
-  @IsArray()
+  @IsStringList(200)
   interiorHighlights?: string[];
 
   @IsOptional()
   @IsArray()
-  colors?: { name: string; hex: string; imageUrl?: string }[];
+  @ArrayMaxSize(MAX_LIST_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => VehicleColorDto)
+  colors?: VehicleColorDto[];
 
   @IsOptional()
   @IsArray()
-  faqs?: { question: string; answer: string }[];
+  @ArrayMaxSize(MAX_LIST_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => VehicleFaqDto)
+  faqs?: VehicleFaqDto[];
 }
 
 /** Every field optional — a PATCH only touches the fields the client actually sent. */
@@ -260,13 +345,15 @@ export class AdminVehiclesController {
     @Inject(BRANCH_REPOSITORY) private readonly branches: BranchRepository,
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     private readonly regional: RegionalSettingsService,
+    @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
   ) {}
 
   @Post()
-  async create(@Body() dto: CreateVehicleDto, @CurrentStaffAccess() access: StaffAccess) {
+  async create(@Body() dto: CreateVehicleDto, @CurrentStaffAccess() access: StaffAccess, @CurrentStaff() staff: AuthenticatedStaff) {
     const branch = await this.requireBranch(dto.branchId, access);
     const vehicle = Vehicle.create({ ...toVehicleProps(dto, (await this.regional.resolve(branch.dealershipId)).currencyCode), dealershipId: branch.dealershipId });
     const saved = await this.vehicles.save(vehicle);
+    await this.audit(staff, "VEHICLE_CREATED", saved, { make: dto.make, model: dto.model, vin: dto.vin });
     return vehicleToDto(saved);
   }
 
@@ -275,6 +362,7 @@ export class AdminVehiclesController {
     @Param("id", ParseRecordIdPipe) id: string,
     @Body() dto: UpdateVehicleDto,
     @CurrentStaffAccess() access: StaffAccess,
+    @CurrentStaff() staff: AuthenticatedStaff,
   ) {
     const existing = await this.requireVehicle(id, access);
     const { branchId, ...patch } = toVehiclePatch(dto, (await this.regional.resolve(existing.dealershipId)).currencyCode);
@@ -284,25 +372,38 @@ export class AdminVehiclesController {
       existing.moveToBranch(branch.id, branch.dealershipId);
     }
     const saved = await this.vehicles.save(existing);
+    await this.audit(staff, "VEHICLE_UPDATED", saved, { changedFields: Object.keys(dto).sort() });
     return vehicleToDto(saved);
   }
 
   @Delete(":id")
-  async remove(@Param("id", ParseRecordIdPipe) id: string, @CurrentStaffAccess() access: StaffAccess) {
-    await this.requireVehicle(id, access);
+  async remove(
+    @Param("id", ParseRecordIdPipe) id: string,
+    @CurrentStaffAccess() access: StaffAccess,
+    @CurrentStaff() staff: AuthenticatedStaff,
+  ) {
+    const vehicle = await this.requireVehicle(id, access);
     // Bookings keep their vehicle for history and reporting, so a booked vehicle is retired, not deleted.
     if (await this.bookings.hasAnyForVehicle(id)) {
       throw new ConflictException("This vehicle has booking history and can't be deleted. Set its status to Sold to retire it instead.");
     }
     await this.vehicles.delete(id);
+    await this.audit(staff, "VEHICLE_DELETED", vehicle);
     return { deleted: true };
   }
 
   @Get()
   async list(@CurrentStaffAccess() access: StaffAccess) {
     const scope = access.scopeFor(PERMISSIONS.MANAGE_CONFIG) ?? { dealershipIds: [] };
-    const { items } = await this.vehicles.search({ pageSize: 200, ...scope });
-    return items.map(vehicleToDto);
+    // The console lists the whole inventory in one table, so walk every page rather than silently
+    // truncating a large dealership at the first one.
+    const all: Vehicle[] = [];
+    for (let page = 1; page <= LIST_MAX_PAGES; page++) {
+      const { items, total } = await this.vehicles.search({ page, pageSize: LIST_PAGE_SIZE, ...scope });
+      all.push(...items);
+      if (items.length === 0 || all.length >= total) break;
+    }
+    return all.map(vehicleToDto);
   }
 
   /**
@@ -315,6 +416,17 @@ export class AdminVehiclesController {
       throw new BadRequestException("Unknown branch.");
     }
     return branch;
+  }
+
+  private audit(staff: AuthenticatedStaff, action: string, vehicle: Vehicle, metadata: Record<string, unknown> = {}) {
+    return this.auditLog.append({
+      actorId: staff.staffUserId,
+      action,
+      entityType: "Vehicle",
+      entityId: vehicle.id,
+      dealershipId: vehicle.dealershipId,
+      metadata,
+    });
   }
 
   private async requireVehicle(id: string, access: StaffAccess): Promise<Vehicle> {

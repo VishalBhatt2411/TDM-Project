@@ -19,7 +19,7 @@ export function AdminAuthCallbackPage() {
     refreshSession().finally(() => setChecked(true));
   }, [error, refreshSession]);
 
-  if (error) return <Navigate to={`/admin/login?error=${error}`} replace />;
+  if (error) return <Navigate to={`/admin/login?error=${encodeURIComponent(error)}`} replace />;
   if (!checked) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">

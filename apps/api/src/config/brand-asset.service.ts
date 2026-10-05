@@ -44,6 +44,8 @@ export class BrandAssetService {
   private store(key: string, asset: CachedAsset): void {
     const size = asset?.data.length ?? 0;
     if (size > MAX_CACHE_BYTES) return;
+    // Concurrent first reads of one asset both land here; drop the earlier entry so its bytes aren't counted twice.
+    this.evict(key);
     this.cache.set(key, { asset, expiresAt: asset ? Number.POSITIVE_INFINITY : Date.now() + MISS_TTL_MS });
     this.cachedBytes += size;
     for (const oldest of this.cache.keys()) {

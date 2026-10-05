@@ -23,6 +23,9 @@ import {
   dealershipCondition,
   DRIVE_FEEDBACK_FIELDS,
   escapeSoql,
+  pageWindow,
+  queryAll,
+  resolveContactId,
   withConnection,
 } from "../soql";
 
@@ -41,9 +44,9 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findByCustomer(customerId: string): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const contactId = await this.resolveContactId(conn, customerId);
+      const contactId = await resolveContactId(conn, customerId);
       if (!contactId) return [];
-      const result = await conn.query(
+      const result = await queryAll(conn,
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Contact__c = '${escapeSoql(contactId)}' ORDER BY Scheduled_Start__c DESC`,
       );
       return result.records.map((r) => bookingRecordToDomain(r, integrationUserId));
@@ -61,14 +64,13 @@ export class SalesforceBookingRepository implements BookingRepository {
       if (dealership) clauses.push(dealership);
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
 
-      const page = safeInt(filter.page, 1);
-      const pageSize = safeInt(filter.pageSize, 25);
-      const offset = (page - 1) * pageSize;
+      const { limit, offset, reachable } = pageWindow(filter.page, filter.pageSize, 25);
 
+      // Id breaks ties between bookings sharing a start time, so a record can't straddle two pages.
       const [itemsResult, countResult] = await Promise.all([
-        conn.query(
-          `SELECT ${BOOKING_FIELDS} FROM Booking__c ${where} ORDER BY Scheduled_Start__c DESC LIMIT ${pageSize} OFFSET ${offset}`,
-        ),
+        reachable
+          ? conn.query(`SELECT ${BOOKING_FIELDS} FROM Booking__c ${where} ORDER BY Scheduled_Start__c DESC, Id LIMIT ${limit} OFFSET ${offset}`)
+          : Promise.resolve({ records: [] as any[] }),
         conn.query(`SELECT COUNT() FROM Booking__c ${where}`),
       ]);
 
@@ -82,7 +84,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findActiveByVehicle(vehicleId: string): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
+      const result = await queryAll(conn,
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' ` +
           `AND Status__c IN ('Confirmed', 'InProgress', 'Requested')`,
       );
@@ -100,7 +102,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findWaitlistedForVehicle(vehicleId: string): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
+      const result = await queryAll(conn,
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Vehicle__c = '${escapeSoql(vehicleId)}' AND Status__c = 'Waitlisted' ` +
           `ORDER BY Waitlist_Position__c ASC`,
       );
@@ -112,7 +114,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findByRepAndDate(salesRepId: string, day: InstantWindow): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
+      const result = await queryAll(conn,
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE OwnerId = '${escapeSoql(salesRepId)}' ` +
           `AND Scheduled_Start__c >= ${day.start.toISOString()} AND Scheduled_Start__c <= ${day.end.toISOString()} ` +
           `AND Status__c IN ('Requested', 'Confirmed', 'InProgress') ` +
@@ -125,7 +127,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async save(booking: Booking): Promise<Booking> {
     return withConnection(this.connectionProvider, async (conn) => {
       const props = booking.toProps();
-      const contactId = await this.resolveContactId(conn, props.customerId);
+      const contactId = await resolveContactId(conn, props.customerId);
       if (!contactId) {
         throw new Error(`No Salesforce Contact found for platform customer id ${props.customerId}.`);
       }
@@ -153,7 +155,7 @@ export class SalesforceBookingRepository implements BookingRepository {
       const props = record.toProps();
       const fields = complianceToRecord(record);
       const existing = await conn.query(
-        `SELECT Id FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(props.bookingId)}' LIMIT 1`,
+        `SELECT Id FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(props.bookingId)}' ORDER BY CreatedDate ASC LIMIT 1`,
       );
       if (existing.records[0]) {
         const updated = await conn.sobject("Compliance_Record__c").update({ Id: (existing.records[0] as any).Id, ...fields });
@@ -172,7 +174,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findComplianceByBooking(bookingId: string): Promise<ComplianceRecord | null> {
     return withConnection(this.connectionProvider, async (conn) => {
       const result = await conn.query(
-        `SELECT ${COMPLIANCE_RECORD_FIELDS} FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(bookingId)}' LIMIT 1`,
+        `SELECT ${COMPLIANCE_RECORD_FIELDS} FROM Compliance_Record__c WHERE Booking__c = '${escapeSoql(bookingId)}' ORDER BY CreatedDate ASC LIMIT 1`,
       );
       const record = result.records[0];
       return record ? complianceRecordToDomain(record) : null;
@@ -201,7 +203,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findByStatusWithinWindow(status: BookingStatus, start: Date, end: Date): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
+      const result = await queryAll(conn,
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Status__c = '${escapeSoql(status)}' ` +
           `AND Scheduled_Start__c >= ${start.toISOString()} AND Scheduled_Start__c <= ${end.toISOString()} ` +
           `ORDER BY Scheduled_Start__c ASC`,
@@ -213,7 +215,7 @@ export class SalesforceBookingRepository implements BookingRepository {
   async findCompletedWithoutOpportunity(start: Date, end: Date): Promise<Booking[]> {
     const integrationUserId = await this.connectionProvider.getIntegrationUserId();
     return withConnection(this.connectionProvider, async (conn) => {
-      const result = await conn.query(
+      const result = await queryAll(conn,
         `SELECT ${BOOKING_FIELDS} FROM Booking__c WHERE Status__c = 'Completed' ` +
           `AND Actual_End__c >= ${start.toISOString()} AND Actual_End__c <= ${end.toISOString()} ` +
           `AND Id NOT IN (SELECT Booking__c FROM Opportunity WHERE Booking__c != null) ` +
@@ -222,16 +224,4 @@ export class SalesforceBookingRepository implements BookingRepository {
       return result.records.map((r) => bookingRecordToDomain(r, integrationUserId));
     });
   }
-
-  private async resolveContactId(conn: any, platformCustomerId: string): Promise<string | null> {
-    const result = await conn.query(
-      `SELECT Id FROM Contact WHERE Portal_User_Id__c = '${escapeSoql(platformCustomerId)}' LIMIT 1`,
-    );
-    return result.records[0]?.Id ?? null;
-  }
-}
-
-/** Clamps a possibly-undefined/NaN page/pageSize query param to a safe positive integer. */
-function safeInt(value: number | undefined, fallback: number): number {
-  return value != null && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }

@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Request } from "express";
-import { ACCESS_TOKEN_COOKIE, AUTH_SCOPE } from "../auth/auth.constants";
+import { ACCESS_TOKEN_COOKIE, AUTH_SCOPE, TOKEN_TYPE } from "../auth/auth.constants";
 import { parseCookieHeader } from "../common/cookie.util";
 import { TenantContext } from "../tenancy/tenant-context";
 
@@ -31,7 +31,7 @@ export class StaffAuthGuard implements CanActivate {
     if (!token) {
       throw new UnauthorizedException("Not authenticated.");
     }
-    let payload: { sub: string; scope?: string; org?: string };
+    let payload: { sub: string; scope?: string; org?: string; typ?: string };
     try {
       payload = this.jwtService.verify(token);
     } catch {
@@ -39,6 +39,9 @@ export class StaffAuthGuard implements CanActivate {
     }
     if (payload.scope !== AUTH_SCOPE.STAFF) {
       throw new UnauthorizedException("This token is not valid for admin console endpoints.");
+    }
+    if (payload.typ !== TOKEN_TYPE.ACCESS) {
+      throw new UnauthorizedException("Invalid or expired session.");
     }
     // Pre-tenancy tokens carry no `org` — bindSession rejects them, forcing a fresh login.
     TenantContext.bindSession(payload.org);

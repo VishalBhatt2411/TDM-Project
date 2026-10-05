@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, Query, UseGuards } from "@nestjs/common";
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import { AuditLogRepository } from "@tdm/domain";
 import { AUDIT_LOG_REPOSITORY } from "../infrastructure/tokens";
 import { StaffAuthGuard } from "./staff-auth.guard";
@@ -13,10 +13,12 @@ import { StaffAccess } from "./staff-access";
 class QueryAuditLogDto {
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   entityType?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   actorId?: string;
 
   @IsOptional()

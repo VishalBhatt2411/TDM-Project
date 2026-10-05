@@ -41,6 +41,8 @@ export interface BookingSchedule {
   checkInOpensMinutes?: number;
   /** Days after a completed drive without a sale that the customer is sent a follow-up. */
   followUpDays?: number[];
+  /** Wall-clock time ("HH:MM") on the dealership's clock from which the "your drive is today" reminder goes out. */
+  dayOfReminderTime?: string;
   closures?: Closure[];
 }
 
@@ -52,6 +54,7 @@ export interface ResolvedBookingSchedule {
   cancellationCutoffMinutes: number;
   checkInOpensMinutes: number;
   followUpDays: number[];
+  dayOfReminderTime: string;
   /** Every scope's closures and the data provider's holidays, by date. */
   closures: Closure[];
 }
@@ -86,6 +89,7 @@ export const MAX_CLOSURE_NAME = 80;
 export const DEFAULT_CANCELLATION_CUTOFF_MINUTES = 2 * 60;
 export const DEFAULT_CHECK_IN_OPENS_MINUTES = 60;
 export const DEFAULT_FOLLOW_UP_DAYS: readonly number[] = [3, 7, 14];
+export const DEFAULT_DAY_OF_REMINDER_TIME = "08:00";
 
 /** Every field a schedule layer can set. */
 export const BOOKING_SCHEDULE_FIELDS = [
@@ -96,6 +100,7 @@ export const BOOKING_SCHEDULE_FIELDS = [
   "cancellationCutoffMinutes",
   "checkInOpensMinutes",
   "followUpDays",
+  "dayOfReminderTime",
   "closures",
 ] as const satisfies readonly (keyof BookingSchedule)[];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -180,6 +185,10 @@ function parseFollowUpDays(raw: unknown): number[] {
   return days;
 }
 
+function parseDayOfReminderTime(raw: unknown): string {
+  return formatWallTime(minutesOf(raw, "dayOfReminderTime"));
+}
+
 /** "YYYY-MM-DD" that is a real calendar date. */
 export function isIsoDate(value: unknown): value is string {
   if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
@@ -256,6 +265,9 @@ export function parseBookingSchedule(raw: unknown): BookingSchedule {
     schedule.checkInOpensMinutes = parseStepMinutes(raw.checkInOpensMinutes, "checkInOpensMinutes", CHECK_IN_OPENS_RANGE);
   }
   if (raw.followUpDays !== undefined && raw.followUpDays !== null) schedule.followUpDays = parseFollowUpDays(raw.followUpDays);
+  if (raw.dayOfReminderTime !== undefined && raw.dayOfReminderTime !== null) {
+    schedule.dayOfReminderTime = parseDayOfReminderTime(raw.dayOfReminderTime);
+  }
   if (raw.closures !== undefined && raw.closures !== null) schedule.closures = parseClosures(raw.closures);
   return schedule;
 }
@@ -279,6 +291,7 @@ export function resolveBookingSchedule(
     cancellationCutoffMinutes: pick("cancellationCutoffMinutes") ?? DEFAULT_CANCELLATION_CUTOFF_MINUTES,
     checkInOpensMinutes: pick("checkInOpensMinutes") ?? DEFAULT_CHECK_IN_OPENS_MINUTES,
     followUpDays: pick("followUpDays") ?? [...DEFAULT_FOLLOW_UP_DAYS],
+    dayOfReminderTime: pick("dayOfReminderTime") ?? DEFAULT_DAY_OF_REMINDER_TIME,
     closures: [...layers.flatMap((layer) => layer.closures ?? []), ...providerClosures].sort((a, b) => a.date.localeCompare(b.date)),
   };
 }

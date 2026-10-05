@@ -4,7 +4,8 @@ Everything runs on free tiers. One Vercel project serves both the web app (stati
 and the API (one Node function, `api/index.js`, wrapping `apps/api/src/serverless.ts`). The
 platform store is a Neon Postgres. Because a serverless host has no long-running process, the API
 runs with `SCHEDULER_MODE=external` and `.github/workflows/scheduled-jobs.yml` triggers the
-reminder (15 min) and follow-up (daily, 10:00 UTC) jobs over HTTPS.
+reminder (15 min), follow-up (daily, 10:00 UTC) and housekeeping purge (daily, 03:30 UTC;
+removes expired OTPs/tokens and old reminder markers) jobs over HTTPS.
 
 The same build still runs as a long-running server (`node apps/api/dist/main.js`, default
 `SCHEDULER_MODE=in-process`) on any container host.
@@ -35,6 +36,7 @@ Environment variables (Production):
 | `SF_OAUTH_REDIRECT_URI` | `https://<tenant host>/api/v1/admin/auth/salesforce/callback` |
 | `SF_ONBOARDING_REDIRECT_URI` | `https://<tenant host>/api/v1/onboarding/salesforce/callback` |
 | `ANTHROPIC_API_KEY` | optional (AI licence check) |
+| `ANTHROPIC_MODEL` | optional (defaults to `claude-sonnet-5-5`) |
 | `PLATFORM_OPERATOR_PASSWORD_HASH` | optional; enables the operator console (below) |
 
 Domains: each company has one customer site, `<company slug>.<TENANT_BASE_DOMAIN>`, shared by all
@@ -47,6 +49,8 @@ its dealerships. On `*.vercel.app` add each company host as a project domain (e.
 In the GitHub repo set variable `APP_URL` (`https://<tenant host>`) and secret
 `JOB_TRIGGER_SECRET`. The workflow is inert until `APP_URL` exists. Run any job on demand from
 Actions → Scheduled jobs → Run workflow.
+
+Onboarding setup links expire 7 days after they are issued; **Reconnect** in the operator console issues a fresh one.
 
 ## 4. Salesforce
 

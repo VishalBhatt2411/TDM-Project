@@ -583,6 +583,8 @@ export interface BookingScheduleLayerDto {
   checkInOpensMinutes?: number;
   /** Days after a completed drive with no sale to send a follow-up; an empty list sends none. */
   followUpDays?: number[];
+  /** Time of day ("HH:MM", on the showroom's clock) from which the "your drive is today" reminder is emailed. */
+  dayOfReminderTime?: string;
   /** This scope's own closures — they add to the company's and the org's holidays. */
   closures?: ClosureDto[];
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   Booking,
   BookingConflictChecker,
@@ -9,7 +9,7 @@ import {
   BranchRepository,
   CustomerRepository,
   DriveFeedback,
-  PersonName,
+  ExclusiveLock,
   phoneNumberFromInput,
   SalesOpportunity,
   SalesOpportunityRepository,
@@ -23,6 +23,7 @@ import {
   BOOKING_REPOSITORY,
   BRANCH_REPOSITORY,
   CUSTOMER_REPOSITORY,
+  EXCLUSIVE_LOCK,
   SALES_OPPORTUNITY_REPOSITORY,
   SALES_REP_REPOSITORY,
   VEHICLE_REPOSITORY,
@@ -35,7 +36,6 @@ import { FeatureFlagService } from "../config/feature-flag.service";
 import { BookingMutationService } from "./booking-mutation.service";
 import { CheckInToken, QrCheckinService } from "./qr-checkin.service";
 import { CancelBookingDto, CreateBookingDto, CreatePublicBookingDto, RescheduleBookingDto, SubmitSurveyDto } from "./dto";
-import { errorCodeOf } from "../common/error-code";
 
 export function bookingToDto(booking: Booking): BookingDto {
   const props = booking.toProps();
@@ -77,6 +77,7 @@ export class BookingsService {
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(SALES_OPPORTUNITY_REPOSITORY) private readonly opportunities: SalesOpportunityRepository,
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
+    @Inject(EXCLUSIVE_LOCK) private readonly locks: ExclusiveLock,
     private readonly authService: AuthService,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
@@ -108,7 +109,10 @@ export class BookingsService {
    * come back and manage their bookings — no password ever changes hands.
    */
   async createPublic(dto: CreatePublicBookingDto): Promise<BookingDto & { conflictChecked: true }> {
-    // Validated before any account is created or updated, so a bad request leaves no trace.
+    // Validated before any account is created, so a malformed request leaves no trace.
+    if (dto.driveType === "Home" && !dto.homeAddress) {
+      throw new BadRequestException("A home address is required for a home test drive.");
+    }
     const branch = await this.resolveBookingBranch(dto);
     const { phoneCountryCode } = await this.regional.resolve(branch.dealershipId);
     const submittedPhone = phoneNumberFromInput(dto.mobileNumber, phoneCountryCode);
@@ -123,28 +127,10 @@ export class BookingsService {
         phone: submittedPhone,
       });
       isNewAccount = true;
-    } else {
-      // A returning customer's details can change between bookings (typo fix, new
-      // number, booking for a different name) — keep the record in sync with what
-      // was actually submitted on this form rather than silently keeping stale data.
-      // This is a best-effort enrichment, not part of the booking's critical path:
-      // a Salesforce write failure here must never block the booking itself.
-      try {
-        const submittedName = PersonName.create(dto.firstName, dto.lastName);
-        if (
-          submittedPhone.value !== customer.phone.value ||
-          submittedName.firstName !== customer.name.firstName ||
-          submittedName.lastName !== customer.name.lastName
-        ) {
-          customer.updateContactDetails({ name: submittedName, phone: submittedPhone });
-          await this.customers.save(customer);
-        }
-      } catch (error) {
-        this.logger.warn(
-          JSON.stringify({ event: "customer_contact_sync_failed", customerId: customer.id, errorCode: errorCodeOf(error) }),
-        );
-      }
     }
+    // An existing account is deliberately left untouched: this endpoint is unauthenticated, so the
+    // submitted name/phone are unproven — letting them overwrite a stored profile would let anyone who
+    // knows an email address rewrite that customer's contact details.
 
     const booking = await this.createBookingInternal(customer.id, dto, branch);
     const customerName = `${customer.name.firstName} ${customer.name.lastName}`;
@@ -157,7 +143,10 @@ export class BookingsService {
     // skip a redundant lookup, but a *returning* customer whose account was itself auto-registered
     // and never had its password set (e.g. from before this check existed) must get the same
     // password-setup email, not a magic link, on every booking until they actually set one.
-    if (isNewAccount || (await this.authService.needsPasswordSetup(customer.id))) {
+    // The same goes for an account its owner never verified: anyone can self-register an email address they don't
+    // control, with a password of their choosing. A magic link would sign the real owner into that account, whereas
+    // the setup link lets them replace the password the squatter knows (a reset also ends the squatter's sessions).
+    if (isNewAccount || !customer.isFullyVerified || (await this.authService.needsPasswordSetup(customer.id))) {
       await this.authService.issuePasswordSetupEmail(customer.id, customer.email.value, customerName, isNewAccount);
     } else {
       const magicLink = await this.authService.issueMagicLoginLink(customer.id);
@@ -203,6 +192,19 @@ export class BookingsService {
 
   async submitSurvey(customerId: string, bookingId: string, dto: SubmitSurveyDto): Promise<{ opportunityCreated: boolean }> {
     const booking = await this.requireOwnedBooking(customerId, bookingId);
+    // A survey is about a drive that happened, and a drive is surveyed once — otherwise a customer could
+    // mint sales opportunities from bookings that never took place, or repeat a submission for more.
+    if (booking.status !== "Completed") {
+      throw new BadRequestException("A survey can only be submitted for a completed test drive.");
+    }
+    // Check-then-write: serialised per booking so a double submit can't store two surveys or mint two opportunities.
+    return this.locks.runExclusive(`survey:${booking.id}`, () => this.recordSurvey(booking, dto));
+  }
+
+  private async recordSurvey(booking: Booking, dto: SubmitSurveyDto): Promise<{ opportunityCreated: boolean }> {
+    if ((await this.bookings.findFeedbackByBooking(booking.id))?.isSurveyResponse) {
+      throw new ConflictException("A survey has already been submitted for this test drive.");
+    }
 
     const interestLevel = dto.npsScore >= 8 || dto.purchaseInterest ? "High" : dto.npsScore >= 5 ? "Medium" : "Low";
     const feedback = DriveFeedback.create({
@@ -223,15 +225,20 @@ export class BookingsService {
     await this.bookings.saveFeedback(feedback);
 
     // Strong purchase intent auto-triggers the sales opportunity workflow.
-    if (feedback.indicatesStrongIntent) {
-      await this.opportunities.save(
-        SalesOpportunity.create({
-          bookingId: booking.id,
-          customerId: booking.customerId,
-          vehicleId: booking.vehicleId,
-        }),
-      );
-      return { opportunityCreated: true };
+    if (feedback.indicatesStrongIntent && !(await this.opportunities.findByBooking(booking.id))) {
+      try {
+        await this.opportunities.save(
+          SalesOpportunity.create({
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            vehicleId: booking.vehicleId,
+          }),
+        );
+        return { opportunityCreated: true };
+      } catch (err) {
+        // The survey itself is stored; failing the customer's submission over the sales follow-up would only invite a retry that 409s.
+        this.logger.error(JSON.stringify({ event: "opportunity_create_failed", bookingId: booking.id, error: (err as Error).message }));
+      }
     }
     return { opportunityCreated: false };
   }
@@ -244,6 +251,7 @@ export class BookingsService {
   private async resolveBookingBranch(dto: CreateBookingDto): Promise<Branch> {
     const [vehicle, branch] = await Promise.all([this.vehicles.findById(dto.vehicleId), this.branches.findById(dto.branchId)]);
     if (!vehicle) throw new NotFoundException("Vehicle not found.");
+    if (!vehicle.isBookable) throw new BadRequestException("This vehicle is not available for test drives.");
     if (vehicle.branchId !== dto.branchId) {
       throw new BadRequestException("This vehicle can only be test-driven at the branch that stocks it.");
     }
@@ -253,6 +261,26 @@ export class BookingsService {
   }
 
   private async createBookingInternal(customerId: string, dto: CreateBookingDto, branch: Branch): Promise<Booking> {
+    // The "is the vehicle free?" check and the save must be one atomic step per vehicle, or two
+    // simultaneous requests both pass the check and double-book the same slot.
+    const { booking, assignedRepEmail, assignedRepName } = await this.locks.runExclusive(`vehicle:${dto.vehicleId}`, () =>
+      this.reserveBooking(customerId, dto, branch),
+    );
+
+    if (assignedRepEmail && assignedRepName) {
+      const emailCtx = await this.emailContext.build(booking);
+      if (emailCtx) await this.notifications.sendRepAssignment(assignedRepEmail, assignedRepName, emailCtx);
+    }
+
+    return booking;
+  }
+
+  /** Conflict check, rep assignment and save — callers hold the vehicle's exclusive lock. */
+  private async reserveBooking(
+    customerId: string,
+    dto: CreateBookingDto,
+    branch: Branch,
+  ): Promise<{ booking: Booking; assignedRepEmail?: string; assignedRepName?: string }> {
     const slot = TimeSlot.create(dto.slot.start, dto.slot.end);
 
     const conflictChecker = new BookingConflictChecker(this.bookings);
@@ -281,14 +309,18 @@ export class BookingsService {
       currentVehicleOwned: dto.currentVehicleOwned,
       purchaseTimeline: dto.purchaseTimeline,
       pickupRequired: dto.pickupRequired,
-      additionalNotes: dto.additionalNotes,
+      // The booking has no pickup-address field of its own; carry it in the notes the rep reads.
+      additionalNotes: [dto.additionalNotes, dto.pickupRequired && dto.pickupAddress ? `Pickup address: ${dto.pickupAddress}` : undefined]
+        .filter(Boolean)
+        .join("\n") || undefined,
     });
 
     let assignedRepEmail: string | undefined;
     let assignedRepName: string | undefined;
     if (joinWaitlist) {
+      // Highest position + 1, not a count: a cancelled waitlister leaves a gap that a count would reuse.
       const currentWaitlist = await this.bookings.findWaitlistedForVehicle(dto.vehicleId);
-      booking.waitlist(currentWaitlist.length + 1);
+      booking.waitlist(Math.max(0, ...currentWaitlist.map((w) => w.waitlistPosition ?? 0)) + 1);
     } else {
       // No conflict was found for this slot, so the booking is confirmed immediately —
       // "Requested" only persists for a booking that joined the waitlist (see waitlist()
@@ -308,13 +340,7 @@ export class BookingsService {
     }
 
     booking = await this.bookings.save(booking);
-
-    if (assignedRepEmail && assignedRepName) {
-      const emailCtx = await this.emailContext.build(booking);
-      if (emailCtx) await this.notifications.sendRepAssignment(assignedRepEmail, assignedRepName, emailCtx);
-    }
-
-    return booking;
+    return { booking, assignedRepEmail, assignedRepName };
   }
 
   private async sendConfirmation(booking: Booking, customerEmail: string, customerName: string): Promise<void> {
@@ -330,11 +356,9 @@ export class BookingsService {
 
   private async requireOwnedBooking(customerId: string, bookingId: string): Promise<Booking> {
     const booking = await this.bookings.findById(bookingId);
-    if (!booking) {
+    // Someone else's booking answers exactly like a missing one, so booking ids can't be probed.
+    if (!booking || booking.customerId !== customerId) {
       throw new NotFoundException(`Booking ${bookingId} was not found.`);
-    }
-    if (booking.customerId !== customerId) {
-      throw new ForbiddenException("This booking does not belong to you.");
     }
     return booking;
   }

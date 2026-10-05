@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   AuditLogRepository,
   Booking,
@@ -6,12 +6,13 @@ import {
   BookingRepository,
   BookingStatus,
   CustomerRepository,
+  ExclusiveLock,
   SalesRepRepository,
   TimeSlot,
   UNASSIGNED_ID,
   WaitlistPromotionService,
 } from "@tdm/domain";
-import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, SALES_REP_REPOSITORY } from "../infrastructure/tokens";
+import { AUDIT_LOG_REPOSITORY, BOOKING_REPOSITORY, CUSTOMER_REPOSITORY, EXCLUSIVE_LOCK, SALES_REP_REPOSITORY } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import { BookingEmailContextService } from "../notifications/booking-email-context.service";
 import { BookingAudience, BookingScheduleService } from "../config/booking-schedule.service";
@@ -27,11 +28,14 @@ export const SLOT_OCCUPYING_STATUSES: ReadonlySet<BookingStatus> = new Set(["Req
  */
 @Injectable()
 export class BookingMutationService {
+  private readonly logger = new Logger(BookingMutationService.name);
+
   constructor(
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(CUSTOMER_REPOSITORY) private readonly customers: CustomerRepository,
     @Inject(SALES_REP_REPOSITORY) private readonly salesReps: SalesRepRepository,
     @Inject(AUDIT_LOG_REPOSITORY) private readonly auditLog: AuditLogRepository,
+    @Inject(EXCLUSIVE_LOCK) private readonly locks: ExclusiveLock,
     private readonly notifications: NotificationsService,
     private readonly emailContext: BookingEmailContextService,
     private readonly schedule: BookingScheduleService,
@@ -57,17 +61,24 @@ export class BookingMutationService {
       metadata: { reason },
     });
 
-    if (emailCtx) {
-      const customer = await this.customers.findById(booking.customerId);
-      if (customer) await this.notifications.sendCancellation(customer.email.value, emailCtx, reason);
-      if (booking.salesRepId) {
-        const rep = await this.salesReps.findById(booking.salesRepId);
-        if (rep) await this.notifications.sendCancellation(rep.toProps().email, emailCtx, reason);
-      }
-    }
-
+    // The cancellation is committed. Waitlist promotion and e-mail are best-effort follow-ups: a
+    // failure in either must not turn a successful cancel into a 500 (whose retry would then be
+    // refused as an illegal state change) or leave the next waitlisted customer unpromoted.
     if (freesSlot) {
-      await this.promoteNextWaitlisted(booking.vehicleId);
+      await this.bestEffort("waitlist_promotion_failed", booking.id, () => this.promoteNextWaitlisted(booking.vehicleId));
+    }
+    if (emailCtx) {
+      await this.bestEffort("cancellation_email_failed", booking.id, async () => {
+        const customer = await this.customers.findById(booking.customerId);
+        if (customer) await this.notifications.sendCancellation(customer.email.value, emailCtx, reason);
+        if (booking.salesRepId) {
+          const rep = await this.salesReps.findById(booking.salesRepId);
+          if (rep) {
+            const { email, name } = rep.toProps();
+            await this.notifications.sendCancellation(email, emailCtx, reason, { kind: "rep", name });
+          }
+        }
+      });
     }
 
     return booking;
@@ -87,9 +98,6 @@ export class BookingMutationService {
       this.schedule.cancellationCutoffMinutes(booking.dealershipId, audience),
     ]);
 
-    const conflictChecker = new BookingConflictChecker(this.bookings);
-    await conflictChecker.assertNoConflict(booking.vehicleId, newSlot);
-
     // Throws CancellationWindowExpiredError (-> 400) if past the dealership's cutoff.
     // UNASSIGNED_ID, not a client-generated id — the repository only creates a new
     // Salesforce record (vs. attempting to update a nonexistent one) when it sees
@@ -99,8 +107,23 @@ export class BookingMutationService {
     // a Salesforce hiccup), the original booking must still be safely in place; nothing
     // has been cancelled yet. Only once the new booking exists do we cancel the old one.
     const newBooking = booking.reschedule(newSlot, UNASSIGNED_ID, cutoffMinutes);
-    const saved = await this.bookings.save(newBooking);
-    await this.bookings.save(booking);
+    // The new slot must clear the conflict check, so — like a fresh booking that clears it — it is
+    // Confirmed. Left as Requested it could never be checked in, started, or marked a no-show.
+    newBooking.confirm();
+    // Check and save under the vehicle's lock: two simultaneous reschedules/bookings into the same slot
+    // must not both pass the check.
+    const saved = await this.locks.runExclusive(`vehicle:${booking.vehicleId}`, async () => {
+      await new BookingConflictChecker(this.bookings).assertNoConflict(booking.vehicleId, newSlot, booking.id);
+      return this.bookings.save(newBooking);
+    });
+    try {
+      await this.bookings.save(booking);
+    } catch (err) {
+      // Never leave the customer holding two active bookings: withdraw the replacement.
+      saved.cancel("Reschedule could not be completed", 0);
+      await this.bookings.save(saved).catch(() => undefined);
+      throw err;
+    }
 
     await this.auditLog.append({
       actorId,
@@ -111,27 +134,39 @@ export class BookingMutationService {
       metadata: { previousBookingId: booking.id },
     });
 
-    const emailCtx = await this.emailContext.build(saved);
-    if (emailCtx) {
+    if (freesSlot) {
+      await this.bestEffort("waitlist_promotion_failed", booking.id, () => this.promoteNextWaitlisted(booking.vehicleId));
+    }
+    await this.bestEffort("reschedule_email_failed", saved.id, async () => {
+      const emailCtx = await this.emailContext.build(saved);
+      if (!emailCtx) return;
       const customer = await this.customers.findById(saved.customerId);
       if (customer) await this.notifications.sendReschedule(customer.email.value, emailCtx, previousStart);
       if (saved.salesRepId) {
         const rep = await this.salesReps.findById(saved.salesRepId);
-        if (rep) await this.notifications.sendReschedule(rep.toProps().email, emailCtx, previousStart);
+        if (rep) {
+          const { email, name } = rep.toProps();
+          await this.notifications.sendReschedule(email, emailCtx, previousStart, { kind: "rep", name });
+        }
       }
-    }
-
-    if (freesSlot) {
-      await this.promoteNextWaitlisted(booking.vehicleId);
-    }
+    });
 
     return saved;
+  }
+
+  /** Runs a post-commit follow-up whose failure must be logged, not surfaced to a caller whose change already succeeded. */
+  private async bestEffort(event: string, bookingId: string, work: () => Promise<void>): Promise<void> {
+    try {
+      await work();
+    } catch (err) {
+      this.logger.error(JSON.stringify({ event, bookingId, reason: (err as Error).message }));
+    }
   }
 
   /** Confirms the earliest-position waitlisted booking for a vehicle once a slot frees up, and notifies the customer. */
   private async promoteNextWaitlisted(vehicleId: string): Promise<void> {
     const promotionService = new WaitlistPromotionService(this.bookings);
-    const promoted = await promotionService.promoteNextFor(vehicleId);
+    const promoted = await this.locks.runExclusive(`vehicle:${vehicleId}`, () => promotionService.promoteNextFor(vehicleId));
     if (!promoted) return;
 
     const emailCtx = await this.emailContext.build(promoted);

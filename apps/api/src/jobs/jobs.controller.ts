@@ -3,6 +3,7 @@ import { SkipThrottle } from "@nestjs/throttler";
 import { ReminderScheduler } from "../bookings/reminder.scheduler";
 import { FollowUpScheduler } from "../bookings/followup.scheduler";
 import { JobTriggerGuard } from "./job-trigger.guard";
+import { PurgeScheduler } from "./purge.scheduler";
 
 /**
  * HTTP triggers for the background jobs when SCHEDULER_MODE=external (serverless hosting). Each job
@@ -16,10 +17,11 @@ export class JobsController {
   private readonly logger = new Logger(JobsController.name);
   private readonly jobs: Record<string, () => Promise<void>>;
 
-  constructor(reminders: ReminderScheduler, followUps: FollowUpScheduler) {
+  constructor(reminders: ReminderScheduler, followUps: FollowUpScheduler, purge: PurgeScheduler) {
     this.jobs = {
       reminders: () => reminders.sendDueReminders(),
       "follow-ups": () => followUps.sendDueFollowUps(),
+      purge: () => purge.purgeExpiredRows(),
     };
   }
 

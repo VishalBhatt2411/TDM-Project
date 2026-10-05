@@ -30,6 +30,8 @@ model OtpCode {
   codeHash   String
   expiresAt  DateTime
   consumedAt DateTime?
+  // Wrong guesses so far; the code is dead after MAX_OTP_ATTEMPTS (a 6-digit space is brute-forceable otherwise).
+  attempts   Int       @default(0)
   createdAt  DateTime  @default(now())
 
   @@index([customerId])
@@ -69,23 +71,28 @@ model AuditLogEntry {
 
 // Tracks which scheduled reminders have already been sent for a booking, so the
 // reminder cron job never double-sends when it re-scans the same time window.
+// bookingId is a data-provider record Id, unique only within one tenant's org — hence the composite key.
 model ReminderLog {
-  id           String   @id @default(uuid())
-  bookingId    String
-  reminderType String // "24h" | "2h" | "day_of"
-  sentAt       DateTime @default(now())
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bookingId      String
+  reminderType   String // "24h" | "2h" | "day_of"
+  sentAt         DateTime     @default(now())
 
-  @@unique([bookingId, reminderType])
+  @@unique([organizationId, bookingId, reminderType])
 }
 
 // Tracks which no-purchase follow-up emails have already been sent per booking.
 model FollowUpLog {
-  id           String   @id @default(uuid())
-  bookingId    String
-  intervalDays Int
-  sentAt       DateTime @default(now())
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bookingId      String
+  intervalDays   Int
+  sentAt         DateTime     @default(now())
 
-  @@unique([bookingId, intervalDays])
+  @@unique([organizationId, bookingId, intervalDays])
 }
 
 // One-click sign-in links emailed to customers whose account was auto-created
@@ -196,14 +203,18 @@ model Organization {
   // SHA-256 of the setup token issued once to the onboarding wizard that created this company —
   // its public endpoints require the token, not just the organization id (see OnboardingTokenGuard).
   onboardingTokenHash  String?
+  // The setup token stops working after this instant (see ONBOARDING_TOKEN_TTL_MS); a platform
+  // "reset connection" issues a fresh one.
+  onboardingTokenExpiresAt DateTime?
   // Bumped whenever the master encryption key is rotated, so a future migration
   // knows which key to decrypt sfConsumerSecretEnc/sfRefreshTokenEnc with.
   encryptionKeyVersion Int       @default(1)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  staffUsers  StaffUser[]
-  oauthStates StaffOAuthState[]
-  auditLog    AuditLogEntry[]
+  staffUsers   StaffUser[]
+  oauthStates  StaffOAuthState[]
+  auditLog     AuditLogEntry[]
+  reminderLogs ReminderLog[]
+  followUpLogs FollowUpLog[]
 }
-

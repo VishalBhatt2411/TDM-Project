@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { LayoutDashboard, LogOut, ShieldCheck, Users, Calendar, ToggleLeft, ScrollText, MapPin, Car, Activity, Mail, Palette } from "lucide-react";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { cn } from "@/lib/utils";
@@ -29,21 +29,30 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/admin/system-health", label: "System Health", icon: Activity, permission: "manage_config", companyAdminOnly: true },
 ];
 
+function canAccess(item: NavItem, hasPermission: (key: string) => boolean, isCompanyAdmin: boolean | undefined) {
+  return (!item.permission || hasPermission(item.permission)) && (!item.companyAdminOnly || !!isCompanyAdmin);
+}
+
 export function AdminLayout() {
   const { staff, logout, hasPermission } = useAdminAuth();
   const location = useLocation();
 
+  // The nav hides pages a role can't use, but a typed or bookmarked URL must not render them either
+  // (the API would 403 every call, leaving an empty or error-filled page).
+  const requested = NAV_ITEMS.find((item) => item.to === location.pathname);
+  if (requested && !canAccess(requested, hasPermission, staff?.isCompanyAdmin)) {
+    return <Navigate to="/admin/bookings" replace />;
+  }
+
   return (
-    <div className="flex min-h-screen bg-muted/30">
-      <aside className="flex w-64 flex-col border-r bg-background">
+    <div className="flex min-h-screen flex-col bg-muted/30 md:flex-row">
+      <aside className="flex w-full flex-col border-b bg-background md:w-64 md:shrink-0 md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 border-b px-5 py-4">
           <ShieldCheck className="h-5 w-5 text-primary" />
           <span className="font-semibold">Admin Console</span>
         </div>
-        <nav className="flex-1 space-y-1 p-3">
-          {NAV_ITEMS.filter(
-            (item) => (!item.permission || hasPermission(item.permission)) && (!item.companyAdminOnly || staff?.isCompanyAdmin),
-          ).map((item) => {
+        <nav className="flex gap-1 overflow-x-auto p-3 md:block md:flex-1 md:space-y-1 md:overflow-visible">
+          {NAV_ITEMS.filter((item) => canAccess(item, hasPermission, staff?.isCompanyAdmin)).map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.to;
             return (
@@ -51,7 +60,7 @@ export function AdminLayout() {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium",
+                  "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium",
                   isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
                 )}
               >
@@ -74,7 +83,7 @@ export function AdminLayout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-x-auto">
+      <main className="min-w-0 flex-1 overflow-x-auto">
         <RouteErrorBoundary key={location.pathname}>
           <Outlet />
         </RouteErrorBoundary>

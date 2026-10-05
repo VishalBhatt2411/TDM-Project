@@ -4,6 +4,7 @@ import { IsInt, IsOptional, Max, Min } from "class-validator";
 import { AuthenticatedUser, JwtAuthGuard } from "../common/jwt-auth.guard";
 import { CurrentUser } from "../common/current-user.decorator";
 import { CustomersService } from "./customers.service";
+import { ParseRecordIdPipe } from "../common/record-id";
 import { AddWishlistItemDto } from "./dto";
 
 class RecommendationsQueryDto {
@@ -37,7 +38,7 @@ export class CustomersController {
   }
 
   @Delete("wishlist/:vehicleId")
-  removeFromWishlist(@CurrentUser() user: AuthenticatedUser, @Param("vehicleId") vehicleId: string) {
+  removeFromWishlist(@CurrentUser() user: AuthenticatedUser, @Param("vehicleId", ParseRecordIdPipe) vehicleId: string) {
     return this.customersService.removeFromWishlist(user.customerId, vehicleId);
   }
 

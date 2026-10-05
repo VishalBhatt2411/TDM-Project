@@ -34,6 +34,16 @@ function createdInPeriod(window: AnalyticsWindow): string {
   return `CreatedDate >= ${analyticsPeriodStart(window).toISOString()}`;
 }
 
+/**
+ * ` AND ...` excluding the old half of a reschedule: rescheduling cancels the booking and creates a
+ * replacement (see Booking.reschedule), so counting both would report one visit twice and a cancellation nobody made.
+ */
+const NOT_RESCHEDULED = " AND Cancellation_Reason__c != 'Rescheduled'";
+/** Statuses of a drive that is, or was, going ahead. */
+const LIVE_STATUSES = "('Requested','Confirmed','InProgress','Completed')";
+/** Vehicles a customer can actually book — sold or in-maintenance stock isn't capacity. */
+const BOOKABLE_VEHICLE_STATUSES = new Set(["Available", "Reserved", "In_Drive"]);
+
 export class SalesforceAnalyticsRepository implements AnalyticsRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
 
@@ -46,6 +56,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
       const startsToday =
         `Scheduled_Start__c >= ${window.today.start.toISOString()} AND Scheduled_Start__c <= ${window.today.end.toISOString()}`;
       const inPeriod = createdInPeriod(window);
+      const bookingFilter = branchFilter + NOT_RESCHEDULED;
 
       const [
         todaysTestDrives,
@@ -61,8 +72,9 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
         vehicleDemandResult,
         npsResult,
         satisfactionResult,
+        bookedVehiclesToday,
       ] = await Promise.all([
-        conn.query(`SELECT COUNT() FROM Booking__c WHERE ${startsToday}${branchFilter}`),
+        conn.query(`SELECT COUNT() FROM Booking__c WHERE ${startsToday} AND Status__c IN ${LIVE_STATUSES}${branchFilter}`),
         conn.query(
           `SELECT COUNT() FROM Booking__c WHERE Scheduled_Start__c > ${nowIso} AND Status__c IN ('Requested','Confirmed')${branchFilter}`,
         ),
@@ -70,14 +82,14 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
           `SELECT Status__c s, COUNT(Id) cnt FROM Vehicle__c WHERE Branch__c != null${branchFilter} GROUP BY Status__c`,
         ),
         conn.query(
-          `SELECT Status__c s, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod}${branchFilter} GROUP BY Status__c`,
+          `SELECT Status__c s, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod}${bookingFilter} GROUP BY Status__c`,
         ),
         conn.query(
           `SELECT COUNT() FROM Opportunity WHERE ${inPeriod} AND Booking__c != null${bookingPathFilter}`,
         ),
-        bookingsPerDay(conn, window.days, branchFilter),
+        bookingsPerDay(conn, window.days, bookingFilter),
         conn.query(
-          `SELECT Branch__c b, Branch__r.Name bn, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod}${branchFilter} ` +
+          `SELECT Branch__c b, Branch__r.Name bn, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod}${bookingFilter} ` +
             `GROUP BY Branch__c, Branch__r.Name`,
         ),
         conn.query(
@@ -89,7 +101,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
           // owned by it (see SalesforceConnectionSource.getIntegrationUserId), so without
           // this filter "unassigned" shows up as a phantom sales rep in the results.
           `SELECT OwnerId r, Owner.Name rn, COUNT(Id) cnt FROM Booking__c ` +
-            `WHERE ${inPeriod} AND OwnerId != '${escapeSoql(integrationUserId)}'${branchFilter} GROUP BY OwnerId, Owner.Name`,
+            `WHERE ${inPeriod} AND OwnerId != '${escapeSoql(integrationUserId)}'${bookingFilter} GROUP BY OwnerId, Owner.Name`,
         ),
         conn.query(
           `SELECT OwnerId r, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod} ` +
@@ -97,30 +109,38 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
         ),
         conn.query(
           `SELECT Vehicle__c v, Vehicle__r.Make__c mk, Vehicle__r.Model__c md, COUNT(Id) cnt FROM Booking__c ` +
-            `WHERE ${inPeriod}${branchFilter} GROUP BY Vehicle__c, Vehicle__r.Make__c, Vehicle__r.Model__c ` +
+            `WHERE ${inPeriod}${bookingFilter} GROUP BY Vehicle__c, Vehicle__r.Make__c, Vehicle__r.Model__c ` +
             `ORDER BY COUNT(Id) DESC LIMIT 5`,
         ),
-        conn.query(`SELECT AVG(NPS_Score__c) avgNps FROM Drive_Feedback__c WHERE NPS_Score__c != null${bookingPathFilter}`),
+        conn.query(
+          `SELECT AVG(NPS_Score__c) avgNps FROM Drive_Feedback__c WHERE ${inPeriod} AND NPS_Score__c != null${bookingPathFilter}`,
+        ),
         conn.query(
           `SELECT AVG(Dealership_Experience_Rating__c) avgSat FROM Drive_Feedback__c ` +
-            `WHERE Dealership_Experience_Rating__c != null${bookingPathFilter}`,
+            `WHERE ${inPeriod} AND Dealership_Experience_Rating__c != null${bookingPathFilter}`,
+        ),
+        conn.query(
+          `SELECT Vehicle__c v, COUNT(Id) cnt FROM Booking__c WHERE ${startsToday} AND Vehicle__c != null ` +
+            `AND Status__c IN ('Confirmed','InProgress','Completed')${branchFilter} GROUP BY Vehicle__c LIMIT ${MAX_AGGREGATE_GROUPS}`,
         ),
       ]);
 
       const vehicleRows = vehicleCounts.records as any[];
-      const totalVehicles = vehicleRows.reduce((sum, r) => sum + r.cnt, 0);
-      const inUseVehicles = vehicleRows
-        .filter((r) => r.s === "In_Drive" || r.s === "Reserved")
-        .reduce((sum, r) => sum + r.cnt, 0);
-      const vehicleUtilizationPct = totalVehicles > 0 ? (inUseVehicles / totalVehicles) * 100 : 0;
+      const bookableVehicles = vehicleRows.filter((r) => BOOKABLE_VEHICLE_STATUSES.has(r.s)).reduce((sum, r) => sum + r.cnt, 0);
+      // Vehicle status is set by hand (nothing flips a car to In_Drive), so utilisation is measured from
+      // the bookings instead: the share of bookable vehicles with a drive going ahead today.
+      const vehiclesDrivenToday = (bookedVehiclesToday.records as unknown[]).length;
+      const vehicleUtilizationPct = bookableVehicles > 0 ? Math.min(100, (vehiclesDrivenToday / bookableVehicles) * 100) : 0;
 
       const cancellationRows = cancellationCounts.records as any[];
-      const totalBookings30d = cancellationRows.reduce((sum, r) => sum + r.cnt, 0);
-      const cancelled30d = cancellationRows.filter((r) => r.s === "Cancelled").reduce((sum, r) => sum + r.cnt, 0);
-      const cancellationRatePct = totalBookings30d > 0 ? (cancelled30d / totalBookings30d) * 100 : 0;
+      const bookingsInPeriod = cancellationRows.reduce((sum, r) => sum + r.cnt, 0);
+      const cancelledInPeriod = cancellationRows.filter((r) => r.s === "Cancelled").reduce((sum, r) => sum + r.cnt, 0);
+      const cancellationRatePct = bookingsInPeriod > 0 ? (cancelledInPeriod / bookingsInPeriod) * 100 : 0;
 
-      const opportunities30d = (conversionCounts as any).totalSize ?? 0;
-      const conversionRatePct = totalBookings30d > 0 ? (opportunities30d / totalBookings30d) * 100 : 0;
+      // Only a completed drive can convert, so that — not every request, waitlisting or cancellation — is the base.
+      const completedInPeriod = cancellationRows.filter((r) => r.s === "Completed").reduce((sum, r) => sum + r.cnt, 0);
+      const opportunitiesInPeriod = (conversionCounts as any).totalSize ?? 0;
+      const conversionRatePct = completedInPeriod > 0 ? Math.min(100, (opportunitiesInPeriod / completedInPeriod) * 100) : 0;
 
       const branchConversionsById = new Map<string, number>(
         (branchConversionResult.records as any[]).map((r) => [r.b, r.cnt]),
@@ -153,8 +173,8 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
           label: `${r.mk ?? ""} ${r.md ?? ""}`.trim(),
           count: r.cnt,
         })),
-        averageNpsScore: (npsResult.records[0] as any)?.avgNps ?? null,
-        averageSatisfactionRating: (satisfactionResult.records[0] as any)?.avgSat ?? null,
+        averageNpsScore: roundOrNull((npsResult.records[0] as any)?.avgNps),
+        averageSatisfactionRating: roundOrNull((satisfactionResult.records[0] as any)?.avgSat),
       };
     });
   }
@@ -167,7 +187,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
 
       const [statusResult, opportunityResult] = await Promise.all([
         conn.query(
-          `SELECT Status__c s, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod}${branchFilter} GROUP BY Status__c`,
+          `SELECT Status__c s, COUNT(Id) cnt FROM Booking__c WHERE ${inPeriod}${branchFilter}${NOT_RESCHEDULED} GROUP BY Status__c`,
         ),
         conn.query(
           `SELECT COUNT() FROM Opportunity WHERE ${inPeriod} AND Booking__c != null${opportunityBranchFilter}`,
@@ -195,7 +215,7 @@ export class SalesforceAnalyticsRepository implements AnalyticsRepository {
       // Grouped per customer, so each is paged by customer Id past the 2,000-group cap.
       const [completedRows, activityRows, convertedRows] = await Promise.all([
         groupedByKey(conn, "Contact__c", "COUNT(Id) cnt", "Booking__c", `Status__c = 'Completed'${branchFilter}`),
-        groupedByKey(conn, "Contact__c", "MAX(CreatedDate) lastBookedAt", "Booking__c", `Id != null${branchFilter}`),
+        groupedByKey(conn, "Contact__c", "MAX(CreatedDate) lastBookedAt", "Booking__c", `Status__c != 'Cancelled'${branchFilter}`),
         groupedByKey(
           conn,
           "Booking__r.Contact__c",
@@ -319,4 +339,8 @@ async function bookingsPerDay(conn: Connection, days: AnalyticsDay[], branchFilt
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function roundOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" ? round1(value) : null;
 }

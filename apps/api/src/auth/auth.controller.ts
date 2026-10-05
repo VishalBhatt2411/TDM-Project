@@ -16,6 +16,8 @@ import {
 
 /** Tighter-than-default limit for brute-forceable/abuse-prone auth endpoints (credential guessing, OTP guessing, email-bombing via forgot-password). */
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+// Looser than a credential check — a signed-in SPA refreshes routinely — but tighter than the global default.
+const SESSION_THROTTLE = { default: { limit: 30, ttl: 60_000 } };
 
 @Controller("auth")
 export class AuthController {
@@ -55,6 +57,7 @@ export class AuthController {
   }
 
   @Post("refresh")
+  @Throttle(SESSION_THROTTLE)
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto);
@@ -62,6 +65,7 @@ export class AuthController {
 
   /** Revokes the presented refresh token. Always 204, so it reveals nothing about the token. */
   @Post("logout")
+  @Throttle(SESSION_THROTTLE)
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Body() dto: RefreshDto): Promise<void> {
     await this.authService.logout(dto);

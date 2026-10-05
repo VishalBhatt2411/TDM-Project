@@ -8,12 +8,22 @@ import { AUTH_REPOSITORY, CUSTOMER_PASSWORD_TOKEN_REPOSITORY, CUSTOMER_REPOSITOR
 import { NotificationsService } from "../notifications/notifications.service";
 import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateProfileDto, VerifyOtpDto } from "./dto";
 import { OTP_SENDER, OtpSender } from "./otp-sender";
-import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from "./auth.constants";
+import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS, TOKEN_TYPE } from "./auth.constants";
 import { TenantContext } from "../tenancy/tenant-context";
+import { runInBackground } from "../common/background-tasks";
+import { errorCodeOf } from "../common/error-code";
 
 const OTP_TTL_MINUTES = 10;
 const MAGIC_LINK_TTL_MS = 48 * 60 * 60 * 1000;
 const PASSWORD_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Verified against when the email is unknown, so a miss costs the same hashing time as a wrong password
+// and response timing doesn't reveal which emails have accounts.
+let unknownAccountHash: Promise<string> | undefined;
+function decoyPasswordHash(): Promise<string> {
+  unknownAccountHash ??= hashSecret(randomBytes(24).toString("hex"));
+  return unknownAccountHash;
+}
 
 @Injectable()
 export class AuthService {
@@ -50,7 +60,8 @@ export class AuthService {
 
     await this.issueOtp(customer);
 
-    return { customerId: customer.id, otpChannel: "sms" };
+    // OtpSender is the delivery channel; today it is email (see EmailOtpSender).
+    return { customerId: customer.id, otpChannel: "email" };
   }
 
   async verifyOtp(dto: VerifyOtpDto): Promise<{ verified: boolean }> {
@@ -71,6 +82,7 @@ export class AuthService {
   async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
     const customer = await this.customers.findByEmail(dto.email);
     if (!customer) {
+      await verifySecret(dto.password, await decoyPasswordHash());
       throw new UnauthorizedException("Invalid email or password.");
     }
     const credentials = await this.authRepo.findCredentials(customer.id);
@@ -84,22 +96,22 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshDto): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    let payload: { sub: string; scope?: string; org?: string };
+    let payload: { sub: string; scope?: string; org?: string; typ?: string };
     try {
-      payload = this.jwtService.verify<{ sub: string; scope?: string; org?: string }>(dto.refreshToken);
+      payload = this.jwtService.verify<{ sub: string; scope?: string; org?: string; typ?: string }>(dto.refreshToken);
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token.");
     }
-    if (payload.scope !== AUTH_SCOPE.CUSTOMER) {
+    if (payload.scope !== AUTH_SCOPE.CUSTOMER || payload.typ === TOKEN_TYPE.ACCESS) {
       throw new UnauthorizedException("This token is not valid for customer endpoints.");
     }
     // A customer id is a record in one tenant's org — its session is only ever valid on that tenant's host.
     TenantContext.bindSession(payload.org);
-    const isValid = await this.authRepo.isRefreshTokenValid(payload.sub, sha256Hex(dto.refreshToken));
-    if (!isValid) {
+    // Single-use and atomic: of two concurrent refreshes with the same token, exactly one wins.
+    const consumed = await this.authRepo.consumeRefreshToken(payload.sub, sha256Hex(dto.refreshToken));
+    if (!consumed) {
       throw new UnauthorizedException("Refresh token has been revoked.");
     }
-    await this.authRepo.revokeRefreshToken(payload.sub, sha256Hex(dto.refreshToken));
     return this.issueTokens(payload.sub);
   }
 
@@ -195,7 +207,10 @@ export class AuthService {
     const customer = await this.customers.findByEmail(dto.email);
     if (customer) {
       const name = `${customer.name.firstName} ${customer.name.lastName}`;
-      await this.issuePasswordSetupEmail(customer.id, customer.email.value, name, /* isNewAccount */ false);
+      // Not awaited: the mail round-trip would make "account exists" measurably slower than "doesn't".
+      runInBackground(this.issuePasswordSetupEmail(customer.id, customer.email.value, name, /* isNewAccount */ false)).catch((err) => {
+        this.logger.error(JSON.stringify({ event: "password_reset_email_failed", customerId: customer.id, errorCode: errorCodeOf(err) }));
+      });
     }
     return { message: "If an account exists for that email, a reset link has been sent." };
   }
@@ -207,6 +222,16 @@ export class AuthService {
     }
     const passwordHash = await hashSecret(dto.newPassword);
     await this.authRepo.saveCredentials({ customerId, passwordHash, isTemporary: false });
+    // A reset is how a compromised account gets recovered — sessions opened with the old password must end.
+    await this.authRepo.revokeAllRefreshTokens(customerId);
+    // The link went to the account's mailbox, which is the same proof the emailed OTP gives — so it also settles an
+    // account that was never verified, rather than leaving its owner with a password they still can't sign in with.
+    const customer = await this.customers.findById(customerId);
+    if (customer && !customer.isFullyVerified) {
+      customer.verifyEmail();
+      customer.verifyPhone();
+      await this.customers.save(customer);
+    }
     return { success: true };
   }
 
@@ -261,9 +286,11 @@ export class AuthService {
   private async issueTokens(customerId: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
     const organizationId = TenantContext.currentOrganizationId();
     if (!organizationId) throw new TenantContextMissingError();
-    const payload = { sub: customerId, scope: AUTH_SCOPE.CUSTOMER, org: organizationId };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_TTL });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: REFRESH_TOKEN_TTL });
+    const identity = { sub: customerId, scope: AUTH_SCOPE.CUSTOMER, org: organizationId };
+    const accessToken = this.jwtService.sign({ ...identity, typ: TOKEN_TYPE.ACCESS }, { expiresIn: ACCESS_TOKEN_TTL });
+    // `jti` keeps two refresh tokens minted for one customer in the same second distinct —
+    // they're stored by hash under a unique key, so identical tokens would collide.
+    const refreshToken = this.jwtService.sign({ ...identity, typ: TOKEN_TYPE.REFRESH, jti: randomUUID() }, { expiresIn: REFRESH_TOKEN_TTL });
     await this.authRepo.saveRefreshToken(customerId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
     return { accessToken, refreshToken, expiresIn: 15 * 60 };
   }

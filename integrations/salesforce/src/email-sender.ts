@@ -1,5 +1,5 @@
 import { SalesforceConnectionSource } from "./connection-source";
-import { providerErrorCode } from "./soql";
+import { providerErrorCode, withConnection } from "./soql";
 
 export interface SalesforceEmailMessage {
   to: string;
@@ -32,13 +32,14 @@ export class SalesforceEmailSender {
     private readonly logger: SalesforceEmailLogger,
   ) {}
 
-  async send(message: SalesforceEmailMessage): Promise<void> {
+  /** Resolves to whether Salesforce accepted the message. */
+  async send(message: SalesforceEmailMessage): Promise<boolean> {
     try {
-      const conn = await this.connectionSource.getConnection();
       const senderDisplayName = await this.resolveSenderDisplayName();
       // jsforce returns the raw response body as a string for custom Apex REST
       // callouts rather than auto-parsing it — parse explicitly.
-      const raw = await conn.request<string>({
+      // withConnection: a cached session can expire mid-flight; retry once on a fresh one rather than dropping the email.
+      const raw = await withConnection(this.connectionSource, (conn) => conn.request<string>({
         method: "POST",
         url: "/services/apexrest/tdm/sendEmail",
         body: JSON.stringify({
@@ -49,16 +50,18 @@ export class SalesforceEmailSender {
           senderDisplayName,
         }),
         headers: { "Content-Type": "application/json" },
-      });
+      }));
       const response: { success: boolean; message: string } = typeof raw === "string" ? JSON.parse(raw) : (raw as any);
       if (!response.success) {
         // The Apex endpoint's message can quote the recipient address — log that it was rejected, not why.
         this.logger.warn(JSON.stringify({ event: "email_send_rejected", provider: "salesforce" }));
-      } else {
-        this.logger.log(JSON.stringify({ event: "email_sent", provider: "salesforce" }));
+        return false;
       }
+      this.logger.log(JSON.stringify({ event: "email_sent", provider: "salesforce" }));
+      return true;
     } catch (err) {
       this.logger.error(JSON.stringify({ event: "email_send_failed", provider: "salesforce", errorCode: providerErrorCode(err) }));
+      return false;
     }
   }
 }

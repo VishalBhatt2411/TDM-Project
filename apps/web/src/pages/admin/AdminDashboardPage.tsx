@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { Trophy } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -61,18 +61,21 @@ export function AdminDashboardPage() {
     queryKey: ["admin-dashboard", branchId, periodDays],
     queryFn: () => getAdminDashboardSummary(periodDays, branchId || undefined),
     enabled: canViewDashboard,
+    placeholderData: keepPreviousData,
   });
 
   const { data: funnel, error: funnelError, refetch: refetchFunnel } = useQuery({
     queryKey: ["admin-funnel", branchId, periodDays],
     queryFn: () => getFunnelInsight(periodDays, branchId || undefined),
     enabled: canViewDashboard,
+    placeholderData: keepPreviousData,
   });
 
   const { data: segments, error: segmentsError, refetch: refetchSegments } = useQuery({
     queryKey: ["admin-customer-segments", branchId, dormantAfterDays],
     queryFn: () => getCustomerSegments(dormantAfterDays, branchId || undefined),
     enabled: canViewDashboard,
+    placeholderData: keepPreviousData,
   });
 
   if (!canViewDashboard) {
@@ -135,7 +138,7 @@ export function AdminDashboardPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Today's Test Drives" value={data.todaysTestDrives} />
         <StatTile label="Upcoming Bookings" value={data.upcomingBookings} />
-        <StatTile label="Vehicle Utilization" value={data.vehicleUtilizationPct} suffix="%" />
+        <StatTile label="Vehicles Driven Today" value={data.vehicleUtilizationPct} suffix="%" />
         <StatTile label={`Cancellation Rate (${periodDays}d)`} value={data.cancellationRatePct} suffix="%" />
         <StatTile label={`Conversion Rate (${periodDays}d)`} value={data.conversionRatePct} suffix="%" />
       </div>
@@ -331,7 +334,7 @@ export function AdminDashboardPage() {
       )}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <StatTile label="Avg. NPS Score" value={data.averageNpsScore != null ? data.averageNpsScore.toFixed(1) : "—"} suffix="/10" />
+        <StatTile label="Avg. Likelihood to Recommend" value={data.averageNpsScore != null ? data.averageNpsScore.toFixed(1) : "—"} suffix="/10" />
         <StatTile label="Avg. Customer Satisfaction" value={data.averageSatisfactionRating != null ? data.averageSatisfactionRating.toFixed(1) : "—"} suffix="/5" />
       </div>
     </div>

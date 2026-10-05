@@ -84,8 +84,12 @@ export class AdminUsersService {
       ...(dto.phone !== undefined && { phone: dto.phone ?? undefined }),
       ...(dto.isActive !== undefined && { isActive: dto.isActive }),
     };
+    const wasActiveCompanyAdmin = existing.role === "Company_Admin" && existing.isActive;
     existing.update(patch);
     this.assertMayGrant(access, existing.role, existing.dealershipId);
+    if (wasActiveCompanyAdmin && !(existing.role === "Company_Admin" && existing.isActive)) {
+      await this.assertAnotherCompanyAdmin(existing.id);
+    }
     if (dto.branchId !== undefined || dto.dealershipId !== undefined) {
       await this.assertBranchInDealership(existing.branchId, existing.dealershipId);
     }
@@ -101,6 +105,14 @@ export class AdminUsersService {
       metadata: { userId: saved.userId, ...dto },
     });
     return toPublicDto(saved);
+  }
+
+  /** Demoting or deactivating the last active Company Admin would leave nobody able to manage the company. */
+  private async assertAnotherCompanyAdmin(excludingAssignmentId: string): Promise<void> {
+    const admins = await this.assignments.findAll({ role: "Company_Admin" });
+    if (!admins.some((admin) => admin.id !== excludingAssignmentId)) {
+      throw new BadRequestException("At least one active Company Admin must remain.");
+    }
   }
 
   private mayManage(access: StaffAccess, role: StaffRole, dealershipId: string | undefined): boolean {

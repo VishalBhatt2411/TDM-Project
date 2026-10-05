@@ -8,7 +8,7 @@ import {
 } from "@tdm/domain";
 import { SalesforceConnectionSource } from "../connection-source";
 import { allocationRecordToDomain, allocationToRecord, wishlistRecordToDomain } from "../mappers";
-import { dealershipCondition, escapeSoql, withConnection } from "../soql";
+import { dealershipCondition, escapeSoql, resolveContactId, withConnection } from "../soql";
 
 export class SalesforceWishlistRepository implements WishlistRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
@@ -18,7 +18,7 @@ export class SalesforceWishlistRepository implements WishlistRepository {
       const contactId = await resolveContactId(conn, customerId);
       if (!contactId) return [];
       const result = await conn.query(
-        `SELECT Id, Contact__c, Vehicle__c, CreatedDate FROM Wishlist_Item__c WHERE Contact__c = '${contactId}'`,
+        `SELECT Id, Contact__c, Vehicle__c, CreatedDate FROM Wishlist_Item__c WHERE Contact__c = '${escapeSoql(contactId)}'`,
       );
       return result.records.map(wishlistRecordToDomain);
     });
@@ -38,7 +38,7 @@ export class SalesforceWishlistRepository implements WishlistRepository {
       const contactId = await resolveContactId(conn, customerId);
       if (!contactId) return;
       const result = await conn.query(
-        `SELECT Id FROM Wishlist_Item__c WHERE Contact__c = '${contactId}' AND Vehicle__c = '${vehicleId}'`,
+        `SELECT Id FROM Wishlist_Item__c WHERE Contact__c = '${escapeSoql(contactId)}' AND Vehicle__c = '${escapeSoql(vehicleId)}'`,
       );
       for (const record of result.records as any[]) {
         await conn.sobject("Wishlist_Item__c").destroy(record.Id);
@@ -96,9 +96,4 @@ export class SalesforceVehicleAllocationRepository implements VehicleAllocationR
       return result.records.map(allocationRecordToDomain);
     });
   }
-}
-
-async function resolveContactId(conn: any, platformCustomerId: string): Promise<string | null> {
-  const result = await conn.query(`SELECT Id FROM Contact WHERE Portal_User_Id__c = '${platformCustomerId}' LIMIT 1`);
-  return result.records[0]?.Id ?? null;
 }

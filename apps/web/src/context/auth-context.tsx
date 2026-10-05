@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AuthTokens, CustomerDto, LoginRequest, RegisterRequest, RegisterResponse, VerifyOtpRequest } from "@tdm/types";
 import { apiClient } from "@/lib/api-client";
-import { decodeCustomerId, tokenStorage } from "@/lib/token-storage";
+import { decodeCustomerId, onSessionCleared, tokenStorage } from "@/lib/token-storage";
 
 interface AuthContextValue {
   customerId: string | null;
@@ -97,6 +97,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const queryClient = useQueryClient();
+  React.useEffect(
+    () =>
+      onSessionCleared(() => {
+        setCustomerId(null);
+        queryClient.clear();
+      }),
+    [queryClient],
+  );
   const logout = React.useCallback(() => {
     const refreshToken = tokenStorage.getRefreshToken();
     tokenStorage.clear();

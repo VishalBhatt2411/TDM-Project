@@ -4,6 +4,10 @@ import { LicenseAiAssessment } from "@tdm/types";
 import { env } from "../common/env";
 import { errorCodeOf } from "../common/error-code";
 
+/** Bounded well under a serverless function's time limit — the SDK's defaults (10 min, 2 retries) would outlive the request. */
+const AI_TIMEOUT_MS = 25_000;
+const AI_MAX_RETRIES = 1;
+
 const KNOWN_FLAGS = ["blurry", "expired", "name_mismatch", "number_mismatch", "unreadable", "not_a_license"] as const;
 
 const PROMPT = `You are assisting a dealership staff member in reviewing a customer's driving license photo before a test drive. This is an advisory read only — a human will make the final decision.
@@ -27,7 +31,7 @@ export class LicenseAiService {
 
   constructor() {
     const apiKey = env.anthropicApiKey;
-    this.client = apiKey ? new Anthropic({ apiKey }) : null;
+    this.client = apiKey ? new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS, maxRetries: AI_MAX_RETRIES }) : null;
   }
 
   async assess(image: Buffer, contentType: string, submittedName: string, submittedLicenseNumber: string): Promise<LicenseAiAssessment> {
@@ -35,22 +39,29 @@ export class LicenseAiService {
       throw new ServiceUnavailableException("AI license verification is not configured (missing ANTHROPIC_API_KEY).");
     }
 
-    const response = await this.client.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 512,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: contentType as "image/jpeg" | "image/png" | "image/webp", data: image.toString("base64") } },
-            {
-              type: "text",
-              text: `${PROMPT}\n\nCustomer submitted name: ${submittedName}\nCustomer submitted license number: ${submittedLicenseNumber}`,
-            },
-          ],
-        },
-      ],
-    });
+    let response: Anthropic.Message;
+    try {
+      response = await this.client.messages.create({
+        model: env.anthropicModel,
+        max_tokens: 512,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: contentType as "image/jpeg" | "image/png" | "image/webp", data: image.toString("base64") } },
+              {
+                type: "text",
+                text: `${PROMPT}\n\nCustomer submitted name: ${submittedName}\nCustomer submitted license number: ${submittedLicenseNumber}`,
+              },
+            ],
+          },
+        ],
+      });
+    } catch (error) {
+      // The provider's error can echo request details; log only its code and give the staff member an actionable message.
+      this.logger.error(JSON.stringify({ event: "license_ai_request_failed", errorCode: errorCodeOf(error) }));
+      throw new ServiceUnavailableException("The AI license check is temporarily unavailable. Please review the image manually or try again.");
+    }
 
     const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
     return this.parseAssessment(textBlock?.text ?? "");

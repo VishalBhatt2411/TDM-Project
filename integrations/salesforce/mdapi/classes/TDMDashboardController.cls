@@ -9,6 +9,10 @@
  * to the drives the running user owns — a rep sees their own numbers, while a manager
  * or admin (View All Data / View All Bookings) sees the whole dealership. `isPersonalView`
  * tells the UI which of the two it's rendering so it can label things honestly.
+ *
+ * Rescheduling cancels the old booking and creates a replacement, so every count below leaves
+ * out bookings cancelled with reason 'Rescheduled' — otherwise one visit would be counted twice
+ * and a cancellation nobody made would be reported.
  */
 public with sharing class TDMDashboardController {
 
@@ -50,10 +54,11 @@ public with sharing class TDMDashboardController {
         Datetime now = Datetime.now();
         Date today = Date.today();
         Date monthStart = today.toStartOfMonth();
+        Date nextMonthStart = monthStart.addMonths(1);
         Boolean personal = isPersonalView();
         kpis.isPersonalView = personal;
 
-        kpis.totalBookings = [SELECT COUNT() FROM Booking__c];
+        kpis.totalBookings = [SELECT COUNT() FROM Booking__c WHERE Cancellation_Reason__c != 'Rescheduled'];
 
         kpis.upcomingCount = [
             SELECT COUNT() FROM Booking__c
@@ -75,7 +80,9 @@ public with sharing class TDMDashboardController {
 
         kpis.cancelledThisMonth = [
             SELECT COUNT() FROM Booking__c
-            WHERE Status__c IN ('Cancelled', 'NoShow') AND Scheduled_Start__c >= :monthStart
+            WHERE Status__c IN ('Cancelled', 'NoShow')
+            AND Cancellation_Reason__c != 'Rescheduled'
+            AND Scheduled_Start__c >= :monthStart AND Scheduled_Start__c < :nextMonthStart
         ];
 
         Integer completedTotal = [SELECT COUNT() FROM Booking__c WHERE Status__c = 'Completed'];
@@ -99,7 +106,7 @@ public with sharing class TDMDashboardController {
                 WHERE Is_Survey_Response__c = true
               ];
         Object avgNpsRaw = npsAgg.get('avgNps');
-        kpis.avgNps = avgNpsRaw != null ? ((Decimal) avgNpsRaw).setScale(1) : null;
+        kpis.avgNps = avgNpsRaw != null ? Decimal.valueOf(String.valueOf(avgNpsRaw)).setScale(1) : null;
 
         // Bookings are assigned to real Salesforce Users (record Owner) rather than a
         // Sales_Rep__c record, so "active sales reps" is read as distinct booking owners.
@@ -117,7 +124,8 @@ public with sharing class TDMDashboardController {
     public static List<StatusCount> getStatusBreakdown() {
         Map<String, Integer> counts = new Map<String, Integer>();
         for (AggregateResult ar : [
-            SELECT Status__c st, COUNT(Id) cnt FROM Booking__c GROUP BY Status__c
+            SELECT Status__c st, COUNT(Id) cnt FROM Booking__c
+            WHERE Cancellation_Reason__c != 'Rescheduled' GROUP BY Status__c
         ]) {
             counts.put((String) ar.get('st'), (Integer) ar.get('cnt'));
         }
@@ -155,10 +163,12 @@ public with sharing class TDMDashboardController {
         ]) {
             BookingRow row = new BookingRow();
             row.bookingNumber = b.Name;
-            row.customerName = trim(b.Contact__r.FirstName) + ' ' + trim(b.Contact__r.LastName);
-            row.customerPhone = b.Contact__r != null ? b.Contact__r.Phone : null;
-            row.vehicleName = trim(b.Vehicle__r.Make__c) + ' ' + trim(b.Vehicle__r.Model__c);
-            row.repName = b.Owner.Name;
+            Contact customer = b.Contact__r;
+            Vehicle__c vehicle = b.Vehicle__r;
+            row.customerName = customer == null ? '' : (trim(customer.FirstName) + ' ' + trim(customer.LastName)).trim();
+            row.customerPhone = customer == null ? null : customer.Phone;
+            row.vehicleName = vehicle == null ? '' : (trim(vehicle.Make__c) + ' ' + trim(vehicle.Model__c)).trim();
+            row.repName = b.Owner == null ? '' : b.Owner.Name;
             row.branchName = b.Branch__r != null ? b.Branch__r.Name : '';
             row.scheduledStart = b.Scheduled_Start__c;
             row.status = b.Status__c;
@@ -182,7 +192,8 @@ public with sharing class TDMDashboardController {
         Map<Id, String> repNames = new Map<Id, String>();
         Map<Id, Integer> totalByRep = new Map<Id, Integer>();
         for (AggregateResult ar : [
-            SELECT OwnerId, Owner.Name ownerName, COUNT(Id) cnt FROM Booking__c GROUP BY OwnerId, Owner.Name
+            SELECT OwnerId, Owner.Name ownerName, COUNT(Id) cnt FROM Booking__c
+            WHERE Cancellation_Reason__c != 'Rescheduled' GROUP BY OwnerId, Owner.Name
         ]) {
             Id ownerId = (Id) ar.get('OwnerId');
             repNames.put(ownerId, (String) ar.get('ownerName'));

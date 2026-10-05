@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   BookingRepository,
+  ExclusiveLock,
   HeuristicRecommendationEngine,
+  RETIRED_VEHICLE_STATUSES,
   Vehicle,
   VehicleRepository,
   WishlistItem,
   WishlistRepository,
 } from "@tdm/domain";
 import type { CustomerDashboardDto, VehicleDto, VehicleRecommendationDto } from "@tdm/types";
-import { BOOKING_REPOSITORY, VEHICLE_REPOSITORY, WISHLIST_REPOSITORY } from "../infrastructure/tokens";
+import { BOOKING_REPOSITORY, EXCLUSIVE_LOCK, VEHICLE_REPOSITORY, WISHLIST_REPOSITORY } from "../infrastructure/tokens";
 import { bookingToDto } from "../bookings/bookings.service";
 import { FeatureFlagService } from "../config/feature-flag.service";
 import { vehicleToDto } from "../vehicles/vehicles.service";
@@ -25,6 +27,7 @@ export class CustomersService {
     @Inject(WISHLIST_REPOSITORY) private readonly wishlist: WishlistRepository,
     @Inject(BOOKING_REPOSITORY) private readonly bookings: BookingRepository,
     @Inject(VEHICLE_REPOSITORY) private readonly vehicles: VehicleRepository,
+    @Inject(EXCLUSIVE_LOCK) private readonly locks: ExclusiveLock,
     private readonly featureFlags: FeatureFlagService,
   ) {}
 
@@ -41,11 +44,15 @@ export class CustomersService {
     if (!vehicle) {
       throw new NotFoundException("Vehicle not found.");
     }
-    const existing = await this.wishlist.findByCustomer(customerId);
-    if (existing.some((item) => item.toProps().vehicleId === vehicleId)) {
-      return { added: true };
+    if (RETIRED_VEHICLE_STATUSES.includes(vehicle.status)) {
+      throw new BadRequestException("This vehicle is no longer available.");
     }
-    await this.wishlist.add(WishlistItem.create({ id: randomUUID(), customerId, vehicleId, createdAt: new Date() }));
+    // Check-then-add under a lock, or two simultaneous taps both pass the check and save the vehicle twice.
+    await this.locks.runExclusive(`wishlist:${customerId}`, async () => {
+      const existing = await this.wishlist.findByCustomer(customerId);
+      if (existing.some((item) => item.toProps().vehicleId === vehicleId)) return;
+      await this.wishlist.add(WishlistItem.create({ id: randomUUID(), customerId, vehicleId, createdAt: new Date() }));
+    });
     return { added: true };
   }
 

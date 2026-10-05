@@ -1,4 +1,4 @@
-import { CancellationWindowExpiredError, IllegalBookingStateError } from "../errors";
+import { CancellationWindowExpiredError, IllegalBookingStateError, InvalidValueError } from "../errors";
 import { durationText } from "./booking-schedule";
 import { Address, TimeSlot } from "../value-objects";
 
@@ -79,7 +79,7 @@ export class Booking {
     additionalNotes?: string;
   }): Booking {
     if (input.driveType === "Home" && !input.homeAddress) {
-      throw new Error("Home address is required for a home test drive.");
+      throw new InvalidValueError("Home address is required for a home test drive.");
     }
     return new Booking({
       id: input.id ?? UNASSIGNED_ID,
@@ -146,9 +146,13 @@ export class Booking {
       throw new IllegalBookingStateError(`Cannot confirm a booking with status "${this.props.status}".`);
     }
     this.props.status = "Confirmed";
+    this.props.waitlistPosition = undefined;
   }
 
   waitlist(position: number): void {
+    if (this.props.status !== "Requested") {
+      throw new IllegalBookingStateError(`Cannot waitlist a booking with status "${this.props.status}".`);
+    }
     this.props.status = "Waitlisted";
     this.props.waitlistPosition = position;
   }
@@ -169,7 +173,12 @@ export class Booking {
   }
 
   private assertActive(): void {
-    if (this.props.status === "Completed" || this.props.status === "Cancelled" || this.props.status === "NoShow") {
+    if (
+      this.props.status === "Completed" ||
+      this.props.status === "Cancelled" ||
+      this.props.status === "NoShow" ||
+      this.props.status === "InProgress"
+    ) {
       throw new IllegalBookingStateError(`Cannot modify a booking with status "${this.props.status}".`);
     }
   }
@@ -243,6 +252,9 @@ export class Booking {
   complete(odometerEnd: number, asOf: Date = new Date()): void {
     if (this.props.status !== "InProgress") {
       throw new IllegalBookingStateError(`Cannot complete a drive that hasn't started (status "${this.props.status}").`);
+    }
+    if (this.props.odometerStart != null && odometerEnd < this.props.odometerStart) {
+      throw new InvalidValueError("The ending odometer reading can't be lower than the starting reading.");
     }
     this.props.status = "Completed";
     this.props.actualEnd = asOf;
@@ -333,6 +345,9 @@ export class DriveFeedback {
 
   get purchaseInterest() {
     return this.props.purchaseInterest;
+  }
+  get isSurveyResponse() {
+    return this.props.isSurveyResponse;
   }
   get bookingId() {
     return this.props.bookingId;

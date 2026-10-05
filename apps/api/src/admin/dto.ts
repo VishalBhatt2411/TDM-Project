@@ -1,6 +1,44 @@
+import { Type } from "class-transformer";
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from "class-validator";
-import { STAFF_ROLES, StaffRole } from "@tdm/domain";
+import { BookingStatus, STAFF_ROLES, StaffRole } from "@tdm/domain";
 import { IsRecordId } from "../common/record-id";
+
+const BOOKING_STATUSES: readonly BookingStatus[] = [
+  "Requested",
+  "Confirmed",
+  "Waitlisted",
+  "InProgress",
+  "Completed",
+  "Cancelled",
+  "NoShow",
+];
+
+/** Page, size and status filter shared by the staff booking lists — rejects junk instead of silently returning nothing. */
+export class BookingListQueryDto {
+  @IsOptional()
+  @IsIn(BOOKING_STATUSES)
+  status?: BookingStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  pageSize?: number;
+}
+
+export class AdminBookingListQueryDto extends BookingListQueryDto {
+  @IsOptional()
+  @IsRecordId()
+  branchId?: string;
+}
 
 export class StaffDirectoryQueryDto {
   @IsOptional()

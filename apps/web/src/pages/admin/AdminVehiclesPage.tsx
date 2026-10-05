@@ -478,7 +478,7 @@ function VehicleTransfersSection({
               {requestMutation.isPending ? "Requesting…" : "Request Transfer"}
             </Button>
           </form>
-          {requestMutation.isError && <p className="mt-2 text-sm text-destructive">Couldn't request that transfer. Please try again.</p>}
+          {requestMutation.isError && <p role="alert" className="mt-2 text-sm text-destructive">{errorMessage(requestMutation.error, "Couldn't request that transfer. Please try again.")}</p>}
         </CardContent>
       </Card>
 
@@ -488,6 +488,11 @@ function VehicleTransfersSection({
         <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No transfers yet.</p>
       ) : (
         <div className="space-y-2">
+          {advanceMutation.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {errorMessage(advanceMutation.error, "Couldn't update that transfer. Please try again.")}
+            </p>
+          )}
           {allocations?.map((a) => (
             <Card key={a.id}>
               <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">

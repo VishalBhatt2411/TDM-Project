@@ -1,6 +1,6 @@
-import { IsString } from "class-validator";
+import { IsRecordId } from "../common/record-id";
 
 export class AddWishlistItemDto {
-  @IsString()
+  @IsRecordId()
   vehicleId!: string;
 }

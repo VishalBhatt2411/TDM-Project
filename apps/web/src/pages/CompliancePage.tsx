@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import { blobToBase64, prepareImageForUpload } from "@/lib/image-upload";
+import { errorMessage } from "@/lib/api-error";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 // The photo and signature travel in one JSON body, which the host caps at ~4.5 MB after base64's
@@ -67,7 +68,7 @@ export function CompliancePage() {
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["compliance", bookingId] });
     },
-    onError: (err: Error) => setError(err.message || "Something went wrong. Please try again."),
+    onError: (err) => setError(errorMessage(err) ?? null),
   });
 
   if (submitMutation.isSuccess || status?.signedAt) {

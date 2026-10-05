@@ -224,6 +224,12 @@ export function AdminBranchesPage() {
         <Button onClick={() => setShowCreateForm((v) => !v)}>{showCreateForm ? "Cancel" : "Add Branch"}</Button>
       </div>
 
+      {toggleActiveMutation.isError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {errorMessage(toggleActiveMutation.error, "Couldn't change that branch's status. Please try again.")}
+        </p>
+      )}
+
       {showCreateForm && (
         <Card className="mb-6">
           <CardHeader>

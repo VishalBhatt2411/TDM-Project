@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
-import { ArrayMaxSize, IsArray, IsInt, IsObject, IsOptional } from "class-validator";
+import { ArrayMaxSize, IsArray, IsInt, IsObject, IsOptional, IsString, MaxLength } from "class-validator";
 import {
   CANCELLATION_CUTOFF_RANGE,
   CHECK_IN_OPENS_RANGE,
@@ -31,6 +31,7 @@ class SaveBookingScheduleDto {
   @IsOptional() @IsInt() cancellationCutoffMinutes?: number;
   @IsOptional() @IsInt() checkInOpensMinutes?: number;
   @IsOptional() @IsArray() @ArrayMaxSize(FOLLOW_UP_DAYS_RANGE.maxCount) followUpDays?: unknown[];
+  @IsOptional() @IsString() @MaxLength(5) dayOfReminderTime?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_CLOSURES) closures?: unknown[];
 }
 

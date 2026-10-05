@@ -13,7 +13,10 @@ import { Connection } from "jsforce";
 import { SalesforceConnectionSource } from "../connection-source";
 import { orgRegionalDefaults } from "../org-defaults";
 import { branchRecordToDomain, branchToRecord, variantRecordToDomain, vehicleRecordToDomain, vehicleToFullRecord } from "../mappers";
-import { BRANCH_FIELDS, dealershipCondition, escapeSoql, soqlIdList, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
+import { BRANCH_FIELDS, dealershipCondition, escapeSoql, escapeSoqlLike, pageWindow, soqlIdList, VEHICLE_FIELDS, VEHICLE_VARIANT_FIELDS, withConnection } from "../soql";
+
+/** Words of a free-text vehicle search that are honoured; the rest would only bloat the query. */
+const MAX_SEARCH_TERMS = 5;
 
 export class SalesforceVehicleRepository implements VehicleRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
@@ -43,15 +46,15 @@ export class SalesforceVehicleRepository implements VehicleRepository {
   async search(criteria: VehicleSearchCriteria): Promise<{ items: Vehicle[]; total: number }> {
     return withConnection(this.connectionProvider, async (conn) => {
       const where = this.buildWhereClause(criteria);
-      const page = criteria.page ?? 1;
-      const pageSize = criteria.pageSize ?? 20;
-      const offset = (page - 1) * pageSize;
+      const { limit, offset, reachable } = pageWindow(criteria.page, criteria.pageSize, 20);
 
       const [itemsResult, countResult, currency] = await Promise.all([
-        conn.query(
-          `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c ${where} ORDER BY Is_Featured__c DESC, CreatedDate DESC ` +
-            `LIMIT ${pageSize} OFFSET ${offset}`,
-        ),
+        reachable
+          ? conn.query(
+              `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c ${where} ORDER BY Is_Featured__c DESC, CreatedDate DESC, Id ` +
+                `LIMIT ${limit} OFFSET ${offset}`,
+            )
+          : Promise.resolve({ records: [] as any[] }),
         conn.query(`SELECT COUNT() FROM Vehicle__c ${where}`),
         this.currency(conn),
       ]);
@@ -123,8 +126,9 @@ export class SalesforceVehicleRepository implements VehicleRepository {
 
   private buildWhereClause(criteria: VehicleSearchCriteria): string {
     const clauses: string[] = [];
-    if (criteria.q) {
-      const q = escapeSoql(criteria.q);
+    // "toyota camry" must find a Toyota Camry: every word has to match the make or the model.
+    for (const term of (criteria.q ?? "").split(/\s+/).filter(Boolean).slice(0, MAX_SEARCH_TERMS)) {
+      const q = escapeSoqlLike(term);
       clauses.push(`(Make__c LIKE '%${q}%' OR Model__c LIKE '%${q}%')`);
     }
     if (criteria.bodyType) clauses.push(`Body_Type__c = '${escapeSoql(criteria.bodyType)}'`);
