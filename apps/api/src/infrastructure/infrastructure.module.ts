@@ -96,14 +96,15 @@ const connectionProvider = new TenantSalesforceConnectionProvider({
     const saved = await organizationRepository.saveRotatedRefreshToken(organizationId, previousRefreshToken, refreshToken);
     logger.log(JSON.stringify({ event: "salesforce_refresh_token_rotated", organizationId, saved }));
   },
-  onCredentialsRejected: async (organizationId, rejectedRefreshToken) => {
+  onCredentialsRejected: async (organizationId, rejectedRefreshToken, reason) => {
     const marked = await organizationRepository.recordRefreshTokenRejected(
       organizationId,
       rejectedRefreshToken,
-      "Salesforce rejected the stored refresh token (revoked or Connected App policy changed). Reconnect the org.",
+      `Salesforce rejected the stored refresh token (${reason}). Reconnect the org.`,
     );
-    logger.warn(JSON.stringify({ event: "salesforce_credentials_rejected", organizationId, marked }));
+    logger.warn(JSON.stringify({ event: "salesforce_credentials_rejected", organizationId, reason, marked }));
   },
+  refreshLock: new PostgresExclusiveLock(prisma, () => TenantContext.currentOrganizationId()),
 });
 
 const identityProviderFactory: SalesforceIdentityProviderFactory = async (organizationId, purpose) => {
