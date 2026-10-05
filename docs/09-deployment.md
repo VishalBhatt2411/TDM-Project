@@ -27,8 +27,9 @@ feature/*  ──PR──▶  staging  ──PR──▶  master
 ```
 
 The build command runs `db:deploy` on every deployment, so a Preview that shared the production
-`DATABASE_URL` would apply unreviewed migrations to the live database. `vercel.json` therefore **skips
-migrations on Preview builds** until `PREVIEW_DB_ISOLATED=1` is set (step 4). One-time setup:
+`DATABASE_URL` would apply unreviewed migrations to the live database. The build script
+(`infrastructure/vercel-build.sh`) therefore **skips migrations on Preview builds** until
+`PREVIEW_DB_ISOLATED=1` is set (step 3). One-time setup:
 
 1. **Database.** In Neon create a branch (or project) for staging with **no tenant data** — a copy of
    production would carry each tenant's encrypted Salesforce credentials into preview code.
