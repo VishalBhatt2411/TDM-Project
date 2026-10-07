@@ -21,6 +21,7 @@ import { TenantMiddleware } from "./tenancy/tenant.middleware";
 import { JobsModule } from "./jobs/jobs.module";
 import { PlatformModule } from "./platform/platform.module";
 import { env } from "./common/env";
+import { UpstashThrottlerStorage } from "./common/upstash-throttler-storage";
 
 @Module({
   imports: [
@@ -29,7 +30,11 @@ import { env } from "./common/env";
     ...(env.schedulerMode === "in-process" ? [ScheduleModule.forRoot()] : []),
     // Baseline abuse protection for every endpoint; auth-sensitive endpoints
     // (login, OTP, password reset) apply a stricter override via @Throttle.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    // Counters live in Upstash Redis when configured (shared across serverless instances), else in memory.
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 120 }],
+      storage: env.upstashRedis ? new UpstashThrottlerStorage(env.upstashRedis.url, env.upstashRedis.token) : undefined,
+    }),
     InfrastructureModule,
     TenancyModule,
     HealthModule,

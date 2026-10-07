@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getVehicle, getVehicleAvailability, getVehicleVariants } from "@/api/vehicles";
 import { TimeSlotSelect, findAvailableSlot, firstAvailableTime } from "@/components/TimeSlotSelect";
@@ -45,6 +45,7 @@ const INTERNATIONAL_PHONE_PATTERN = /^\+[\d\s().-]{6,24}$/;
 export function BookingPage() {
   const { vehicleId } = useParams<{ vehicleId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { isAuthenticated, profile } = useAuth();
 
   const { data: vehicle, isError: vehicleError } = useQuery({ queryKey: ["vehicle", vehicleId], queryFn: () => getVehicle(vehicleId!), enabled: !!vehicleId });
@@ -176,6 +177,7 @@ export function BookingPage() {
               email: values.email,
               mobileNumber: values.mobileNumber,
             });
+      for (const key of ["my-bookings", "dashboard", "vehicle-availability"]) queryClient.invalidateQueries({ queryKey: [key] });
       setConfirmedId(result.id);
     } catch (err) {
       if (isBookingConflictError(err)) {

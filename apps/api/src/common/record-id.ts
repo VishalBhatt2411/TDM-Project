@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, PipeTransform } from "@nestjs/common";
 import { Matches, ValidationOptions } from "class-validator";
 
-/** Shape of a business-data record id (15/18-character alphanumeric) — rejects malformed ids before any lookup. */
-const RECORD_ID_PATTERN = /^[a-zA-Z0-9]{15,18}$/;
+/** Shape of a business-data record id (exactly 15 or 18 alphanumeric characters) — rejects malformed ids before any lookup. */
+const RECORD_ID_PATTERN = /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/;
 
 export const IsRecordId = (options?: ValidationOptions) =>
   Matches(RECORD_ID_PATTERN, { message: "$property must be a valid record id.", ...options });

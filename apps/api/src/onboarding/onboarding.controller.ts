@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Response } from "express";
 import { OnboardingService } from "./onboarding.service";
-import { CreateOrganizationDto, SaveSalesforceCredentialsDto } from "./dto";
+import { CreateOrganizationDto, SaveSalesforceCredentialsDto, VerifyEmailDto } from "./dto";
 import { env } from "../common/env";
 import { isValidOrganizationSlug } from "../tenancy/organization-slug";
 import { OnboardingTokenGuard } from "./onboarding-token.guard";
@@ -38,6 +38,21 @@ export class OnboardingController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   createOrganization(@Body() dto: CreateOrganizationDto) {
     return this.onboarding.createOrganization(dto);
+  }
+
+  /** Public: the emailed link carries the organization id and a single-use token, so no setup-token header. */
+  @Post("verify-email")
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.onboarding.verifyEmail(dto);
+  }
+
+  @Post(":organizationId/resend-verification")
+  @UseGuards(OnboardingTokenGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @HttpCode(204)
+  resendVerification(@Param("organizationId") organizationId: string) {
+    return this.onboarding.resendVerification(organizationId);
   }
 
   @Post(":organizationId/salesforce-credentials")

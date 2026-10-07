@@ -38,6 +38,8 @@ export interface AppEnv {
    * operator console (/platform). Unset, the console and its API don't exist (404).
    */
   platformOperatorPasswordHash?: string;
+  /** Upstash Redis REST credentials for rate-limit counters shared across serverless instances; unset → per-instance memory. */
+  upstashRedis?: { url: string; token: string };
 }
 
 export type SchedulerMode = "in-process" | "external";
@@ -115,6 +117,14 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     errors.push("PLATFORM_OPERATOR_PASSWORD_HASH must be generated with `npm run platform:hash-password -w apps/api`.");
   }
 
+  const upstashUrl = read("UPSTASH_REDIS_REST_URL");
+  const upstashToken = read("UPSTASH_REDIS_REST_TOKEN");
+  if (!upstashUrl !== !upstashToken) {
+    errors.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set together.");
+  } else if (upstashUrl && !/^https:\/\//.test(upstashUrl)) {
+    errors.push("UPSTASH_REDIS_REST_URL must be an https URL.");
+  }
+
   const webOrigin = url("WEB_ORIGIN", "http://localhost:5173");
   const adminWebOrigin = read("ADMIN_WEB_ORIGIN") ? url("ADMIN_WEB_ORIGIN", webOrigin) : webOrigin;
 
@@ -136,6 +146,7 @@ function loadEnv(source: NodeJS.ProcessEnv): AppEnv {
     schedulerMode,
     jobTriggerSecret: schedulerMode === "external" ? jobTriggerSecret : undefined,
     platformOperatorPasswordHash,
+    upstashRedis: upstashUrl && upstashToken ? { url: upstashUrl.replace(/\/+$/, ""), token: upstashToken } : undefined,
   };
 
   if (errors.length > 0) {

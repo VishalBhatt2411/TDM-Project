@@ -1,4 +1,5 @@
 import * as React from "react";
+import { errorMessage } from "@/lib/api-error";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { isBookingConflictError, cancelBooking, listMyBookings, rescheduleBooking } from "@/api/bookings";
@@ -71,10 +72,15 @@ export function MyBookingsPage() {
   const [rescheduleError, setRescheduleError] = React.useState<string | null>(null);
   const [qrBookingId, setQrBookingId] = React.useState<string | null>(null);
 
+  // A booking change also moves the dashboard counts and frees/occupies a slot.
+  const invalidateBookingViews = () => {
+    for (const key of ["my-bookings", "dashboard", "vehicle-availability"]) queryClient.invalidateQueries({ queryKey: [key] });
+  };
+
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => cancelBooking(id, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
+      invalidateBookingViews();
       setCancellingId(null);
     },
   });
@@ -83,7 +89,7 @@ export function MyBookingsPage() {
     mutationFn: ({ id, start, end }: { id: string; start: string; end: string }) =>
       rescheduleBooking(id, { slot: { start, end } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
+      invalidateBookingViews();
       setReschedulingId(null);
       setRescheduleError(null);
     },
@@ -204,6 +210,11 @@ export function MyBookingsPage() {
                       >
                         Confirm Cancel
                       </Button>
+                      {cancelMutation.isError && (
+                        <p role="alert" className="self-center text-sm text-destructive">
+                          {errorMessage(cancelMutation.error, "Couldn't cancel this booking. Please try again.")}
+                        </p>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => setCancellingId(null)}>
                         Keep Booking
                       </Button>

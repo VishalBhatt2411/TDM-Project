@@ -58,10 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await fetchProfile();
   }, [customerId, fetchProfile]);
 
-  const applyTokens = React.useCallback((tokens: AuthTokens) => {
-    tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);
-    setCustomerId(decodeCustomerId(tokens.accessToken));
-  }, []);
+  const queryClient = useQueryClient();
+  const applyTokens = React.useCallback(
+    (tokens: AuthTokens) => {
+      const nextCustomerId = decodeCustomerId(tokens.accessToken);
+      // Signing in as someone else without a logout must not show the previous customer's cached bookings/wishlist.
+      if (nextCustomerId !== customerId) queryClient.clear();
+      tokenStorage.setTokens(tokens.accessToken, tokens.refreshToken);
+      setCustomerId(nextCustomerId);
+    },
+    [customerId, queryClient],
+  );
 
   const register = React.useCallback(async (input: RegisterRequest) => {
     const { data } = await apiClient.post<RegisterResponse>("/auth/register", input);
@@ -96,7 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await apiClient.post("/auth/reset-password", { token, newPassword });
   }, []);
 
-  const queryClient = useQueryClient();
   React.useEffect(
     () =>
       onSessionCleared(() => {

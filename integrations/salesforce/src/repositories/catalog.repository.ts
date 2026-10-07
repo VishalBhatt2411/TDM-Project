@@ -1,6 +1,7 @@
 import {
   Branch,
   BranchRepository,
+  RETIRED_VEHICLE_STATUSES,
   DealershipScope,
   UNASSIGNED_ID,
   Vehicle,
@@ -17,6 +18,9 @@ import { BRANCH_FIELDS, dealershipCondition, escapeSoql, escapeSoqlLike, pageWin
 
 /** Words of a free-text vehicle search that are honoured; the rest would only bloat the query. */
 const MAX_SEARCH_TERMS = 5;
+
+/** Public showcase queries must never surface vehicles that can no longer be booked. */
+const ACTIVE_STATUS_CLAUSE = `Status__c NOT IN (${RETIRED_VEHICLE_STATUSES.map((s) => `'${escapeSoql(s)}'`).join(", ")})`;
 
 export class SalesforceVehicleRepository implements VehicleRepository {
   constructor(private readonly connectionProvider: SalesforceConnectionSource) {}
@@ -72,7 +76,7 @@ export class SalesforceVehicleRepository implements VehicleRepository {
       bestSeller: "Is_Best_Seller__c",
       newLaunch: "Is_New_Launch__c",
     };
-    const where = [`${fieldByKind[kind]} = true`, ...this.locationClauses(filter)].join(" AND ");
+    const where = [`${fieldByKind[kind]} = true`, ACTIVE_STATUS_CLAUSE, ...this.locationClauses(filter)].join(" AND ");
     return withConnection(this.connectionProvider, async (conn) => {
       const [result, currency] = await Promise.all([
         conn.query(`SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE ${where} ORDER BY CreatedDate DESC LIMIT ${limit}`),
@@ -91,7 +95,7 @@ export class SalesforceVehicleRepository implements VehicleRepository {
       if (!bodyType || !dealershipId) return [];
       const result = await conn.query(
         `SELECT ${VEHICLE_FIELDS} FROM Vehicle__c WHERE Body_Type__c = '${escapeSoql(bodyType)}' ` +
-          `AND Dealership__c = '${escapeSoql(dealershipId)}' AND Id != '${escapeSoql(vehicleId)}' ` +
+          `AND Dealership__c = '${escapeSoql(dealershipId)}' AND Id != '${escapeSoql(vehicleId)}' AND ${ACTIVE_STATUS_CLAUSE} ` +
           `ORDER BY Is_Featured__c DESC LIMIT ${limit}`,
       );
       const currency = await this.currency(conn);

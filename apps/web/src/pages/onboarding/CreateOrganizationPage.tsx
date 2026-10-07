@@ -28,6 +28,7 @@ export function CreateOrganizationPage() {
   const callbackError = searchParams.get("error");
   const [name, setName] = React.useState("");
   const [slug, setSlug] = React.useState("");
+  const [adminEmail, setAdminEmail] = React.useState("");
   const [slugEdited, setSlugEdited] = React.useState(false);
 
   const mutation = useMutation({
@@ -52,14 +53,14 @@ export function CreateOrganizationPage() {
         <CardContent>
           {callbackError && (
             <p className="mb-4 text-sm text-destructive">
-              {CALLBACK_ERROR_MESSAGES[callbackError] ?? "Couldn't connect your Salesforce org. Please try again."}
+              {(Object.hasOwn(CALLBACK_ERROR_MESSAGES, callbackError) ? CALLBACK_ERROR_MESSAGES[callbackError] : undefined) ?? "Couldn't connect your Salesforce org. Please try again."}
             </p>
           )}
           <form
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              mutation.mutate({ name, slug: slugify(slug, true) });
+              mutation.mutate({ name, slug: slugify(slug, true), adminEmail: adminEmail.trim() });
             }}
           >
             <div className="space-y-1.5">
@@ -89,6 +90,20 @@ export function CreateOrganizationPage() {
                 minLength={3}
               />
               <p className="text-xs text-muted-foreground">Lowercase letters, numbers, and hyphens only. Used to identify your organization.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="adminEmail">Your Work Email</Label>
+              <Input
+                id="adminEmail"
+                type="email"
+                autoComplete="email"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                placeholder="you@acmemotors.com"
+                maxLength={254}
+                required
+              />
+              <p className="text-xs text-muted-foreground">We'll send a link to confirm it before you connect Salesforce.</p>
             </div>
             {mutation.isError && (
               <p className="text-sm text-destructive">

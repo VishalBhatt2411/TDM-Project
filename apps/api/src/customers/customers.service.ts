@@ -117,7 +117,8 @@ export class CustomersService {
 
   /** Each distinct vehicle once, keyed by id — dropping any that no longer exist. */
   private async findVisible(ids: Iterable<string>): Promise<Map<string, Vehicle>> {
-    const vehicles = await Promise.all([...new Set(ids)].map((id) => this.vehicles.findById(id)));
-    return new Map(vehicles.filter((v): v is Vehicle => v !== null).map((v) => [v.toProps().id, v]));
+    const unique = [...new Set(ids)];
+    const vehicles = unique.length ? await this.vehicles.findByIds(unique) : [];
+    return new Map(vehicles.map((v) => [v.toProps().id, v]));
   }
 }

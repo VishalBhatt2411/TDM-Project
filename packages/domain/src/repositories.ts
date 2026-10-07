@@ -206,14 +206,26 @@ export interface AuthCredentials {
   isTemporary: boolean;
 }
 
+/** Identifies one sign-in across its chain of rotating refresh tokens. */
+export interface RefreshSession {
+  familyId: string;
+  startedAt: Date;
+}
+
+export type RefreshConsumption = { status: "ok"; session: RefreshSession } | { status: "reused" } | { status: "invalid" };
+
 export interface AuthRepository {
   saveCredentials(creds: AuthCredentials): Promise<void>;
   findCredentials(customerId: string): Promise<AuthCredentials | null>;
   saveOtp(customerId: string, codeHash: string, expiresAt: Date): Promise<void>;
   consumeOtp(customerId: string, code: string): Promise<boolean>;
-  saveRefreshToken(customerId: string, tokenHash: string, expiresAt: Date): Promise<void>;
-  /** Atomically revokes a live refresh token; true only for the single caller that did (rotation is single-use). */
-  consumeRefreshToken(customerId: string, tokenHash: string): Promise<boolean>;
+  /** A new sign-in starts a session (family); a rotation passes the session it continues. */
+  saveRefreshToken(customerId: string, tokenHash: string, expiresAt: Date, session?: RefreshSession): Promise<void>;
+  /**
+   * Atomically revokes a live refresh token (rotation is single-use). A token that was already rotated away is a
+   * replay — evidence it leaked — so the whole session is ended and "reused" is returned.
+   */
+  consumeRefreshToken(customerId: string, tokenHash: string): Promise<RefreshConsumption>;
   revokeRefreshToken(customerId: string, tokenHash: string): Promise<void>;
   /** Ends every session of a customer (e.g. after a password reset). */
   revokeAllRefreshTokens(customerId: string): Promise<void>;

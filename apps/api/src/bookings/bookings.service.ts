@@ -146,12 +146,15 @@ export class BookingsService {
     // The same goes for an account its owner never verified: anyone can self-register an email address they don't
     // control, with a password of their choosing. A magic link would sign the real owner into that account, whereas
     // the setup link lets them replace the password the squatter knows (a reset also ends the squatter's sessions).
-    if (isNewAccount || !customer.isFullyVerified || (await this.authService.needsPasswordSetup(customer.id))) {
-      await this.authService.issuePasswordSetupEmail(customer.id, customer.email.value, customerName, isNewAccount);
-    } else {
-      const magicLink = await this.authService.issueMagicLoginLink(customer.id);
-      await this.notifications.sendAccountAccess(customer.email.value, customerName, magicLink);
-    }
+    const account = customer;
+    await this.bestEffort("account_access_email_failed", booking.id, async () => {
+      if (isNewAccount || !account.isFullyVerified || (await this.authService.needsPasswordSetup(account.id))) {
+        await this.authService.issuePasswordSetupEmail(account.id, account.email.value, customerName, isNewAccount);
+      } else {
+        const magicLink = await this.authService.issueMagicLoginLink(account.id);
+        await this.notifications.sendAccountAccess(account.email.value, customerName, magicLink);
+      }
+    });
 
     return { ...bookingToDto(booking), conflictChecked: true };
   }
@@ -268,8 +271,10 @@ export class BookingsService {
     );
 
     if (assignedRepEmail && assignedRepName) {
-      const emailCtx = await this.emailContext.build(booking);
-      if (emailCtx) await this.notifications.sendRepAssignment(assignedRepEmail, assignedRepName, emailCtx);
+      await this.bestEffort("rep_assignment_email_failed", booking.id, async () => {
+        const emailCtx = await this.emailContext.build(booking);
+        if (emailCtx) await this.notifications.sendRepAssignment(assignedRepEmail, assignedRepName, emailCtx);
+      });
     }
 
     return booking;
@@ -344,13 +349,24 @@ export class BookingsService {
   }
 
   private async sendConfirmation(booking: Booking, customerEmail: string, customerName: string): Promise<void> {
-    const emailCtx = await this.emailContext.build(booking, customerName);
-    if (!emailCtx) return;
+    await this.bestEffort("confirmation_email_failed", booking.id, async () => {
+      const emailCtx = await this.emailContext.build(booking, customerName);
+      if (!emailCtx) return;
 
-    if (booking.status === "Waitlisted") {
-      await this.notifications.sendWaitlisted(customerEmail, emailCtx, booking.waitlistPosition ?? 1);
-    } else {
-      await this.notifications.sendBookingConfirmation(customerEmail, emailCtx);
+      if (booking.status === "Waitlisted") {
+        await this.notifications.sendWaitlisted(customerEmail, emailCtx, booking.waitlistPosition ?? 1);
+      } else {
+        await this.notifications.sendBookingConfirmation(customerEmail, emailCtx);
+      }
+    });
+  }
+
+  /** Runs a post-commit follow-up whose failure must be logged, not surfaced to a caller whose booking already succeeded. */
+  private async bestEffort(event: string, bookingId: string, work: () => Promise<void>): Promise<void> {
+    try {
+      await work();
+    } catch (err) {
+      this.logger.error(JSON.stringify({ event, bookingId, reason: (err as Error).message }));
     }
   }
 

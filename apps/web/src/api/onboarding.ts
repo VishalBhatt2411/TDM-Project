@@ -16,6 +16,8 @@ export interface OrganizationStatusDto {
   connectionStatus: OrganizationConnectionStatus;
   connectionError: string | null;
   metadataDeployedAt: string | null;
+  /** False until the sign-up email's link is opened; the credentials step is blocked until then. */
+  emailVerified: boolean;
   /** Register all of these on the Connected App (one per line in Salesforce's Callback URL box). */
   salesforceCallbackUrls: string[];
 }
@@ -32,11 +34,22 @@ export async function getOnboardingSetupStatus(organizationSlug?: string): Promi
   return data;
 }
 
-export async function createOrganization(input: { name: string; slug: string }): Promise<OrganizationStatusDto> {
+export async function createOrganization(input: { name: string; slug: string; adminEmail: string }): Promise<OrganizationStatusDto> {
   const { data } = await onboardingApiClient.post<OrganizationStatusDto & { onboardingToken: string }>("/onboarding/organizations", input);
   const { onboardingToken, ...status } = data;
   rememberOnboardingToken(status.id, onboardingToken);
   return status;
+}
+
+/** Confirms the emailed link's organization + single-use token. */
+export async function verifyOrganizationEmail(input: { organizationId: string; token: string }): Promise<void> {
+  await onboardingApiClient.post("/onboarding/verify-email", input);
+}
+
+export async function resendVerificationEmail(organizationId: string): Promise<void> {
+  await onboardingApiClient.post(`/onboarding/${organizationId}/resend-verification`, undefined, {
+    headers: setupHeaders(organizationId),
+  });
 }
 
 /** A wizard step opened without this browser's setup token (another browser, cleared storage) can't continue. */

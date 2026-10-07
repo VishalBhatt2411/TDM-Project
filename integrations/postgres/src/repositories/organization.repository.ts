@@ -18,6 +18,8 @@ export interface OrganizationRecord {
   connectionError: string | null;
   metadataDeployedAt: Date | null;
   encryptionKeyVersion: number;
+  /** Whether the sign-up contact proved they own their mailbox — an unverified organization is never served as a tenant. */
+  emailVerified: boolean;
   createdAt: Date;
 }
 
@@ -61,6 +63,9 @@ export interface ConnectionCredentials extends ConnectedAppCredentials {
 export const ONBOARDING_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const onboardingTokenExpiry = (): Date => new Date(Date.now() + ONBOARDING_TOKEN_TTL_MS);
+
+/** How long an emailed verification link works. */
+export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export class OrganizationRepository {
   constructor(
@@ -133,17 +138,54 @@ export class OrganizationRepository {
     });
   }
 
-  async create(input: { name: string; slug: string; onboardingTokenHash: string }): Promise<OrganizationRecord> {
+  async create(input: {
+    name: string;
+    slug: string;
+    onboardingTokenHash: string;
+    contactEmail: string;
+    emailVerificationTokenHash: string;
+  }): Promise<OrganizationRecord> {
     const slug = input.slug.toLowerCase();
     try {
       const record = await this.prisma.organization.create({
-        data: { name: input.name, slug, onboardingTokenHash: input.onboardingTokenHash, onboardingTokenExpiresAt: onboardingTokenExpiry() },
+        data: {
+          name: input.name,
+          slug,
+          onboardingTokenHash: input.onboardingTokenHash,
+          onboardingTokenExpiresAt: onboardingTokenExpiry(),
+          contactEmail: input.contactEmail.toLowerCase(),
+          emailVerificationTokenHash: input.emailVerificationTokenHash,
+          emailVerificationExpiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+        },
       });
       return toRecord(record);
     } catch (err) {
       if (isUniqueViolation(err)) throw new OrganizationSlugTakenError(slug);
       throw err;
     }
+  }
+
+  /** The sign-up contact address — only for sending the verification mail, never exposed through a DTO. */
+  async findContactEmail(id: string): Promise<string | null> {
+    const record = await this.prisma.organization.findUnique({ where: { id }, select: { contactEmail: true } });
+    return record?.contactEmail ?? null;
+  }
+
+  /** Replaces the pending verification link (a resend), so only the newest one works. */
+  async saveEmailVerificationToken(id: string, tokenHash: string): Promise<void> {
+    await this.prisma.organization.updateMany({
+      where: { id, emailVerifiedAt: null },
+      data: { emailVerificationTokenHash: tokenHash, emailVerificationExpiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS) },
+    });
+  }
+
+  /** Marks the contact email verified if `tokenHash` is the live link; single-use. Returns whether it matched. */
+  async verifyEmail(id: string, tokenHash: string): Promise<boolean> {
+    const { count } = await this.prisma.organization.updateMany({
+      where: { id, emailVerificationTokenHash: tokenHash, emailVerificationExpiresAt: { gt: new Date() } },
+      data: { emailVerifiedAt: new Date(), emailVerificationTokenHash: null, emailVerificationExpiresAt: null },
+    });
+    return count === 1;
   }
 
   /** Whether `tokenHash` is the unexpired onboarding setup token issued for this organization. */
@@ -328,6 +370,7 @@ function toRecord(record: Organization): OrganizationRecord {
     connectionError: record.connectionError,
     metadataDeployedAt: record.metadataDeployedAt,
     encryptionKeyVersion: record.encryptionKeyVersion,
+    emailVerified: record.emailVerifiedAt !== null,
     createdAt: record.createdAt,
   };
 }

@@ -200,6 +200,8 @@ export class Booking {
       id: newBookingId,
       slot: newSlot,
       status: "Requested",
+      // "Rescheduled" marks the retired original only — carrying it onto the live replacement hid it from analytics.
+      cancellationReason: undefined,
       rescheduledFromBookingId: this.props.id,
       checkInMethod: undefined,
       checkInTimestamp: undefined,

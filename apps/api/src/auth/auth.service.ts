@@ -1,14 +1,14 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { AuthRepository, Customer, CustomerRepository, Email, PersonName, PhoneNumber, TenantContextMissingError } from "@tdm/domain";
+import { AuthRepository, Customer, CustomerRepository, RefreshSession, Email, PersonName, PhoneNumber, TenantContextMissingError } from "@tdm/domain";
 import { CustomerPasswordTokenRepository, generateOtpCode, hashSecret, MagicLoginRepository, sha256Hex, verifySecret } from "@tdm/postgres-adapter";
 import type { CustomerDto } from "@tdm/types";
 import { AUTH_REPOSITORY, CUSTOMER_PASSWORD_TOKEN_REPOSITORY, CUSTOMER_REPOSITORY, MAGIC_LOGIN_REPOSITORY } from "../infrastructure/tokens";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ForgotPasswordDto, LoginDto, RefreshDto, RegisterDto, ResetPasswordDto, UpdateProfileDto, VerifyOtpDto } from "./dto";
 import { OTP_SENDER, OtpSender } from "./otp-sender";
-import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS, TOKEN_TYPE } from "./auth.constants";
+import { ACCESS_TOKEN_TTL, AUTH_SCOPE, REFRESH_TOKEN_TTL, REFRESH_TOKEN_TTL_MS, SESSION_MAX_AGE_MS, TOKEN_TYPE } from "./auth.constants";
 import { TenantContext } from "../tenancy/tenant-context";
 import { runInBackground } from "../common/background-tasks";
 import { errorCodeOf } from "../common/error-code";
@@ -109,10 +109,17 @@ export class AuthService {
     TenantContext.bindSession(payload.org);
     // Single-use and atomic: of two concurrent refreshes with the same token, exactly one wins.
     const consumed = await this.authRepo.consumeRefreshToken(payload.sub, sha256Hex(dto.refreshToken));
-    if (!consumed) {
+    if (consumed.status === "reused") {
+      // An already-rotated token came back: someone holds a copy. The repository has ended the whole session.
+      this.logger.warn(JSON.stringify({ event: "refresh_token_reuse_detected", customerId: payload.sub }));
+    }
+    if (consumed.status !== "ok") {
       throw new UnauthorizedException("Refresh token has been revoked.");
     }
-    return this.issueTokens(payload.sub);
+    if (Date.now() - consumed.session.startedAt.getTime() > SESSION_MAX_AGE_MS) {
+      throw new UnauthorizedException("Your session has expired. Please sign in again.");
+    }
+    return this.issueTokens(payload.sub, consumed.session);
   }
 
   async logout(dto: RefreshDto): Promise<void> {
@@ -224,6 +231,8 @@ export class AuthService {
     await this.authRepo.saveCredentials({ customerId, passwordHash, isTemporary: false });
     // A reset is how a compromised account gets recovered — sessions opened with the old password must end.
     await this.authRepo.revokeAllRefreshTokens(customerId);
+    // Older emailed links (sign-in or reset) could still let in whoever holds them, so they die with the old password.
+    await Promise.all([this.magicLoginRepo.revokeAllFor(customerId), this.passwordTokens.revokeAllFor(customerId)]);
     // The link went to the account's mailbox, which is the same proof the emailed OTP gives — so it also settles an
     // account that was never verified, rather than leaving its owner with a password they still can't sign in with.
     const customer = await this.customers.findById(customerId);
@@ -283,7 +292,7 @@ export class AuthService {
     await this.otpSender.send({ email: customer.email.value, phone: customer.phone.value }, code, OTP_TTL_MINUTES);
   }
 
-  private async issueTokens(customerId: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+  private async issueTokens(customerId: string, session?: RefreshSession): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
     const organizationId = TenantContext.currentOrganizationId();
     if (!organizationId) throw new TenantContextMissingError();
     const identity = { sub: customerId, scope: AUTH_SCOPE.CUSTOMER, org: organizationId };
@@ -291,7 +300,7 @@ export class AuthService {
     // `jti` keeps two refresh tokens minted for one customer in the same second distinct —
     // they're stored by hash under a unique key, so identical tokens would collide.
     const refreshToken = this.jwtService.sign({ ...identity, typ: TOKEN_TYPE.REFRESH, jti: randomUUID() }, { expiresIn: REFRESH_TOKEN_TTL });
-    await this.authRepo.saveRefreshToken(customerId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
+    await this.authRepo.saveRefreshToken(customerId, sha256Hex(refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS), session);
     return { accessToken, refreshToken, expiresIn: 15 * 60 };
   }
 }

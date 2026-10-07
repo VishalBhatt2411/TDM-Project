@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client";
 
 /** Spent rows are kept briefly after they stop mattering, so a support question about a recent login/reset can still be answered. */
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+/** A sign-up that never verified its email is abandoned once its setup token (7 days) would have expired anyway. */
+const UNVERIFIED_ORGANIZATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 /** Reminder/follow-up claims only need to outlive the windows they guard (hours to ~two weeks). */
 const CLAIM_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -24,7 +26,7 @@ export class ExpiredRowsRepository {
     const unusable = { OR: [{ expiresAt: { lt: spentBefore } }, { consumedAt: { lt: spentBefore } }] };
     const unusableRevocable = { OR: [{ expiresAt: { lt: spentBefore } }, { revokedAt: { lt: spentBefore } }] };
 
-    const [otpCodes, refreshTokens, magicLoginTokens, customerPasswordTokens, staffRefreshTokens, staffOAuthStates, reminderLogs, followUpLogs] =
+    const [otpCodes, refreshTokens, magicLoginTokens, customerPasswordTokens, staffRefreshTokens, staffOAuthStates, reminderLogs, followUpLogs, unverifiedOrganizations] =
       await Promise.all([
         this.prisma.otpCode.deleteMany({ where: unusable }),
         this.prisma.refreshToken.deleteMany({ where: unusableRevocable }),
@@ -34,6 +36,10 @@ export class ExpiredRowsRepository {
         this.prisma.staffOAuthState.deleteMany({ where: { expiresAt: { lt: spentBefore } } }),
         this.prisma.reminderLog.deleteMany({ where: { sentAt: { lt: claimsBefore } } }),
         this.prisma.followUpLog.deleteMany({ where: { sentAt: { lt: claimsBefore } } }),
+        // Never verified, so never served or connected: nothing of value hangs off these rows.
+        this.prisma.organization.deleteMany({
+          where: { emailVerifiedAt: null, createdAt: { lt: new Date(now.getTime() - UNVERIFIED_ORGANIZATION_RETENTION_MS) } },
+        }),
       ]);
 
     return {
@@ -45,6 +51,7 @@ export class ExpiredRowsRepository {
       staffOAuthStates: staffOAuthStates.count,
       reminderLogs: reminderLogs.count,
       followUpLogs: followUpLogs.count,
+      unverifiedOrganizations: unverifiedOrganizations.count,
     };
   }
 }

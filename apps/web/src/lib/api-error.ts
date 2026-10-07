@@ -1,3 +1,5 @@
+import { isAxiosError } from "axios";
+
 type ApiError = { response?: { data?: { message?: string | string[] } } };
 
 /**
@@ -6,6 +8,10 @@ type ApiError = { response?: { data?: { message?: string | string[] } } };
  */
 export function errorMessage(error: unknown, fallback = "Something went wrong. Please try again."): string | undefined {
   const message = (error as ApiError | null)?.response?.data?.message;
-  if (!message) return error ? fallback : undefined;
+  if (!message) {
+    // Client-side validation errors (e.g. an oversized photo) carry their own user-facing text.
+    if (error instanceof Error && !isAxiosError(error) && error.message) return error.message;
+    return error ? fallback : undefined;
+  }
   return Array.isArray(message) ? message.join(" ") : message;
 }

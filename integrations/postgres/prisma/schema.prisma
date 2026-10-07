@@ -44,9 +44,13 @@ model RefreshToken {
   expiresAt  DateTime
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
+  // Every token rotated from the same sign-in shares familyId and sessionStartedAt.
+  familyId         String
+  sessionStartedAt DateTime @default(now())
 
   @@unique([customerId, tokenHash])
   @@index([customerId])
+  @@index([familyId])
 }
 
 // Tenant-scoped: every read and write filters by organizationId explicitly (see PostgresAuditLogRepository).
@@ -210,6 +214,12 @@ model Organization {
   // The setup token stops working after this instant (see ONBOARDING_TOKEN_TTL_MS); a platform
   // "reset connection" issues a fresh one.
   onboardingTokenExpiresAt DateTime?
+  // Who signed the company up, and proof they own that mailbox. Until emailVerifiedAt is set the organization
+  // is not served as a tenant and cannot connect Salesforce; the verification token is stored hashed.
+  contactEmail               String?
+  emailVerifiedAt            DateTime?
+  emailVerificationTokenHash String?
+  emailVerificationExpiresAt DateTime?
   // Bumped whenever the master encryption key is rotated, so a future migration
   // knows which key to decrypt sfConsumerSecretEnc/sfRefreshTokenEnc with.
   encryptionKeyVersion Int       @default(1)
