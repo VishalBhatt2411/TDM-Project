@@ -105,6 +105,8 @@ const connectionProvider = new TenantSalesforceConnectionProvider({
     logger.warn(JSON.stringify({ event: "salesforce_credentials_rejected", organizationId, reason, marked }));
   },
   refreshLock: new PostgresExclusiveLock(prisma, () => TenantContext.currentOrganizationId()),
+  loadSession: (organizationId) => organizationRepository.loadSalesforceSession(organizationId),
+  saveSession: (organizationId, session) => organizationRepository.saveSalesforceSession(organizationId, session),
 });
 
 const identityProviderFactory: SalesforceIdentityProviderFactory = async (organizationId, purpose) => {

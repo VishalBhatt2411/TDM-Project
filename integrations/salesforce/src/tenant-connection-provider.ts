@@ -12,6 +12,15 @@ export interface SalesforceOrgCredentials {
   refreshToken: string;
 }
 
+/** A minted access token and what came with it — shared by every app instance until `expiresAt`. */
+export interface SalesforceSession {
+  accessToken: string;
+  instanceUrl: string;
+  salesforceOrgId: string;
+  integrationUserId: string;
+  expiresAt: Date;
+}
+
 export interface TenantSalesforceConnectionProviderOptions {
   /** Which tenant the current unit of work belongs to — undefined means "unknown", which fails closed. */
   resolveOrganizationId: () => string | undefined;
@@ -34,11 +43,19 @@ export interface TenantSalesforceConnectionProviderOptions {
    * at once (normal on serverless) would leave the stored token dead and the tenant disconnected.
    */
   refreshLock: ExclusiveLock;
+  /**
+   * The access token currently in use, shared across instances. Without it every cold instance mints
+   * its own — and under rotation each mint logs the other instances' sessions out, so concurrent
+   * requests fail with INVALID_SESSION_ID. Returns null when none is stored or it has expired.
+   */
+  loadSession: (organizationId: string) => Promise<SalesforceSession | null>;
+  saveSession: (organizationId: string, session: SalesforceSession) => Promise<void>;
   /** How long a minted access token is reused before proactively refreshing. */
   ttlMs?: number;
 }
 
 interface CachedTenantConnection {
+  accessToken: string;
   connection: Connection;
   integrationUserId: string;
   salesforceOrgId: string;
@@ -54,6 +71,9 @@ const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const ROTATION_RECHECK_DELAYS_MS = [250, 750, 1500];
 /** Refresh attempts with a newly rotated token before the rejection is treated as final. */
 const MAX_ROTATION_RETRIES = 3;
+
+/** A shared session closer to expiry than this is replaced rather than handed to a request that may outlive it. */
+const MIN_SESSION_REMAINING_MS = 60 * 1000;
 
 const REFRESH_LOCK_KEY = "salesforce-refresh";
 const MAX_REJECTION_REASON_LENGTH = 100;
@@ -82,6 +102,8 @@ const IDENTITY_URL_PATTERN = /\/id\/([a-zA-Z0-9]{15,18})\/([a-zA-Z0-9]{15,18})\/
 export class TenantSalesforceConnectionProvider implements SalesforceConnectionSource {
   private readonly cache = new Map<string, CachedTenantConnection>();
   private readonly inFlight = new Map<string, Promise<CachedTenantConnection>>();
+  /** The access token Salesforce last rejected for each tenant, so it isn't taken back from the shared session. */
+  private readonly rejectedAccessTokens = new Map<string, string>();
   private readonly ttlMs: number;
 
   constructor(private readonly options: TenantSalesforceConnectionProviderOptions) {
@@ -101,7 +123,11 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
   }
 
   async invalidate(): Promise<void> {
-    this.cache.delete(this.requireOrganizationId());
+    const organizationId = this.requireOrganizationId();
+    const cached = this.cache.get(organizationId);
+    // Remember which token failed: the shared session may already hold a newer one, which must be reused, not replaced.
+    if (cached) this.rejectedAccessTokens.set(organizationId, cached.accessToken);
+    this.cache.delete(organizationId);
   }
 
   async ping(): Promise<void> {
@@ -120,14 +146,43 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
     const cached = this.cache.get(organizationId);
     if (cached && cached.expiresAt > Date.now()) return cached;
 
+    // Another instance may already have minted a usable token — taking it needs no lock and no Salesforce call.
+    const shared = await this.usableSharedSession(organizationId);
+    if (shared) return this.remember(organizationId, shared);
+
     let pending = this.inFlight.get(organizationId);
     if (!pending) {
       pending = this.connect(organizationId).finally(() => this.inFlight.delete(organizationId));
       this.inFlight.set(organizationId, pending);
     }
-    const fresh = await pending;
-    this.cache.set(organizationId, fresh);
-    return fresh;
+    return this.remember(organizationId, await pending);
+  }
+
+  private remember(organizationId: string, connection: CachedTenantConnection): CachedTenantConnection {
+    this.cache.set(organizationId, connection);
+    return connection;
+  }
+
+  /** The shared session, unless it is the token Salesforce just rejected (or is about to lapse). */
+  private async usableSharedSession(organizationId: string): Promise<CachedTenantConnection | null> {
+    const session = await this.options.loadSession(organizationId);
+    if (!session || session.expiresAt.getTime() - Date.now() < MIN_SESSION_REMAINING_MS) return null;
+    if (session.accessToken === this.rejectedAccessTokens.get(organizationId)) return null;
+    return this.toConnection(session);
+  }
+
+  private toConnection(session: SalesforceSession): CachedTenantConnection {
+    return {
+      accessToken: session.accessToken,
+      connection: new jsforce.Connection({
+        accessToken: session.accessToken,
+        instanceUrl: session.instanceUrl,
+        version: SALESFORCE_API_VERSION,
+      }),
+      salesforceOrgId: session.salesforceOrgId,
+      integrationUserId: session.integrationUserId,
+      expiresAt: session.expiresAt.getTime(),
+    };
   }
 
   private connect(organizationId: string): Promise<CachedTenantConnection> {
@@ -135,6 +190,10 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
   }
 
   private async connectLocked(organizationId: string): Promise<CachedTenantConnection> {
+    // Whoever held the lock before us may have just minted a token — reuse it rather than rotate again.
+    const shared = await this.usableSharedSession(organizationId);
+    if (shared) return shared;
+
     // Read inside the lock: whoever held it before us may have just rotated the token.
     const stored = await this.options.loadCredentials(organizationId);
     if (!stored) throw new TenantNotConnectedError(organizationId);
@@ -166,16 +225,16 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
       throw new Error("Salesforce token response did not include a recognizable identity URL.");
     }
 
-    return {
-      connection: new jsforce.Connection({
-        accessToken: token.access_token,
-        instanceUrl: token.instance_url,
-        version: SALESFORCE_API_VERSION,
-      }),
+    const session: SalesforceSession = {
+      accessToken: token.access_token,
+      instanceUrl: token.instance_url,
       salesforceOrgId,
       integrationUserId,
-      expiresAt: Date.now() + this.ttlMs,
+      expiresAt: new Date(Date.now() + this.ttlMs),
     };
+    await this.options.saveSession(organizationId, session);
+    this.rejectedAccessTokens.delete(organizationId);
+    return this.toConnection(session);
   }
 
   private refresh(credentials: SalesforceOrgCredentials) {

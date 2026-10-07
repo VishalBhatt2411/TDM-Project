@@ -16,26 +16,49 @@ Create a Neon project (Vercel → Storage → Neon, or neon.tech). Use the poole
 as `DATABASE_URL`; migrations run during the Vercel build against `DATABASE_URL_UNPOOLED` when it
 is set (the Neon integration sets both), else `DATABASE_URL`.
 
-### Preview deployments need their own database
+### Staging environment (Vercel Preview + its own database)
 
-The build command runs `db:deploy` on **every** Vercel deployment, previews included. If the Preview
-environment shares the production `DATABASE_URL`, building any branch applies its migrations to the
-live database before that code has been reviewed or merged. Give Previews a separate database:
+Production (`master`) only ever shows merged work. Everything else is tested on **staging**: Vercel's
+Preview environment, backed by its own Neon branch, served on its own stable address.
 
-1. In Neon, create a branch for previews (or a second project). Prefer one with **no tenant data**:
-   a branch copied from production also copies each tenant's encrypted Salesforce credentials, and
-   those would then be reachable from preview code.
-2. In Vercel → Project → Settings → Environment Variables, set `DATABASE_URL` (pooled) and
-   `DATABASE_URL_UNPOOLED` to that branch's strings with only the **Preview** scope ticked, and make
-   sure the Production values are scoped to Production only.
-3. Give Preview its own `JWT_SECRET` and `ENCRYPTION_KEY`, so a preview can never sign tokens for
-   or decrypt production data. Leave `JOB_TRIGGER_SECRET` and `ANTHROPIC_API_KEY` unset there so
-   previews don't trigger jobs or spend API credit.
-4. Check it: open a preview deployment's build log, and confirm `_prisma_migrations` in the
-   production database gained no new rows from that build.
+```
+feature/*  ──PR──▶  staging  ──PR──▶  master
+(preview URL)       (staging site)    (production)
+```
 
-The Neon–Vercel integration can also create a database branch per preview automatically (its
-"Create a database branch for each preview deployment" option), which replaces step 1 and 2.
+The build command runs `db:deploy` on every deployment, so a Preview that shared the production
+`DATABASE_URL` would apply unreviewed migrations to the live database. The build script
+(`infrastructure/vercel-build.sh`) therefore **skips migrations on Preview builds** until
+`PREVIEW_DB_ISOLATED=1` is set (step 3). One-time setup:
+
+1. **Database.** In Neon create a branch (or project) for staging with **no tenant data** — a copy of
+   production would carry each tenant's encrypted Salesforce credentials into preview code.
+2. **Variables.** In Vercel → Settings → Environment Variables, the Neon variables (`DATABASE_URL`,
+   `DATABASE_URL_UNPOOLED`, `POSTGRES_*`, `PG*`) are scoped *Production and Preview*. Re-scope each to
+   **Production only**, then add the staging branch's `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED`
+   with **Preview only**. (Or use the Neon integration's per-preview database branches.)
+3. **Preview-only values**, each scoped to Preview and different from production:
+
+   | Variable | Value |
+   | --- | --- |
+   | `JWT_SECRET`, `ENCRYPTION_KEY` | new random values, so staging can never sign tokens for or decrypt production data |
+   | `JOB_TRIGGER_SECRET` | its own random value, not the GitHub secret — nothing calls staging's job endpoints |
+   | `SCHEDULER_MODE` / `NODE_ENV` / `TRUST_PROXY_HOPS` | `external` / `production` / `1` |
+   | `TENANT_BASE_DOMAIN` | `vercel.app` |
+   | `WEB_ORIGIN`, `SF_OAUTH_REDIRECT_URI`, `SF_ONBOARDING_REDIRECT_URI` | as in the production table, using the staging host |
+   | `PREVIEW_DB_ISOLATED` | `1` — set last, once steps 1–2 are done |
+
+   Leave `ANTHROPIC_API_KEY` unset so staging spends no API credit.
+4. **Address.** Settings → Domains → add `<name>-staging.vercel.app` and assign it to the `staging` Git
+   branch. The tenant is resolved from `<slug>.<TENANT_BASE_DOMAIN>`, so the company created on staging
+   must use the slug `<name>-staging`. Add the staging redirect URIs to that company's Connected App.
+5. **Check it.** Push `staging`, open its build log (it should run `prisma migrate deploy`), and
+   confirm `_prisma_migrations` in the **production** database gained no new rows from that build.
+6. Create the staging company through the onboarding wizard on the staging host (it can connect the
+   same development Salesforce org; use a sandbox if staging data must stay apart from production's).
+
+Branch URLs (`tdm-git-<branch>-…vercel.app`) do not resolve a tenant; to test a feature branch before it
+reaches `staging`, point the staging domain at that branch under Settings → Domains.
 
 ## 2. Vercel project
 

@@ -21,6 +21,18 @@ export interface OrganizationRecord {
   createdAt: Date;
 }
 
+/** A minted Salesforce access token and what came with it, shared by every instance until `expiresAt`. */
+export interface SalesforceSession {
+  accessToken: string;
+  instanceUrl: string;
+  salesforceOrgId: string;
+  integrationUserId: string;
+  expiresAt: Date;
+}
+
+/** Nulls the shared session — it belongs to the connection being replaced or rejected. */
+const CLEAR_SESSION = { sfSessionEnc: null, sfSessionExpiresAt: null } as const;
+
 /** Thrown by create() when another company already has the slug. */
 export class OrganizationSlugTakenError extends Error {
   constructor(slug: string) {
@@ -94,6 +106,7 @@ export class OrganizationRepository {
         where: { id },
         data: {
           sfRefreshTokenEnc: null,
+          ...CLEAR_SESSION,
           connectionStatus: "pending",
           connectionError: null,
           onboardingTokenHash,
@@ -157,7 +170,7 @@ export class OrganizationRepository {
         sfConsumerKey: input.consumerKey,
         sfConsumerSecretEnc: encryptSecret(input.consumerSecret, this.masterKeyHex),
         ...(input.loginUrl ? { sfLoginUrl: input.loginUrl } : {}),
-        ...(appChanged ? { sfRefreshTokenEnc: null, connectionStatus: "pending", connectionError: null } : {}),
+        ...(appChanged ? { sfRefreshTokenEnc: null, ...CLEAR_SESSION, connectionStatus: "pending", connectionError: null } : {}),
       },
     });
   }
@@ -168,6 +181,7 @@ export class OrganizationRepository {
       where: { id },
       data: {
         sfRefreshTokenEnc: encryptSecret(input.refreshToken, this.masterKeyHex),
+        ...CLEAR_SESSION,
         sfInstanceUrl: input.instanceUrl,
         sfOrgId: input.sfOrgId,
         connectionStatus: "connected",
@@ -201,9 +215,30 @@ export class OrganizationRepository {
     if (!storedCipher) return false;
     const { count } = await this.prisma.organization.updateMany({
       where: { id, sfRefreshTokenEnc: storedCipher },
-      data: { connectionStatus: "error", connectionError: message },
+      data: { ...CLEAR_SESSION, connectionStatus: "error", connectionError: message },
     });
     return count === 1;
+  }
+
+  /** The shared access-token session while it is still valid, else null. */
+  async loadSalesforceSession(id: string): Promise<SalesforceSession | null> {
+    const record = await this.prisma.organization.findUnique({
+      where: { id },
+      select: { connectionStatus: true, sfSessionEnc: true, sfSessionExpiresAt: true },
+    });
+    if (record?.connectionStatus !== "connected" || !record.sfSessionEnc || !record.sfSessionExpiresAt) return null;
+    if (record.sfSessionExpiresAt.getTime() <= Date.now()) return null;
+    const session = JSON.parse(decryptSecret(record.sfSessionEnc, this.masterKeyHex)) as Omit<SalesforceSession, "expiresAt">;
+    return { ...session, expiresAt: record.sfSessionExpiresAt };
+  }
+
+  /** Publishes a freshly minted session for every instance — only while the tenant is still connected. */
+  async saveSalesforceSession(id: string, session: SalesforceSession): Promise<void> {
+    const { expiresAt, ...secret } = session;
+    await this.prisma.organization.updateMany({
+      where: { id, connectionStatus: "connected" },
+      data: { sfSessionEnc: encryptSecret(JSON.stringify(secret), this.masterKeyHex), sfSessionExpiresAt: expiresAt },
+    });
   }
 
   /** The stored refresh-token ciphertext when it decrypts to `refreshToken` (AES-GCM ciphertexts differ per encryption, so compare plaintexts). */
@@ -249,7 +284,7 @@ export class OrganizationRepository {
   async recordConnectionError(id: string, message: string): Promise<void> {
     await this.prisma.organization.update({
       where: { id },
-      data: { connectionStatus: "error", connectionError: message },
+      data: { ...CLEAR_SESSION, connectionStatus: "error", connectionError: message },
     });
   }
 
