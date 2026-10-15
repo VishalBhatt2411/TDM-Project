@@ -26,7 +26,7 @@ export class ExpiredRowsRepository {
     const unusable = { OR: [{ expiresAt: { lt: spentBefore } }, { consumedAt: { lt: spentBefore } }] };
     const unusableRevocable = { OR: [{ expiresAt: { lt: spentBefore } }, { revokedAt: { lt: spentBefore } }] };
 
-    const [otpCodes, refreshTokens, magicLoginTokens, customerPasswordTokens, staffRefreshTokens, staffOAuthStates, reminderLogs, followUpLogs, unverifiedOrganizations] =
+    const [otpCodes, refreshTokens, magicLoginTokens, customerPasswordTokens, staffRefreshTokens, staffOAuthStates, reminderLogs, followUpLogs] =
       await Promise.all([
         this.prisma.otpCode.deleteMany({ where: unusable }),
         this.prisma.refreshToken.deleteMany({ where: unusableRevocable }),
@@ -36,11 +36,19 @@ export class ExpiredRowsRepository {
         this.prisma.staffOAuthState.deleteMany({ where: { expiresAt: { lt: spentBefore } } }),
         this.prisma.reminderLog.deleteMany({ where: { sentAt: { lt: claimsBefore } } }),
         this.prisma.followUpLog.deleteMany({ where: { sentAt: { lt: claimsBefore } } }),
-        // Never verified, so never served or connected: nothing of value hangs off these rows.
-        this.prisma.organization.deleteMany({
-          where: { emailVerifiedAt: null, createdAt: { lt: new Date(now.getTime() - UNVERIFIED_ORGANIZATION_RETENTION_MS) } },
-        }),
       ]);
+
+    // Apart from the batch above: this delete cascades to every row an organization owns, so it runs only once the
+    // routine purges are done (its failure can't leave their outcome unknown) and only for a sign-up that never got
+    // anywhere — unverified AND never connected to Salesforce — however its verification column came to be empty.
+    const unverifiedOrganizations = await this.prisma.organization.deleteMany({
+      where: {
+        emailVerifiedAt: null,
+        sfRefreshTokenEnc: null,
+        connectionStatus: { not: "connected" },
+        createdAt: { lt: new Date(now.getTime() - UNVERIFIED_ORGANIZATION_RETENTION_MS) },
+      },
+    });
 
     return {
       otpCodes: otpCodes.count,

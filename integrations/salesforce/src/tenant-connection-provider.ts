@@ -146,16 +146,19 @@ export class TenantSalesforceConnectionProvider implements SalesforceConnectionS
     const cached = this.cache.get(organizationId);
     if (cached && cached.expiresAt > Date.now()) return cached;
 
-    // Another instance may already have minted a usable token — taking it needs no lock and no Salesforce call.
-    const shared = await this.usableSharedSession(organizationId);
-    if (shared) return this.remember(organizationId, shared);
-
     let pending = this.inFlight.get(organizationId);
     if (!pending) {
-      pending = this.connect(organizationId).finally(() => this.inFlight.delete(organizationId));
+      pending = this.resolve(organizationId).finally(() => this.inFlight.delete(organizationId));
       this.inFlight.set(organizationId, pending);
     }
     return this.remember(organizationId, await pending);
+  }
+
+  /** One lookup per tenant per expiry, however many requests are waiting on it (see `inFlight`). */
+  private async resolve(organizationId: string): Promise<CachedTenantConnection> {
+    // Another instance may already have minted a usable token — taking it needs no lock and no Salesforce call.
+    const shared = await this.usableSharedSession(organizationId);
+    return shared ?? this.connect(organizationId);
   }
 
   private remember(organizationId: string, connection: CachedTenantConnection): CachedTenantConnection {

@@ -25,9 +25,13 @@ export function VerifyEmailPage() {
   }, []);
 
   // A query (not an effect) so React StrictMode's double mount can't spend the single-use token twice.
+  // The queryFn must resolve a value: TanStack Query v5 treats `undefined` as an error, and the API call returns void.
   const verification = useQuery({
     queryKey: ["onboarding", "verify-email", credentials.organizationId],
-    queryFn: () => verifyOrganizationEmail(credentials),
+    queryFn: async () => {
+      await verifyOrganizationEmail(credentials);
+      return true;
+    },
     enabled: wellFormed,
     retry: false,
     staleTime: Infinity,

@@ -11,6 +11,7 @@
     "dev:api": "npm run start:dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
     "build": "npm run build -w @tdm/types -w @tdm/domain -w @tdm/postgres-adapter -w @tdm/salesforce-adapter -w @tdm/api -w @tdm/web",
+    "test": "node --conditions=development tests/run.js",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -22,6 +23,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "prettier": "^3.3.3",
+    "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
   },
   "engines": {

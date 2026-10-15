@@ -69,8 +69,11 @@ export class PostgresAuthRepository implements AuthRepository {
     if (!record) return { status: "invalid" };
     if (claimed.count === 1) return { status: "ok", session: { familyId: record.familyId, startedAt: record.sessionStartedAt } };
     if (record.revokedAt && record.expiresAt > new Date() && Date.now() - record.revokedAt.getTime() > REUSE_GRACE_MS) {
-      await this.prisma.refreshToken.updateMany({ where: { familyId: record.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
-      return { status: "reused" };
+      // Replay evidence only means something while the chain it was rotated into is still alive: ending that live
+      // successor is the response. A token revoked by sign-out (or by an earlier reuse response) has no live
+      // successor, so presenting it later is an ordinary stale client — rejected, but not reported as theft.
+      const ended = await this.prisma.refreshToken.updateMany({ where: { familyId: record.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+      if (ended.count > 0) return { status: "reused" };
     }
     return { status: "invalid" };
   }

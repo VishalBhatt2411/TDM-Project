@@ -44,8 +44,9 @@ model RefreshToken {
   expiresAt  DateTime
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
-  // Every token rotated from the same sign-in shares familyId and sessionStartedAt.
-  familyId         String
+  // Every token rotated from the same sign-in shares familyId and sessionStartedAt. The database default keeps
+  // inserts from a release that predates families valid (each such token starts its own family).
+  familyId         String   @default(dbgenerated("(gen_random_uuid())::text"))
   sessionStartedAt DateTime @default(now())
 
   @@unique([customerId, tokenHash])

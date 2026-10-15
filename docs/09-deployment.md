@@ -120,8 +120,11 @@ Without `PLATFORM_OPERATOR_PASSWORD_HASH` the console and its API return 404.
 
 - Request bodies are capped at ~4.5 MB. The web app downscales licence photos and brand images
   before upload, and the hero image cap is 3 MB to fit.
-- Rate limiting (`ThrottlerModule`) is in-memory, so each warm function instance counts
-  separately — limits are per instance, not global. A shared store (e.g. Redis) makes them global.
+- Rate limiting (`ThrottlerModule`) is in-memory by default, so each warm function instance counts
+  separately — limits are per instance, not global. Set `UPSTASH_REDIS_REST_URL` and
+  `UPSTASH_REDIS_REST_TOKEN` (both or neither) to share the counters across instances; each throttled
+  request then makes one Redis call. If Redis is unreachable (1.5 s timeout) the request falls back to the
+  per-instance counter and a `rate_limit_store_unavailable` error is logged at most once a minute — alert on it.
 - A tenant's metadata deploy runs after the onboarding response via `waitUntil`, bounded by the
   function's `maxDuration` (60 s).
 

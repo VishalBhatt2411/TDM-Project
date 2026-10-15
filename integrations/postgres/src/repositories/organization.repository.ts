@@ -23,7 +23,12 @@ export interface OrganizationRecord {
   createdAt: Date;
 }
 
-/** A minted Salesforce access token and what came with it, shared by every instance until `expiresAt`. */
+/**
+ * A minted Salesforce access token and what came with it, shared by every instance until `expiresAt`.
+ * Deliberately the persistence-side twin of `SalesforceSession` in @tdm/salesforce-adapter: the domain package may
+ * not carry Salesforce-specific types, and the adapters don't depend on each other. The wiring in
+ * infrastructure.module.ts assigns one to the other, so a field added or renamed on only one side fails to compile.
+ */
 export interface SalesforceSession {
   accessToken: string;
   instanceUrl: string;
@@ -270,8 +275,32 @@ export class OrganizationRepository {
     });
     if (record?.connectionStatus !== "connected" || !record.sfSessionEnc || !record.sfSessionExpiresAt) return null;
     if (record.sfSessionExpiresAt.getTime() <= Date.now()) return null;
-    const session = JSON.parse(decryptSecret(record.sfSessionEnc, this.masterKeyHex)) as Omit<SalesforceSession, "expiresAt">;
-    return { ...session, expiresAt: record.sfSessionExpiresAt };
+    const session = this.parseSession(id, record.sfSessionEnc);
+    return session ? { ...session, expiresAt: record.sfSessionExpiresAt } : null;
+  }
+
+  /**
+   * The stored session is only a cache of what a refresh can mint again, so an unreadable one (sealed under a
+   * previous ENCRYPTION_KEY, truncated, or an older shape) must read as "no session" — not throw, which would fail
+   * every request for the tenant before the refresh path that would replace it is ever reached.
+   */
+  private parseSession(id: string, cipher: string): Omit<SalesforceSession, "expiresAt"> | null {
+    try {
+      const parsed: unknown = JSON.parse(decryptSecret(cipher, this.masterKeyHex));
+      const session = parsed as Partial<Omit<SalesforceSession, "expiresAt">> | null;
+      if (
+        typeof session?.accessToken === "string" &&
+        typeof session.instanceUrl === "string" &&
+        typeof session.salesforceOrgId === "string" &&
+        typeof session.integrationUserId === "string"
+      ) {
+        return { accessToken: session.accessToken, instanceUrl: session.instanceUrl, salesforceOrgId: session.salesforceOrgId, integrationUserId: session.integrationUserId };
+      }
+    } catch {
+      // Fall through: same outcome as a malformed shape.
+    }
+    console.warn(JSON.stringify({ event: "salesforce_session_unreadable", organizationId: id }));
+    return null;
   }
 
   /** Publishes a freshly minted session for every instance — only while the tenant is still connected. */
