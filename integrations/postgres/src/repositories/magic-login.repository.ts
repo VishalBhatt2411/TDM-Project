@@ -23,4 +23,9 @@ export class MagicLoginRepository {
     const record = await this.prisma.magicLoginToken.findUnique({ where: { tokenHash } });
     return record?.customerId ?? null;
   }
+
+  /** Voids every unused token of a customer, e.g. after a password reset, so older emailed links stop working. */
+  async revokeAllFor(customerId: string): Promise<void> {
+    await this.prisma.magicLoginToken.updateMany({ where: { customerId, consumedAt: null }, data: { consumedAt: new Date() } });
+  }
 }

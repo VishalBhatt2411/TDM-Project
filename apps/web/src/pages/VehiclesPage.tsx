@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { QueryError } from "@/components/ui/query-error";
@@ -12,6 +12,7 @@ import { useWishlist } from "@/hooks/use-wishlist";
 import { useShoppingLocation } from "@/context/location-context";
 import type { BodyType } from "@tdm/types";
 
+const PAGE_SIZE = 24;
 const BODY_TYPES: BodyType[] = ["Sedan", "SUV", "Hatchback", "MPV", "Luxury", "Pickup"];
 
 export function VehiclesPage() {
@@ -26,11 +27,15 @@ export function VehiclesPage() {
 
   const { t } = useTranslation();
   const { location, isReady, branches, setLocation } = useShoppingLocation();
-  const { data, isLoading, error, refetch, isRefetching } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["vehicles", bodyType, debouncedQ, location.city, location.branchId],
-    queryFn: () => searchVehicles({ bodyType, q: debouncedQ || undefined, city: location.city, branchId: location.branchId }),
+    queryFn: ({ pageParam }) =>
+      searchVehicles({ bodyType, q: debouncedQ || undefined, city: location.city, branchId: location.branchId, page: pageParam, pageSize: PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page * last.pageSize < last.total ? last.page + 1 : undefined),
     enabled: isReady,
   });
+  const vehicles = React.useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
   const locationLabel = location.branchId
     ? branches.find((b) => b.id === location.branchId)?.name ?? location.city
     : location.city;
@@ -76,7 +81,7 @@ export function VehiclesPage() {
         </div>
       )}
       {error && !data && <QueryError error={error} subject="vehicles" onRetry={() => refetch()} isRetrying={isRefetching} />}
-      {data && data.items.length === 0 && (
+      {data && vehicles.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           <p>{locationLabel ? t("location.noVehiclesHere", { location: locationLabel }) : "No vehicles match this filter yet."}</p>
           {locationLabel && (
@@ -88,7 +93,7 @@ export function VehiclesPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {data?.items.map((vehicle, i) => (
+        {vehicles.map((vehicle, i) => (
           <VehicleCard
             key={vehicle.id}
             vehicle={vehicle}
@@ -98,6 +103,13 @@ export function VehiclesPage() {
           />
         ))}
       </div>
+      {hasNextPage && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

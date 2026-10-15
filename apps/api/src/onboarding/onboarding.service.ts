@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { runInBackground } from "../common/background-tasks";
 import { errorCodeOf } from "../common/error-code";
 import { StaffAssignment, StaffAssignmentConflictError, StaffAssignmentRepository } from "@tdm/domain";
@@ -23,7 +23,9 @@ import { SalesforceIdentityProviderFactory } from "../infrastructure/identity-pr
 import { TenantMetadataDeployer } from "../infrastructure/metadata-deployer";
 import { TenantContext } from "../tenancy/tenant-context";
 import { OAUTH_STATE_TTL_MS } from "../auth/auth.constants";
-import { CreateOrganizationDto, SaveSalesforceCredentialsDto } from "./dto";
+import { EMAIL_SENDER, EmailSender } from "../notifications/email-sender";
+import { escapeHtml } from "../notifications/email-templates";
+import { CreateOrganizationDto, SaveSalesforceCredentialsDto, VerifyEmailDto } from "./dto";
 import { env } from "../common/env";
 
 /** Scopes needed beyond staff-login's "id api" — refresh_token/offline_access lets the wizard persist a reusable connection instead of a one-time login. */
@@ -36,6 +38,8 @@ export interface OrganizationStatusDto {
   connectionStatus: OrganizationRecord["connectionStatus"];
   connectionError: string | null;
   metadataDeployedAt: string | null;
+  /** Until the sign-up contact confirms their email the wizard cannot connect Salesforce. */
+  emailVerified: boolean;
   /**
    * Every callback URL the tenant's Connected App must list (onboarding handshake + staff login) —
    * always the server's actual configured values, never guessed on the frontend.
@@ -59,15 +63,24 @@ export class OnboardingService {
     @Inject(STAFF_ASSIGNMENT_REPOSITORY) private readonly assignments: StaffAssignmentRepository,
     @Inject(SALESFORCE_IDENTITY_PROVIDER_FACTORY) private readonly identityProviders: SalesforceIdentityProviderFactory,
     @Inject(TENANT_METADATA_DEPLOYER) private readonly deployMetadata: TenantMetadataDeployer,
+    @Inject(EMAIL_SENDER) private readonly emailSender: EmailSender,
   ) {}
 
   async createOrganization(dto: CreateOrganizationDto): Promise<CreatedOrganizationDto> {
     // Only its hash is stored — the plaintext exists in this response and the creator's browser.
     const onboardingToken = randomBytes(32).toString("hex");
+    const verificationToken = randomBytes(32).toString("hex");
     // The repository checks the shared company/dealer subdomain namespace atomically with the insert.
     try {
-      const org = await this.organizations.create({ name: dto.name, slug: dto.slug, onboardingTokenHash: sha256Hex(onboardingToken) });
+      const org = await this.organizations.create({
+        name: dto.name,
+        slug: dto.slug,
+        onboardingTokenHash: sha256Hex(onboardingToken),
+        contactEmail: dto.adminEmail,
+        emailVerificationTokenHash: sha256Hex(verificationToken),
+      });
       this.logger.log(JSON.stringify({ event: "onboarding_organization_created", organizationId: org.id }));
+      await this.sendVerificationEmail(org, dto.adminEmail, verificationToken);
       return { ...toStatusDto(org), onboardingToken };
     } catch (err) {
       if (err instanceof OrganizationSlugTakenError) {
@@ -81,8 +94,29 @@ export class OnboardingService {
     return this.organizations.matchesOnboardingToken(organizationId, sha256Hex(token));
   }
 
+  /** Confirms the emailed link. Single-use and expiring; a wrong or stale link is refused the same way. */
+  async verifyEmail(dto: VerifyEmailDto): Promise<{ verified: true }> {
+    if (!(await this.organizations.verifyEmail(dto.organizationId, sha256Hex(dto.token)))) {
+      throw new BadRequestException("This verification link is invalid or has expired. Request a new one from the setup page.");
+    }
+    this.logger.log(JSON.stringify({ event: "onboarding_email_verified", organizationId: dto.organizationId }));
+    return { verified: true };
+  }
+
+  /** Issues a fresh link (invalidating the previous one) for a wizard session that still holds the setup token. */
+  async resendVerification(organizationId: string): Promise<void> {
+    const org = await this.getOrganizationOrThrow(organizationId);
+    if (org.emailVerified) return;
+    const email = await this.organizations.findContactEmail(org.id);
+    if (!email) return;
+    const verificationToken = randomBytes(32).toString("hex");
+    await this.organizations.saveEmailVerificationToken(org.id, sha256Hex(verificationToken));
+    await this.sendVerificationEmail(org, email, verificationToken);
+  }
+
   async saveSalesforceCredentials(organizationId: string, dto: SaveSalesforceCredentialsDto): Promise<OrganizationStatusDto> {
     const org = await this.getOrganizationOrThrow(organizationId);
+    this.assertEmailVerified(org);
     // The wizard is public and keyed only by organization id — it may finish a connection, never
     // re-point a live one. Changing a connected tenant's Connected App is an authenticated admin action.
     if (org.connectionStatus === "connected") {
@@ -99,6 +133,7 @@ export class OnboardingService {
   /** Redirect target for the wizard's "Authorize with Salesforce" step. */
   async buildAuthorizationUrl(organizationId: string): Promise<string> {
     const org = await this.getOrganizationOrThrow(organizationId);
+    this.assertEmailVerified(org);
     const identityProvider = await this.identityProviders(org.id, "onboarding");
     if (!identityProvider) {
       throw new BadRequestException("Save this organization's Salesforce Connected App credentials before connecting.");
@@ -299,6 +334,26 @@ export class OnboardingService {
     }
   }
 
+  private assertEmailVerified(org: OrganizationRecord): void {
+    if (!org.emailVerified) {
+      throw new ForbiddenException("Confirm your email address first — check your inbox for the verification link.");
+    }
+  }
+
+  /** Best effort: a mail outage must not lose the sign-up — the wizard offers a resend. */
+  private async sendVerificationEmail(org: OrganizationRecord, to: string, token: string): Promise<void> {
+    const link = `${env.adminWebOrigin}/onboarding/verify#org=${org.id}&token=${token}`;
+    const delivered = await this.emailSender.send({
+      to,
+      subject: "Confirm your email to finish setting up your dealership",
+      html: `<p>Thanks for signing up <strong>${escapeHtml(org.name)}</strong>.</p><p><a href="${link}">Confirm your email address</a> to continue connecting Salesforce. The link works for 24 hours.</p><p>If you did not sign up, ignore this email and nothing will be created.</p>`,
+      plainText: `Confirm your email to continue setting up ${org.name}: ${link}\nThe link works for 24 hours. If you did not sign up, ignore this email.`,
+    });
+    if (!delivered) {
+      this.logger.error(JSON.stringify({ event: "onboarding_verification_email_failed", organizationId: org.id }));
+    }
+  }
+
   private async getOrganizationOrThrow(organizationId: string): Promise<OrganizationRecord> {
     const org = await this.organizations.findById(organizationId);
     if (!org) {
@@ -316,6 +371,7 @@ function toStatusDto(org: OrganizationRecord): OrganizationStatusDto {
     connectionStatus: org.connectionStatus,
     connectionError: org.connectionError,
     metadataDeployedAt: org.metadataDeployedAt ? org.metadataDeployedAt.toISOString() : null,
+    emailVerified: org.emailVerified,
     salesforceCallbackUrls: [env.sfOnboardingRedirectUri, env.sfOAuthRedirectUri],
   };
 }

@@ -5,10 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: tdm
-      POSTGRES_PASSWORD: tdm_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tdm_dev_password}
       POSTGRES_DB: tdm_operational
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - tdm_postgres_data:/var/lib/postgresql/data
 

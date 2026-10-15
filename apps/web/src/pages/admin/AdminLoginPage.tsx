@@ -76,7 +76,7 @@ export function AdminLoginPage() {
         <CardContent>
           {error && (
             <p role="alert" className="mb-4 text-sm text-destructive">
-              {ERROR_MESSAGES[error] ?? "Sign-in failed. Please try again."}
+              {(Object.hasOwn(ERROR_MESSAGES, error) ? ERROR_MESSAGES[error] : undefined) ?? "Sign-in failed. Please try again."}
             </p>
           )}
           <form onSubmit={handleSubmit} noValidate className="space-y-4">

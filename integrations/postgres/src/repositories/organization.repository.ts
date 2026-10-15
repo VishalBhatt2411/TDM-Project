@@ -18,10 +18,17 @@ export interface OrganizationRecord {
   connectionError: string | null;
   metadataDeployedAt: Date | null;
   encryptionKeyVersion: number;
+  /** Whether the sign-up contact proved they own their mailbox — an unverified organization is never served as a tenant. */
+  emailVerified: boolean;
   createdAt: Date;
 }
 
-/** A minted Salesforce access token and what came with it, shared by every instance until `expiresAt`. */
+/**
+ * A minted Salesforce access token and what came with it, shared by every instance until `expiresAt`.
+ * Deliberately the persistence-side twin of `SalesforceSession` in @tdm/salesforce-adapter: the domain package may
+ * not carry Salesforce-specific types, and the adapters don't depend on each other. The wiring in
+ * infrastructure.module.ts assigns one to the other, so a field added or renamed on only one side fails to compile.
+ */
 export interface SalesforceSession {
   accessToken: string;
   instanceUrl: string;
@@ -61,6 +68,9 @@ export interface ConnectionCredentials extends ConnectedAppCredentials {
 export const ONBOARDING_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const onboardingTokenExpiry = (): Date => new Date(Date.now() + ONBOARDING_TOKEN_TTL_MS);
+
+/** How long an emailed verification link works. */
+export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export class OrganizationRepository {
   constructor(
@@ -133,17 +143,54 @@ export class OrganizationRepository {
     });
   }
 
-  async create(input: { name: string; slug: string; onboardingTokenHash: string }): Promise<OrganizationRecord> {
+  async create(input: {
+    name: string;
+    slug: string;
+    onboardingTokenHash: string;
+    contactEmail: string;
+    emailVerificationTokenHash: string;
+  }): Promise<OrganizationRecord> {
     const slug = input.slug.toLowerCase();
     try {
       const record = await this.prisma.organization.create({
-        data: { name: input.name, slug, onboardingTokenHash: input.onboardingTokenHash, onboardingTokenExpiresAt: onboardingTokenExpiry() },
+        data: {
+          name: input.name,
+          slug,
+          onboardingTokenHash: input.onboardingTokenHash,
+          onboardingTokenExpiresAt: onboardingTokenExpiry(),
+          contactEmail: input.contactEmail.toLowerCase(),
+          emailVerificationTokenHash: input.emailVerificationTokenHash,
+          emailVerificationExpiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+        },
       });
       return toRecord(record);
     } catch (err) {
       if (isUniqueViolation(err)) throw new OrganizationSlugTakenError(slug);
       throw err;
     }
+  }
+
+  /** The sign-up contact address — only for sending the verification mail, never exposed through a DTO. */
+  async findContactEmail(id: string): Promise<string | null> {
+    const record = await this.prisma.organization.findUnique({ where: { id }, select: { contactEmail: true } });
+    return record?.contactEmail ?? null;
+  }
+
+  /** Replaces the pending verification link (a resend), so only the newest one works. */
+  async saveEmailVerificationToken(id: string, tokenHash: string): Promise<void> {
+    await this.prisma.organization.updateMany({
+      where: { id, emailVerifiedAt: null },
+      data: { emailVerificationTokenHash: tokenHash, emailVerificationExpiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS) },
+    });
+  }
+
+  /** Marks the contact email verified if `tokenHash` is the live link; single-use. Returns whether it matched. */
+  async verifyEmail(id: string, tokenHash: string): Promise<boolean> {
+    const { count } = await this.prisma.organization.updateMany({
+      where: { id, emailVerificationTokenHash: tokenHash, emailVerificationExpiresAt: { gt: new Date() } },
+      data: { emailVerifiedAt: new Date(), emailVerificationTokenHash: null, emailVerificationExpiresAt: null },
+    });
+    return count === 1;
   }
 
   /** Whether `tokenHash` is the unexpired onboarding setup token issued for this organization. */
@@ -228,8 +275,32 @@ export class OrganizationRepository {
     });
     if (record?.connectionStatus !== "connected" || !record.sfSessionEnc || !record.sfSessionExpiresAt) return null;
     if (record.sfSessionExpiresAt.getTime() <= Date.now()) return null;
-    const session = JSON.parse(decryptSecret(record.sfSessionEnc, this.masterKeyHex)) as Omit<SalesforceSession, "expiresAt">;
-    return { ...session, expiresAt: record.sfSessionExpiresAt };
+    const session = this.parseSession(id, record.sfSessionEnc);
+    return session ? { ...session, expiresAt: record.sfSessionExpiresAt } : null;
+  }
+
+  /**
+   * The stored session is only a cache of what a refresh can mint again, so an unreadable one (sealed under a
+   * previous ENCRYPTION_KEY, truncated, or an older shape) must read as "no session" — not throw, which would fail
+   * every request for the tenant before the refresh path that would replace it is ever reached.
+   */
+  private parseSession(id: string, cipher: string): Omit<SalesforceSession, "expiresAt"> | null {
+    try {
+      const parsed: unknown = JSON.parse(decryptSecret(cipher, this.masterKeyHex));
+      const session = parsed as Partial<Omit<SalesforceSession, "expiresAt">> | null;
+      if (
+        typeof session?.accessToken === "string" &&
+        typeof session.instanceUrl === "string" &&
+        typeof session.salesforceOrgId === "string" &&
+        typeof session.integrationUserId === "string"
+      ) {
+        return { accessToken: session.accessToken, instanceUrl: session.instanceUrl, salesforceOrgId: session.salesforceOrgId, integrationUserId: session.integrationUserId };
+      }
+    } catch {
+      // Fall through: same outcome as a malformed shape.
+    }
+    console.warn(JSON.stringify({ event: "salesforce_session_unreadable", organizationId: id }));
+    return null;
   }
 
   /** Publishes a freshly minted session for every instance — only while the tenant is still connected. */
@@ -328,6 +399,7 @@ function toRecord(record: Organization): OrganizationRecord {
     connectionError: record.connectionError,
     metadataDeployedAt: record.metadataDeployedAt,
     encryptionKeyVersion: record.encryptionKeyVersion,
+    emailVerified: record.emailVerifiedAt !== null,
     createdAt: record.createdAt,
   };
 }

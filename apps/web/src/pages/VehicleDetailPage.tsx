@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { QueryError } from "@/components/ui/query-error";
@@ -41,8 +42,14 @@ function HighlightList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+/** Re-mounts the page per vehicle so colour/gallery/EMI state from the previous vehicle never leaks into the next one (e.g. via "You might also like"). */
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
+  React.useEffect(() => window.scrollTo(0, 0), [id]);
+  return <VehicleDetail key={id} id={id} />;
+}
+
+function VehicleDetail({ id }: { id: string | undefined }) {
   const regional = useRegional();
   const { data: vehicle, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["vehicle", id],

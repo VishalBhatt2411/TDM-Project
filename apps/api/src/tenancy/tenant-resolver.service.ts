@@ -43,6 +43,8 @@ export class TenantResolverService {
     if (!host.endsWith(suffix)) return null;
     const label = host.slice(0, -suffix.length);
     if (!isAssignableSubdomainLabel(label)) return null;
-    return (await this.organizations.findBySlug(label))?.id ?? null;
+    // A sign-up that hasn't proven its email yet gets no site, so squatted slugs never go live.
+    const organization = await this.organizations.findBySlug(label);
+    return organization?.emailVerified ? organization.id : null;
   }
 }

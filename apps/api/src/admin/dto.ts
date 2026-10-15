@@ -114,6 +114,7 @@ export class AssignSalesRepDto {
 
 export class SetStaffNotesDto {
   @IsString()
+  @MaxLength(5000)
   notes!: string;
 }
 
@@ -124,6 +125,7 @@ export class CheckInBookingDto {
   /** Required when method is "QR" — the signed token read from the customer's check-in code. Verified by QrCheckinService. */
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   qrToken?: string;
 }
 

@@ -55,12 +55,14 @@ export class VehicleSearchQueryDto extends VehicleLocationQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(1_000_000_000)
   minPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(1_000_000_000)
   maxPrice?: number;
 
   @IsOptional()
@@ -94,10 +96,12 @@ export class CompareVehiclesDto {
 export class EmiEstimateDto {
   @IsNumber()
   @Min(0)
+  @Max(1_000_000_000)
   price!: number;
 
   @IsNumber()
   @Min(0)
+  @Max(1_000_000_000)
   downPayment!: number;
 
   @IsInt()

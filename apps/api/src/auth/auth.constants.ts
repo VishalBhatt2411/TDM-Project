@@ -9,6 +9,8 @@ export const ACCESS_TOKEN_TTL = "15m";
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 export const REFRESH_TOKEN_TTL = "7d";
 export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Rotation extends a session by a week each time; this is the hard stop, so a stolen token can't be kept alive forever.
+export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 // --- Staff "Login with Salesforce" OAuth2/PKCE flow ---
 // How long a pending authorization (state + PKCE code_verifier, stored server-side —

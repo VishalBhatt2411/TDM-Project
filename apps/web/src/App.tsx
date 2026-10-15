@@ -36,6 +36,7 @@ const CreateOrganizationPage = lazyPage(() => import("@/pages/onboarding/CreateO
 const ConnectedAppInstructionsPage = lazyPage(() => import("@/pages/onboarding/ConnectedAppInstructionsPage"), "ConnectedAppInstructionsPage");
 const SalesforceCredentialsPage = lazyPage(() => import("@/pages/onboarding/SalesforceCredentialsPage"), "SalesforceCredentialsPage");
 const OnboardingCallbackPage = lazyPage(() => import("@/pages/onboarding/OnboardingCallbackPage"), "OnboardingCallbackPage");
+const VerifyEmailPage = lazyPage(() => import("@/pages/onboarding/VerifyEmailPage"), "VerifyEmailPage");
 const ResumeOnboardingPage = lazyPage(() => import("@/pages/onboarding/ResumeOnboardingPage"), "ResumeOnboardingPage");
 const PlatformConsolePage = lazyPage(() => import("@/pages/platform/PlatformConsolePage"), "PlatformConsolePage");
 
@@ -66,6 +67,7 @@ export function App() {
 
       {/* Self-service client onboarding — connects a new client's own Salesforce org. Public, no auth. */}
       <Route path="/onboarding" element={<CreateOrganizationPage />} />
+      <Route path="/onboarding/verify" element={<VerifyEmailPage />} />
       <Route path="/onboarding/:organizationId/connected-app" element={<ConnectedAppInstructionsPage />} />
       <Route path="/onboarding/:organizationId/credentials" element={<SalesforceCredentialsPage />} />
       <Route path="/onboarding/:organizationId/connecting" element={<OnboardingCallbackPage />} />

@@ -7,7 +7,7 @@ export class SubmitComplianceDto {
   licenseNumber!: string;
 
   @IsBase64()
-  @MaxLength(8_000_000)
+  @MaxLength(4_000_000)
   licenseImageBase64!: string;
 
   @IsIn(ALLOWED_IMAGE_CONTENT_TYPES)
@@ -22,7 +22,7 @@ export class SubmitComplianceDto {
   consentAccepted!: boolean;
 
   @IsBase64()
-  @MaxLength(8_000_000)
+  @MaxLength(500_000)
   signatureImageBase64!: string;
 
   @IsIn(ALLOWED_IMAGE_CONTENT_TYPES)

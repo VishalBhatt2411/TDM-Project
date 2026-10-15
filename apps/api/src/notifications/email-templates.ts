@@ -6,7 +6,7 @@ import type { BrandProfile } from "@tdm/domain";
  * dealership config) — without this, `<img src=x onerror=...>` in e.g. a cancellation
  * reason would execute in whatever mail client renders the resulting HTML.
  */
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

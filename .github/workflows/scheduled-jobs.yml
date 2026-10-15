@@ -48,6 +48,7 @@ jobs:
           JOB_TRIGGER_SECRET: ${{ secrets.JOB_TRIGGER_SECRET }}
           JOB: ${{ steps.job.outputs.name }}
         run: |
-          curl --fail-with-body --silent --show-error --max-time 120 --retry 2 --retry-all-errors \
+          case "$APP_URL" in https://*) ;; *) echo "APP_URL must be an https:// URL" >&2; exit 1 ;; esac
+          curl --proto '=https' --tlsv1.2 --fail-with-body --silent --show-error --max-time 120 --retry 2 --retry-all-errors \
             -X POST -H "Authorization: Bearer $JOB_TRIGGER_SECRET" \
             "$APP_URL/api/v1/internal/jobs/$JOB"

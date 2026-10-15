@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { AuthenticatedUser } from "../common/jwt-auth.guard";
 import { CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
@@ -11,6 +12,8 @@ export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
   /** Primary entry point for first-time visitors — no account needed up front. */
+  // Unauthenticated and sends mail to an arbitrary address, so it gets a far tighter cap than the global default.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post("public")
   createPublic(@Body() dto: CreatePublicBookingDto) {
     return this.bookingsService.createPublic(dto);

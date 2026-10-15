@@ -9,8 +9,9 @@ import { TenantResolverService } from "./tenancy/tenant-resolver.service";
 import { siteOriginOf } from "./tenancy/tenant-site-origin";
 
 const DEFAULT_BODY_LIMIT = "1mb";
-// Two base64 images at SubmitComplianceDto's 8,000,000-char cap each, plus JSON overhead.
-const COMPLIANCE_BODY_LIMIT = "17mb";
+// A base64 licence photo (4,000,000 chars) plus signature (500,000) at SubmitComplianceDto's caps, plus JSON overhead —
+// also under the ~4.5 MB request cap of the serverless host, which would reject anything larger first.
+const COMPLIANCE_BODY_LIMIT = "4.5mb";
 // One base64 image at MAX_BRAND_IMAGE_BYTES.hero (3 MB decoded = 4 MB encoded), plus JSON overhead.
 const BRAND_IMAGE_BODY_LIMIT = "4.5mb";
 

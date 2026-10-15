@@ -35,6 +35,13 @@ apiClient.interceptors.response.use(
     }
     original._retried = true;
 
+    // Another tab (or an earlier request) already rotated the tokens since this request was sent: just replay it with the current access token instead of burning the single-use refresh token again.
+    const storedAccessToken = tokenStorage.getAccessToken();
+    if (storedAccessToken && original.headers?.Authorization !== `Bearer ${storedAccessToken}`) {
+      original.headers.Authorization = `Bearer ${storedAccessToken}`;
+      return apiClient(original);
+    }
+
     const refreshToken = tokenStorage.getRefreshToken();
     if (!refreshToken) {
       tokenStorage.clear();
@@ -56,7 +63,10 @@ apiClient.interceptors.response.use(
       original.headers.Authorization = `Bearer ${newAccessToken}`;
       return apiClient(original);
     } catch (refreshError) {
-      tokenStorage.clear();
+      // Only a definite rejection ends the session. A network blip or 5xx must not log the user out, and if a
+      // sibling tab won the rotation race the stored refresh token has changed, so its session is still good.
+      const rejected = axios.isAxiosError(refreshError) && refreshError.response?.status === 401;
+      if (rejected && tokenStorage.getRefreshToken() === refreshToken) tokenStorage.clear();
       return Promise.reject(refreshError);
     }
   },

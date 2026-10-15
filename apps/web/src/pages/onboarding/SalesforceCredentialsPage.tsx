@@ -1,8 +1,14 @@
 import * as React from "react";
 import { useParams } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
-import { getSalesforceAuthorizeUrl, hasOnboardingSession, saveSalesforceCredentials } from "@/api/onboarding";
+import {
+  getOrganizationStatus,
+  getSalesforceAuthorizeUrl,
+  hasOnboardingSession,
+  resendVerificationEmail,
+  saveSalesforceCredentials,
+} from "@/api/onboarding";
 import { OnboardingUnavailable } from "@/components/onboarding/OnboardingUnavailable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +22,17 @@ export function SalesforceCredentialsPage() {
   const [consumerSecret, setConsumerSecret] = React.useState("");
   const [loginUrl, setLoginUrl] = React.useState("");
 
+  const queryClient = useQueryClient();
+  const status = useQuery({
+    queryKey: ["onboarding", organizationId, "status"],
+    queryFn: () => getOrganizationStatus(organizationId!),
+    enabled: !!organizationId && hasOnboardingSession(organizationId),
+    // The confirmation link is opened in another tab/mail app — pick the result up without a manual reload.
+    refetchInterval: (query) => (query.state.data?.emailVerified ? false : 5000),
+  });
+  const emailPending = status.data?.emailVerified === false;
+  const resend = useMutation({ mutationFn: () => resendVerificationEmail(organizationId!) });
+
   const mutation = useMutation({
     mutationFn: async () => {
       await saveSalesforceCredentials(organizationId!, { consumerKey, consumerSecret, loginUrl: loginUrl.trim() || undefined });
@@ -26,6 +43,7 @@ export function SalesforceCredentialsPage() {
       // this must leave the SPA entirely to reach Salesforce's hosted authorization page.
       window.location.href = authorizationUrl;
     },
+    onError: () => queryClient.invalidateQueries({ queryKey: ["onboarding", organizationId, "status"] }),
   });
   const saveError = errorMessage(mutation.error, "Couldn't save these credentials. Double-check them and try again.");
 
@@ -47,6 +65,20 @@ export function SalesforceCredentialsPage() {
               mutation.mutate();
             }}
           >
+            {emailPending && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                Confirm your email first — we sent you a link. This page unlocks as soon as you open it.{" "}
+                <button
+                  type="button"
+                  className="font-medium underline disabled:opacity-60"
+                  disabled={resend.isPending || resend.isSuccess}
+                  onClick={() => resend.mutate()}
+                >
+                  {resend.isSuccess ? "Sent — check your inbox" : resend.isPending ? "Sending…" : "Resend the email"}
+                </button>
+                {resend.isError && <span className="block text-destructive">Couldn't resend right now. Try again in a minute.</span>}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="consumerKey">Consumer Key</Label>
               <Input id="consumerKey" value={consumerKey} onChange={(e) => setConsumerKey(e.target.value)} required minLength={10} />
@@ -84,7 +116,7 @@ export function SalesforceCredentialsPage() {
                 {saveError}
               </p>
             )}
-            <Button type="submit" className="w-full" disabled={mutation.isPending}>
+            <Button type="submit" className="w-full" disabled={mutation.isPending || emailPending}>
               {mutation.isPending ? "Connecting…" : "Connect with Salesforce"}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
